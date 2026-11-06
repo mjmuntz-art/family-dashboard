@@ -332,6 +332,28 @@
       '<div class="nm ellip" style="background:' + bugColor(t.c1, t.c2) + ';font-size:' + fs + 'px">' + esc(t.name) + '</div>' +
       '<div class="sc" style="width:' + Math.round(h * 1.1) + 'px;font-size:' + Math.round(fs * 1.2) + 'px">' + esc(t.score) + '</div></div>';
   }
+  function shade(hex, amt) {
+    var m = /^#?([0-9a-f]{6})$/i.exec(hex || ''); if (!m) return hex;
+    var n = parseInt(m[1], 16), c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(function (v) { return Math.max(0, Math.min(255, Math.round(v * (1 + amt)))); });
+    return '#' + c.map(function (v) { return ('0' + v.toString(16)).slice(-2); }).join('');
+  }
+  function teamBg(t) { return lum(t.c1) > 0.6 && t.c2 && lum(t.c2) < lum(t.c1) ? t.c2 : (t.c1 || NEUTRAL.c1); }
+  function teamInk(bg) { return lum(bg) > 0.38 ? '#111418' : '#ffffff'; }
+  var MATCH = { mini: { logo: 32, name: 11, score: 22, h: 64, pad: 4, gap: 6 }, tile: { logo: 78, name: 14, score: 40, h: 146, pad: 10, gap: 10 }, big: { logo: 128, name: 20, score: 64, h: 230, pad: 16, gap: 18 } };
+  function matchupHTML(g, size) { // two team-color panels with a big logo and the name underneath, score in the middle
+    var z = MATCH[size], played = g.state !== 'pre';
+    var side = function (t) {
+      var bg = teamBg(t), ink = teamInk(bg), dim = g.state === 'post' && !t.winner ? 'opacity:.72;' : '';
+      var logo = t.logo ? '<img src="' + esc(t.logo) + '" alt="" style="width:' + z.logo + 'px;height:' + z.logo + 'px;object-fit:contain;filter:drop-shadow(0 2px 4px rgba(0,0,0,.35))" onerror="this.outerHTML=\'<div style=&quot;width:' + z.logo + 'px;height:' + z.logo + 'px;border-radius:50%;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:' + Math.round(z.logo * 0.32) + 'px&quot;>' + esc(t.abbr) + '</div>\'">' :
+        '<div style="width:' + z.logo + 'px;height:' + z.logo + 'px;border-radius:50%;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:' + Math.round(z.logo * 0.32) + 'px">' + esc(t.abbr) + '</div>';
+      return '<div style="' + dim + 'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:' + Math.round(z.gap / 2) + 'px;padding:' + z.pad + 'px;min-width:0;border-radius:calc(var(--r2) * .8);color:' + ink + ';background:linear-gradient(160deg,' + shade(bg, 0.18) + ',' + shade(bg, -0.28) + ')">' + logo +
+        '<div class="ellip" style="max-width:100%;font-size:' + z.name + 'px;font-weight:700;letter-spacing:.02em;opacity:.92">' + esc(size === 'mini' ? t.abbr : t.name) + '</div></div>';
+    };
+    var a = g.teams[0], b = g.teams[1], sc = function (t) { return '<span style="' + (g.state === 'post' && !t.winner ? 'opacity:.55;' : '') + '">' + esc(t.score) + '</span>'; };
+    var mid = played ? '<div style="display:flex;align-items:center;gap:' + Math.round(z.gap * 0.7) + 'px;font-size:' + z.score + 'px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1">' + sc(a) + '<span style="opacity:.4;font-weight:400">–</span>' + sc(b) + '</div>' :
+      '<div style="font-size:' + Math.round(z.score * 0.55) + 'px;font-weight:800;opacity:.75">VS</div>';
+    return '<div style="display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:' + z.gap + 'px;height:' + z.h + 'px">' + side(a) + mid + side(b) + '</div>';
+  }
   function gameStatus(g) { return '<span class="' + (g.state === 'in' ? 'live' : '') + '">' + esc(g.status) + '</span>'; }
 
   // ------------------------------------------------------------ backend (Apps Script)
@@ -351,6 +373,7 @@
     var b = S.back; if (!b || !b.calendar) return null;
     if (b.calendar.error) { S.calErr = 'Calendar error: ' + b.calendar.error; return null; }
     S.calErr = null;
+    S.calMissing = (b.calendar.missing || []).map(function (m) { return m.name + ': ' + m.why; });
     return (b.calendar.events || []).map(function (e) { return { title: e.title, start: new Date(e.start), end: new Date(e.end), allDay: e.allDay, who: e.calendar, color: e.color || '#ffb35c', location: e.location, description: e.description }; })
       .sort(function (a, b) { return a.start - b.start; });
   }
@@ -421,11 +444,12 @@
     if (ev) {
       list = ev.filter(function (e) { return sameDay(e.start, n) && (e.allDay || e.end > n); });
       if (!list.length) { label = 'Family tomorrow'; list = ev.filter(function (e) { return dayDiff(n, e.start) === 1; }); }
+      if (!list.length) { label = 'Coming up'; list = ev.filter(function (e) { return e.end > n; }).map(function (e) { return Object.assign({}, e, { soon: true }); }); }
     }
     var fam = '<div class="lbl">' + label + '</div>' + (!ev ? note(S.backErr === 'setup' ? 'Calendar not connected yet' : esc(S.calErr || (S.backErr ? 'Can\u2019t reach your Google data — open Family for details' : 'Loading…'))) :
-      !list.length ? note('Nothing on the calendar') : list.slice(0, 4).map(function (e) {
+      !list.length ? note(S.calMissing && S.calMissing.length ? 'Can\u2019t open ' + esc(S.calMissing.join(' \u00b7 ')) : 'Nothing on the calendar this week') : list.slice(0, 4).map(function (e) {
         return '<div style="display:flex;align-items:center;gap:10px"><div style="width:9px;height:9px;border-radius:50%;background:' + esc(e.color) + ';flex-shrink:0"></div>' +
-          '<div style="min-width:0"><div class="ellip" style="font-size:16px;font-weight:700">' + esc(e.title) + '</div><div class="muted ellip" style="font-size:13px">' + (e.allDay ? 'All day' : hm(e.start)) + ' · ' + esc(e.who) + '</div></div></div>';
+          '<div style="min-width:0"><div class="ellip" style="font-size:16px;font-weight:700">' + esc(e.title) + '</div><div class="muted ellip" style="font-size:13px">' + (e.soon ? DOW[e.start.getDay()] + ' ' : '') + (e.allDay ? 'All day' : hm(e.start)) + ' · ' + esc(e.who) + '</div></div></div>';
       }).join(''));
     var ph = photos(), cur = ph && ph.length ? ph[S.photoIdx % ph.length] : null;
     var photo = cur ? '<div id="homephoto" style="flex:1;border-radius:var(--r2);background:rgba(0,0,0,0.3) center/cover no-repeat"></div>' :
@@ -433,7 +457,7 @@
     var games = S.games.slice(0, 3);
     var sc = '<div class="lbl">Scores</div>' + (games.length ? games.map(function (g) {
       return '<div style="display:flex;flex-direction:column;gap:3px"><div class="muted" style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase"><span>' + esc(g.lg) + '</span>' + gameStatus(g) + '</div>' +
-        g.teams.map(function (t) { return bugHTML(t, 26, g.state, 13); }).join('') + '</div>';
+        matchupHTML(g, 'mini') + '</div>';
     }).join('') : note(S.scoresErr || 'Loading scores…'));
     var md = models();
     var pl = '<div class="lbl">Today’s plays</div>' + (!md ? note(S.backErr === 'setup' ? 'Model sheets not connected yet' : 'Loading…') : md.slice(0, 4).map(function (m) {
@@ -483,7 +507,8 @@
       return '<div class="tile" style="display:flex;flex-direction:column;gap:6px;padding:18px 22px;min-height:0"><div class="lbl">' + label + '</div>' +
         (list.length ? list.map(function (e) { return row(e, showDay, ev.indexOf(e)); }).join('') : note(showDay ? 'Nothing else this week' : 'Nothing else today')) + '</div>';
     };
-    return '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr))">' + col('Today', today, false) + col('Rest of the week', week, true) + '</div>';
+    var warn = S.calMissing && S.calMissing.length ? '<div style="padding:10px 16px;border-radius:10px;background:rgba(255,120,80,0.18);border:1px solid rgba(255,140,100,0.5);font-size:15px">Can\u2019t open ' + esc(S.calMissing.join(' \u00b7 ')) + '</div>' : '';
+    return warn + '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr))">' + col('Today', today, false) + col('Rest of the week', week, true) + '</div>';
   }
 
   function photosHTML() {
@@ -499,7 +524,7 @@
     var tiles = S.games.slice(0, 6).map(function (g, i) {
       return '<button type="button" class="tap tile" data-open="game:' + i + '" style="flex-direction:column;justify-content:center;gap:6px;padding:12px 14px">' +
         '<div class="muted" style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase"><span>' + esc(g.lg) + '</span>' + gameStatus(g) + '</div>' +
-        g.teams.map(function (t) { return bugHTML(t, 46, g.state, 18); }).join('') + '<div class="muted" style="font-size:12px">' + (g.state === 'pre' ? 'Tap for preview & odds' : 'Tap for box score') + '</div></button>';
+        matchupHTML(g, 'tile') + '</button>';
     });
     while (tiles.length < 6) tiles.push('<div class="tile">' + note('No other games right now') + '</div>');
     return '<div class="grid" style="grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr))">' + tiles.join('') + '</div>';
@@ -574,8 +599,7 @@
   }
   function gameDetailHTML(g) {
     if (!g) return note('Game not found');
-    return '<div class="lbl">' + esc(g.lg) + ' · ' + gameStatus(g) + '</div><div style="display:flex;flex-direction:column;gap:8px;margin-right:60px">' +
-      g.teams.map(function (t) { return bugHTML(t, 64, g.state, 26); }).join('') + '</div><div id="box" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;flex:1;min-height:0">' + note('Loading…') + '</div>';
+    return '<div class="lbl">' + esc(g.lg) + ' · ' + gameStatus(g) + '</div><div style="margin-right:60px">' + matchupHTML(g, 'big') + '</div><div id="box" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;flex:1;min-height:0">' + note('Loading…') + '</div>';
   }
   function loadBox(g) {
     if (!g) return;
@@ -754,6 +778,17 @@
     };
   }
 
+  // ------------------------------------------------------------ auto-update
+  // Every 5 minutes, check whether any dashboard file changed on GitHub; if so, reload.
+  var WATCH = ['index.html', 'style.css', 'config.js', 'themes.js', 'scenes.js', 'app.js'], PRINT = null;
+  function fingerprint() {
+    return Promise.all(WATCH.map(function (f) { return fetch(f + '?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); }); }))
+      .then(function (ts) { return ts.map(function (x) { var h = 0; for (var i = 0; i < x.length; i++) h = (h * 31 + x.charCodeAt(i)) | 0; return x.length + ':' + h; }).join('|'); });
+  }
+  function checkUpdate() {
+    fingerprint().then(function (fp) { if (PRINT && fp !== PRINT) location.reload(); PRINT = PRINT || fp; }).catch(function () { /* offline: try again later */ });
+  }
+
   // ------------------------------------------------------------ boot
   function every(fn, ms) { fn(); return setInterval(fn, ms); }
   window.addEventListener('resize', fit); fit();
@@ -767,6 +802,7 @@
   $('startbtn').addEventListener('click', start);
   if (Q.has('nostart') || DEMO) $('start').style.display = 'none'; else setTimeout(function () { $('start').style.display = 'none'; }, 15000);
   render();
+  if (!DEMO && location.protocol.indexOf('http') === 0) every(checkUpdate, 5 * 60000);
   every(loadWeather, 10 * 60000);
   every(loadAlerts, 5 * 60000);
   loadBackend().then(function () { every(loadScores, 2 * 60000); });

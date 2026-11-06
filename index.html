@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link id="fonts" rel="stylesheet" href="">
-<link rel="stylesheet" href="style.css">
+<script>(function () { var l = document.createElement("link"); l.rel = "stylesheet"; l.href = "style.css?t=" + Date.now(); document.head.appendChild(l); })();</script>
 </head>
 <body>
 <div id="stage">
@@ -46,9 +46,12 @@
   <video id="keepalive" src="keepalive.mp4" muted loop playsinline autoplay></video>
 </div>
 
-<script src="config.js"></script>
-<script src="themes.js"></script>
-<script src="scenes.js"></script>
-<script src="app.js"></script>
+<script>
+// Load the dashboard files fresh every time so the Echo never runs an old copy
+(function () {
+  var t = Date.now(), files = ['config.js', 'themes.js', 'scenes.js', 'app.js'];
+  (function next(i) { if (i >= files.length) return; var s = document.createElement('script'); s.src = files[i] + '?t=' + t; s.onload = function () { next(i + 1); }; document.body.appendChild(s); })(0);
+})();
+</script>
 </body>
 </html>
