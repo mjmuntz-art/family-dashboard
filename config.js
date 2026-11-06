@@ -4,7 +4,7 @@
 // =====================================================================
 window.DASH_CONFIG = {
   // Where the weather, sunrise/sunset and radar are centered.
-  location: { name: 'Morris, IL', lat: 41.3573, lon: -88.4212, timezone: 'America/Chicago' },
+  location: { name: 'Yorkville, IL', lat: 41.6411, lon: -88.4473, timezone: 'America/Chicago' },
 
   // Your Google Apps Script web app (see README, step 2).
   // Leave blank until it's deployed — those screens show a setup note until then.
