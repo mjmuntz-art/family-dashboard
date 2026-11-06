@@ -8,8 +8,8 @@ window.DASH_CONFIG = {
 
   // Your Google Apps Script web app (see README, step 2).
   // Leave blank until it's deployed — those screens show a setup note until then.
-  appsScriptUrl: '',
-  appsScriptKey: '',          // the same secret you put in Code.gs (KEY)
+  appsScriptUrl: 'https://script.google.com/macros/s/AKfycbz7k4Tst0Tj0AtIYF45mipxAJTrFF8xZ7nlkT3vtfmepS6Gl518MwO8FvnOnlo46TWL/exec',
+  appsScriptKey: 'FranklinandWestonarebabies604!',          // the same secret you put in Code.gs (KEY)
 
   // How long each screen stays up (seconds).
   timing: { home: 60, screen: 30, detail: 20 },
