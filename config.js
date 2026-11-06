@@ -18,6 +18,8 @@ window.DASH_CONFIG = {
   // Logos and colors come from ESPN automatically.
   teams: [
     { sport: 'football', league: 'nfl', team: 'ten', name: 'Titans' }
+    { sport: 'football', league: 'nfl', team: 'det', name: 'Lions' }
+{ sport: 'football', league: 'college-football', team: 'ND', name: 'Notre Dame' }
     // Add more, e.g.:
     // { sport: 'basketball', league: 'nba', team: 'chi', name: 'Bulls' },
     // { sport: 'football', league: 'college-football', team: '356', name: 'Illinois' },
