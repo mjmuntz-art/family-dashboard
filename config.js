@@ -17,8 +17,8 @@ window.DASH_CONFIG = {
   // Teams that always get a spot on the Scores screen (ESPN team codes).
   // Logos and colors come from ESPN automatically.
   teams: [
-    { sport: 'football', league: 'nfl', team: 'ten', name: 'Titans' }
-    { sport: 'football', league: 'nfl', team: 'det', name: 'Lions' }
+    { sport: 'football', league: 'nfl', team: 'ten', name: 'Titans' },
+    { sport: 'football', league: 'nfl', team: 'det', name: 'Lions' },
 { sport: 'football', league: 'college-football', team: 'ND', name: 'Notre Dame' }
     // Add more, e.g.:
     // { sport: 'basketball', league: 'nba', team: 'chi', name: 'Bulls' },
