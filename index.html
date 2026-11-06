@@ -16,9 +16,9 @@
   <div id="topbar">
     <div class="clock frost">
       <div class="t"><span id="time">--:--</span><span class="ap" id="ampm"></span></div>
-      <div style="display:flex;flex-direction:column;padding-bottom:4px">
-        <div id="dow" style="font-size:18px;font-weight:700"></div>
-        <div id="date" class="muted" style="font-size:15px"></div>
+      <div id="cdate" style="display:none;flex-direction:column;padding-bottom:6px">
+        <div id="dow" style="font-size:22px;font-weight:700"></div>
+        <div id="date" class="muted" style="font-size:18px"></div>
       </div>
     </div>
     <div class="banner frost">
@@ -29,7 +29,7 @@
       <span id="wxicon"></span>
       <span style="display:flex;flex-direction:column;align-items:flex-end">
         <span id="wxtemp" class="temp">--°</span>
-        <span id="wxsub" class="muted" style="font-size:14px">&nbsp;</span>
+        <span id="wxsub" class="hilo">&nbsp;</span>
       </span>
     </button>
   </div>

@@ -8,21 +8,16 @@ window.DASH_CONFIG = {
 
   // Your Google Apps Script web app (see README, step 2).
   // Leave blank until it's deployed — those screens show a setup note until then.
-  appsScriptUrl: 'https://script.google.com/macros/s/AKfycbz7k4Tst0Tj0AtIYF45mipxAJTrFF8xZ7nlkT3vtfmepS6Gl518MwO8FvnOnlo46TWL/exec',
-  appsScriptKey: 'FranklinandWestonarebabies604!',          // the same secret you put in Code.gs (KEY)
+  appsScriptUrl: '',
+  appsScriptKey: '',          // the same secret you put in Code.gs (KEY)
 
   // How long each screen stays up (seconds).
-  timing: { home: 60, screen: 30, detail: 20 },
+  timing: { home: 60, screen: 30, detail: 20, page: 12, story: 10, scoresGrid: 15 }, // seconds; Scores, News and Weather cycle through pages
 
   // Teams that always get a spot on the Scores screen (ESPN team codes).
   // Logos and colors come from ESPN automatically.
   teams: [
-    { sport: 'football', league: 'nfl', team: 'ten', name: 'Titans' },
-    { sport: 'football', league: 'nfl', team: 'det', name: 'Lions' },
-    { sport: 'football', league: 'college-football', team: 'nd', name: 'Notre Dame' },
-    { sport: 'basketball', league: 'nba', team: 'chi', name: 'Bulls' },
-    { sport: 'basketball', league: 'college-basketball', team: 'msu', name: 'Michigan State' },
-    { sport: 'hockey', league: 'nhl', team: 'chi', name: 'Blackhawks' },
+    { sport: 'football', league: 'nfl', team: 'ten', name: 'Titans' }
     // Add more, e.g.:
     // { sport: 'basketball', league: 'nba', team: 'chi', name: 'Bulls' },
     // { sport: 'football', league: 'college-football', team: '356', name: 'Illinois' },

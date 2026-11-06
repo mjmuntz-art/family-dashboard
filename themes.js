@@ -143,6 +143,8 @@
       base = MONTHS[m];
     }
     var th = Object.assign({}, base);
+    if (!hit) th.title = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][now.getDay()] + ', ' +
+      ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][now.getMonth()] + ' ' + now.getDate();
     if (hit && hit.id === 'christmas' && now.getDate() === 24) th.title = 'Merry Christmas Eve';
     var nb = nextBirthday(now, birthdays), nh = nextHoliday(now);
     if (hit && hit.sub) th.sub = hit.sub;

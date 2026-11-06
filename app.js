@@ -10,7 +10,7 @@
   var ORDER = ['home', 'family', 'photos', 'scores', 'plays', 'news', 'weather'];
   var LABELS = { home: 'Home', family: 'Family', photos: 'Photos', scores: 'Scores', plays: 'Plays', news: 'News', weather: 'Weather' };
   var S = { screen: ORDER.indexOf(Q.get('screen')) >= 0 ? Q.get('screen') : 'home', detail: null, theme: null, lastScreen: null,
-    wx: null, alerts: [], games: [], back: null, backErr: null, wxErr: null, scoresErr: null, photoIdx: 0, timer: null };
+    wx: null, alerts: [], games: [], back: null, backErr: null, wxErr: null, scoresErr: null, photoIdx: 0, timer: null, page: +(Q.get('page') || 0), lastPage: null, sum: {} };
   var $ = function (id) { return document.getElementById(id); };
 
   // ------------------------------------------------------------ helpers
@@ -145,6 +145,12 @@
       ['--titleSize', t.titleSize + 'px'], ['--h2', t.h2 + 'px']].forEach(function (p) { st.setProperty(p[0], p[1]); });
     if (changedLook) { $('fonts').href = themeFontsHref(t); $('scene').innerHTML = buildScene(t.id, C.lowPower); }
     $('btitle').textContent = t.title; $('bsub').textContent = t.sub;
+    fitTitle(); if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitTitle);
+  }
+  function fitTitle() { // as big as the space between the clock and the weather allows
+    var el = $('btitle'), bar = $('topbar'), room = bar.clientWidth - bar.children[0].offsetWidth - bar.children[2].offsetWidth - 2 * 16 - 72, size = Math.round((S.theme.titleSize || 34) * 1.5);
+    el.style.fontSize = size + 'px';
+    while (el.scrollWidth > room && size > 26) { size -= 2; el.style.fontSize = size + 'px'; }
   }
   function tick() {
     var n = now(), h = n.getHours(), m = n.getMinutes();
@@ -152,6 +158,7 @@
     $('ampm').textContent = h < 12 ? 'AM' : 'PM';
     $('dow').textContent = DOWL[n.getDay()];
     $('date').textContent = MONL[n.getMonth()] + ' ' + n.getDate();
+    $('cdate').style.display = S.theme && S.theme.isHoliday ? 'flex' : 'none';
     if (n.getSeconds() === 0) {
       applyTheme();
       var hh = (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
@@ -191,7 +198,8 @@
       var dl = om.daily;
       wx.hi = Math.round(dl.temperature_2m_max[0]); wx.lo = Math.round(dl.temperature_2m_min[0]); wx.uv = Math.round(dl.uv_index_max[0]);
       var rise = parseLocal(dl.sunrise[0]), set = parseLocal(dl.sunset[0]);
-      if (rise && set) { wx.rise = hm(rise); wx.set = hm(set); var mins = Math.round((set - rise) / 60000); wx.daylight = Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm'; }
+      if (rise && set) { wx.rise = hm(rise); wx.set = hm(set); wx.riseD = rise; wx.setD = set; var mins = Math.round((set - rise) / 60000); wx.daylight = Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm';
+        var r2 = parseLocal(dl.sunrise[1]), s2 = parseLocal(dl.sunset[1]); if (r2 && s2) wx.dayDelta = Math.round((s2 - r2) / 60000) - mins; }
       wx.days = dl.time.slice(0, 7).map(function (t, i) {
         var d = parseLocal(t + 'T12:00'), c = wmo(dl.weather_code[i], 1);
         return { label: i === 0 ? 'Today' : DOW[d.getDay()], hi: Math.round(dl.temperature_2m_max[i]), lo: Math.round(dl.temperature_2m_min[i]), pop: dl.precipitation_probability_max[i], icon: c.icon, text: c.text };
@@ -250,7 +258,7 @@
   }
   function renderWxPill() {
     var w = S.wx; if (!w || !w.now) return;
-    $('wxicon').innerHTML = icon(w.now.icon, 40);
+    $('wxicon').innerHTML = icon(w.now.icon, 62, 1.5);
     $('wxtemp').textContent = w.now.temp + '°';
     $('wxsub').textContent = (w.hi != null ? 'H ' + w.hi + '° · L ' + w.lo + '°' : w.now.text);
   }
@@ -270,13 +278,18 @@
     }).catch(function () { return {}; });
   }
   function scoreVal(s) { if (s == null) return ''; if (typeof s === 'object') return s.displayValue != null ? s.displayValue : (s.value != null ? s.value : ''); return s; }
+  function recOf(c) { // a team's record from any of ESPN's formats
+    var r = c.records || c.record; if (typeof r === 'string') return r;
+    r = (r || []).filter(function (x) { return !x.type || x.type === 'total' || /overall/i.test(x.name || ''); })[0] || (r || [])[0];
+    return r ? r.summary || r.displayValue || '' : '';
+  }
   function parseEvent(ev, sport, league, label, dir) {
     var comp = ev.competitions[0], st = (comp.status || ev.status).type, d = new Date(ev.date);
     var teams = comp.competitors.slice().sort(function (a, b) { return a.homeAway === 'away' ? -1 : b.homeAway === 'away' ? 1 : 0; }).map(function (c) {
       var t = c.team || {}, ref = (dir && dir[t.id]) || {};
       var c1 = t.color ? '#' + t.color : ref.color, c2 = t.alternateColor ? '#' + t.alternateColor : ref.alt;
       return { abbr: t.abbreviation || '', name: t.shortDisplayName || t.name || t.displayName || '', logo: t.logo || (t.logos && t.logos[0] && t.logos[0].href) || ref.logo || '',
-        c1: c1 || NEUTRAL.c1, c2: c2 || NEUTRAL.c2, score: st.state === 'pre' ? '' : scoreVal(c.score), winner: !!c.winner, home: c.homeAway === 'home' };
+        c1: c1 || NEUTRAL.c1, c2: c2 || NEUTRAL.c2, score: st.state === 'pre' ? '' : scoreVal(c.score), winner: !!c.winner, home: c.homeAway === 'home', rec: recOf(c), id: t.id };
     });
     var status = st.state === 'pre' ? whenLabel(d) : (st.shortDetail || st.detail || '');
     return { id: ev.id, sport: sport, league: league, lg: label, state: st.state, status: status, date: d, teams: teams };
@@ -289,7 +302,11 @@
       var label = tm.league === 'nfl' ? 'NFL' : tm.league === 'nba' ? 'NBA' : tm.league === 'college-football' ? 'CFB' : tm.league.toUpperCase();
       return teamDirectory(tm.sport, tm.league).then(function (dir) {
         return getJSON(ESPN + tm.sport + '/' + tm.league + '/teams/' + tm.team + '/schedule').then(function (j) {
-          var evs = (j.events || []).map(function (e) { return parseEvent(e, tm.sport, tm.league, label, dir); });
+          var mine = j.team || {}, evs = (j.events || []).map(function (e) {
+            var g = parseEvent(e, tm.sport, tm.league, label, dir); g.followed = true;
+            g.teams.forEach(function (t) { if (String(t.id) === String(mine.id) && mine.recordSummary && (g.state !== 'post' || !t.rec)) t.rec = mine.recordSummary; });
+            return g;
+          });
           var live = evs.filter(function (g) { return g.state === 'in'; });
           var past = evs.filter(function (g) { return g.state === 'post' && (n - g.date) < 10 * 86400000; }).sort(function (a, b) { return b.date - a.date; });
           var next = evs.filter(function (g) { return g.state === 'pre'; }).sort(function (a, b) { return a.date - b.date; });
@@ -311,7 +328,7 @@
       var rank = function (g) { return g.state === 'pre' ? 1 : 2; };
       fillAll.filter(function (g) { return dayDiff(n, g.date) >= -1 && dayDiff(n, g.date) <= 2; })
         .sort(function (a, b) { return rank(a) - rank(b) || (rank(a) === 1 ? a.date - b.date : b.date - a.date); }).forEach(add);
-      S.games = out.slice(0, 6); S.scoresErr = null; render();
+      S.games = out.slice(0, 6); S.scoresErr = null; featureGames().forEach(ensureSummary); render();
     }).catch(function () { S.scoresErr = 'Scores unavailable — retrying'; render(); });
   }
   function morrisGames() {
@@ -339,19 +356,28 @@
   }
   function teamBg(t) { return lum(t.c1) > 0.6 && t.c2 && lum(t.c2) < lum(t.c1) ? t.c2 : (t.c1 || NEUTRAL.c1); }
   function teamInk(bg) { return lum(bg) > 0.38 ? '#111418' : '#ffffff'; }
-  var MATCH = { mini: { logo: 32, name: 11, score: 22, h: 64, pad: 4, gap: 6 }, tile: { logo: 78, name: 14, score: 40, h: 146, pad: 10, gap: 10 }, big: { logo: 128, name: 20, score: 64, h: 230, pad: 16, gap: 18 } };
-  function matchupHTML(g, size) { // two team-color panels with a big logo and the name underneath, score in the middle
+  function teamGlow(t) { return lum(t.c1) < 0.03 && t.c2 ? t.c2 : (t.c1 || NEUTRAL.c2); }
+  var MATCH = { mini: { logo: 32, name: 11, rec: 10, score: 22, h: 66, gap: 6 }, tile: { logo: 92, name: 16, rec: 13, score: 44, h: 164, gap: 10 },
+    page: { logo: 116, name: 24, rec: 16, score: 88, h: 178, gap: 22 }, big: { logo: 132, name: 22, rec: 16, score: 66, h: 220, gap: 18 } };
+  function logoHTML(t, px) { // the team's logo with a soft glow of its color; a color badge if there's no logo
+    var badge = '<div style="width:' + px + 'px;height:' + px + 'px;border-radius:50%;background:' + teamBg(t) + ';color:' + teamInk(teamBg(t)) + ';display:flex;align-items:center;justify-content:center;font-weight:800;font-size:' + Math.round(px * 0.3) + 'px;box-shadow:0 4px 14px rgba(0,0,0,.35)">' + esc(t.abbr) + '</div>';
+    var img = t.logo ? '<img src="' + esc(t.logo) + '" alt="" style="width:' + px + 'px;height:' + px + 'px;object-fit:contain;filter:drop-shadow(0 4px 10px rgba(0,0,0,.45))" onerror="this.style.display=\'none\';this.nextSibling.style.display=\'flex\'">' + badge.replace('display:flex', 'display:none') : badge;
+    return '<div style="position:relative;display:flex;align-items:center;justify-content:center;width:' + px + 'px;height:' + px + 'px;flex-shrink:0">' +
+      '<div style="position:absolute;inset:-' + Math.round(px * 0.28) + 'px;border-radius:50%;background:radial-gradient(circle,' + teamGlow(t) + ' 0%,transparent 66%);opacity:.55"></div>' +
+      '<div style="position:relative;display:flex">' + img + '</div></div>';
+  }
+  function matchupHTML(g, size, center) { // big logos, name and record underneath, score (or kickoff) in the middle
     var z = MATCH[size], played = g.state !== 'pre';
     var side = function (t) {
-      var bg = teamBg(t), ink = teamInk(bg), dim = g.state === 'post' && !t.winner ? 'opacity:.72;' : '';
-      var logo = t.logo ? '<img src="' + esc(t.logo) + '" alt="" style="width:' + z.logo + 'px;height:' + z.logo + 'px;object-fit:contain;filter:drop-shadow(0 2px 4px rgba(0,0,0,.35))" onerror="this.outerHTML=\'<div style=&quot;width:' + z.logo + 'px;height:' + z.logo + 'px;border-radius:50%;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:' + Math.round(z.logo * 0.32) + 'px&quot;>' + esc(t.abbr) + '</div>\'">' :
-        '<div style="width:' + z.logo + 'px;height:' + z.logo + 'px;border-radius:50%;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:' + Math.round(z.logo * 0.32) + 'px">' + esc(t.abbr) + '</div>';
-      return '<div style="' + dim + 'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:' + Math.round(z.gap / 2) + 'px;padding:' + z.pad + 'px;min-width:0;border-radius:calc(var(--r2) * .8);color:' + ink + ';background:linear-gradient(160deg,' + shade(bg, 0.18) + ',' + shade(bg, -0.28) + ')">' + logo +
-        '<div class="ellip" style="max-width:100%;font-size:' + z.name + 'px;font-weight:700;letter-spacing:.02em;opacity:.92">' + esc(size === 'mini' ? t.abbr : t.name) + '</div></div>';
+      var dim = g.state === 'post' && !t.winner ? 'opacity:.6;' : '';
+      return '<div style="' + dim + 'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:' + Math.round(z.gap / 2) + 'px;min-width:0">' + logoHTML(t, z.logo) +
+        '<div style="display:flex;flex-direction:column;align-items:center;min-width:0;max-width:100%">' +
+        '<div class="ellip" style="max-width:100%;font-size:' + z.name + 'px;font-weight:800;line-height:1.15">' + esc(size === 'mini' ? t.abbr : t.name) + '</div>' +
+        (t.rec ? '<div class="muted" style="font-size:' + z.rec + 'px;font-weight:600;line-height:1.2;font-variant-numeric:tabular-nums">' + esc(t.rec) + '</div>' : '') + '</div></div>';
     };
-    var a = g.teams[0], b = g.teams[1], sc = function (t) { return '<span style="' + (g.state === 'post' && !t.winner ? 'opacity:.55;' : '') + '">' + esc(t.score) + '</span>'; };
-    var mid = played ? '<div style="display:flex;align-items:center;gap:' + Math.round(z.gap * 0.7) + 'px;font-size:' + z.score + 'px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1">' + sc(a) + '<span style="opacity:.4;font-weight:400">–</span>' + sc(b) + '</div>' :
-      '<div style="font-size:' + Math.round(z.score * 0.55) + 'px;font-weight:800;opacity:.75">VS</div>';
+    var a = g.teams[0], b = g.teams[1], sc = function (t) { return '<span style="' + (g.state === 'post' && !t.winner ? 'opacity:.5;' : '') + '">' + esc(t.score) + '</span>'; };
+    var mid = center || (played ? '<div style="display:flex;align-items:center;gap:' + Math.round(z.gap * 0.7) + 'px;font-size:' + z.score + 'px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1">' + sc(a) + '<span style="opacity:.35;font-weight:400">–</span>' + sc(b) + '</div>' :
+      '<div style="font-size:' + Math.round(z.score * 0.5) + 'px;font-weight:800;opacity:.6">VS</div>');
     return '<div style="display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:' + z.gap + 'px;height:' + z.h + 'px">' + side(a) + mid + side(b) + '</div>';
   }
   function gameStatus(g) { return '<span class="' + (g.state === 'in' ? 'live' : '') + '">' + esc(g.status) + '</span>'; }
@@ -415,7 +441,8 @@
     };
     var ap = function (k) { var s = take('AP', k); return s ? Object.assign({ src: 'AP' }, s) : null; };
     var sl = function (k) { var s = take('Shaw Local', k); return s ? Object.assign({ src: 'Shaw Local' }, s) : null; };
-    return [ap(0), pickChicago(), pickChicago(), sl(0), ap(1), pickChicago(), pickChicago(), sl(1)];
+    var list = [ap(0), pickChicago(), sl(0), ap(1), pickChicago(), sl(1)].map(function (x) { return x || pickChicago(); });
+    return list.filter(Boolean);
   }
   var MODEL_STYLE = {
     'NBAPropSignal': { bg: 'rgba(14,38,90,0.94)', edge: '#3466c2', acc: '#8cc8ff', font: "'Barlow Condensed', sans-serif" },
@@ -430,15 +457,18 @@
 
   // ------------------------------------------------------------ screens
   function render() {
-    var el = $('screen'), fresh = S.lastScreen !== S.screen;
-    S.lastScreen = S.screen;
+    var el = $('screen'), fresh = S.lastScreen !== S.screen || S.lastPage !== S.page;
+    S.lastScreen = S.screen; S.lastPage = S.page;
     var html = S.screen === 'home' ? homeHTML() : fullHTML();
     el.innerHTML = '<div class="' + (fresh ? 'screen-in' : '') + '">' + html + '</div>';
     $('nav').style.display = S.screen === 'home' ? 'none' : 'flex';
     $('navbar').innerHTML = ORDER.map(function (k) { return '<button type="button" data-go="' + k + '" class="' + (k === S.screen ? 'on' : '') + '">' + LABELS[k] + '</button>'; }).join('');
     if (S.screen === 'photos' || S.screen === 'home') hookPhotos();
+    var p = S.screen === 'home' ? '' : curPage();
+    if (!(S.detail && S.detail.kind === 'radar')) stopRadar();
+    if (S.screen === 'weather' && p === 'radar') startRadar();
+    if (S.screen === 'news' && p && p.indexOf('s:') === 0) drawQR((newsStories() || [])[+p.slice(2)]);
   }
-
   function homeHTML() {
     var n = now(), ev = events(), list, label = 'Family today';
     if (ev) {
@@ -484,14 +514,17 @@
   }
 
   function fullHTML() {
-    var t = { family: ['Family schedule', 'From the family calendar'], photos: [S.theme && S.theme.birthdayNames ? S.theme.birthdayNames.join(' & ') + '\u2019s photos' : 'Family photos', ''], scores: ['Scores & games', 'Tap a game for the box score'],
-      plays: ['Today’s plays', 'Tap a play for the breakdown · 1 unit flat'], news: ['Top news', 'AP · Tribune · Sun-Times · WGN · NBC 5 · ABC 7 · Shaw Local'], weather: ['Weather', ''] }[S.screen];
-    var body = { family: familyHTML, photos: photosHTML, scores: scoresHTML, plays: playsHTML, news: newsHTML, weather: weatherHTML }[S.screen]();
-    if (S.screen === 'weather' && S.wx) t[1] = L.name + ' · ' + (S.wx.nwsNow || S.wx.src.join(' · '));
+    var pg = pageList(S.screen), p = curPage();
+    var WXT = { now: 'Right now', hours: 'Next 12 hours', week: 'The week ahead', sky: 'Sun & moon', radar: 'Live radar' };
+    var t = { family: ['Family schedule', 'From the family calendar'], photos: [S.theme && S.theme.birthdayNames ? S.theme.birthdayNames.join(' & ') + '\u2019s photos' : 'Family photos', ''],
+      scores: ['Scores & games', p === 'grid' ? 'Tap a game for the box score' : ''], plays: ['Today’s plays', 'Tap a play for the breakdown · 1 unit flat'],
+      news: ['Top news', pg.length > 1 ? 'Story ' + (S.page + 1) + ' of ' + pg.length : ''], weather: ['Weather', (WXT[p] || '') + ' · ' + L.name] }[S.screen];
+    if (S.screen === 'scores' && p !== 'grid') { var g = S.games.filter(function (x) { return 'g:' + x.id === p; })[0]; if (g) t = [g.teams[0].name + (g.teams[0].home ? ' vs ' : ' at ') + g.teams[1].name, g.lg + (g.state === 'pre' ? ' · Up next' : g.state === 'in' ? ' · Live' : ' · Final')]; }
+    var body = S.screen === 'scores' ? scoresBody(p) : S.screen === 'news' ? (p === 'empty' ? note(S.backErr === 'setup' ? SETUP : esc(S.backErr || 'Loading…')) : newsPage(+p.slice(2))) :
+      S.screen === 'weather' ? weatherPage(p) : { family: familyHTML, photos: photosHTML, plays: playsHTML }[S.screen]();
     if (S.screen === 'photos') { var ph = photos(), cur = ph && ph.length ? ph[S.photoIdx % ph.length] : null; t[1] = cur ? [cur.album, cur.taken ? 'Taken ' + MON[new Date(cur.taken).getMonth()] + ' ' + new Date(cur.taken).getDate() + ', ' + new Date(cur.taken).getFullYear() : ''].filter(Boolean).join(' · ') : ''; }
-    return '<section class="full frost"><header><h1>' + t[0] + '</h1><div class="muted ellip">' + esc(t[1]) + '</div></header>' + body + '</section>';
+    return '<section class="full frost"><header><h1 class="ellip">' + esc(t[0]) + '</h1><div style="display:flex;align-items:center;gap:18px;flex-shrink:0"><div class="muted ellip">' + esc(t[1]) + '</div>' + dotsHTML(pg) + '</div></header>' + body + '</section>';
   }
-
   function familyHTML() {
     var ev = events(); if (!ev) return note(S.backErr === 'setup' ? SETUP : esc(S.calErr || S.backErr || 'Loading…'));
     var n = now(), today = ev.filter(function (e) { return sameDay(e.start, n) && (e.allDay || e.end > n); }).slice(0, 5);
@@ -546,39 +579,300 @@
     return '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr))">' + cards.join('') + '</div>';
   }
 
-  function newsHTML() {
-    var nw = newsList(); if (!nw) return note(S.backErr === 'setup' ? SETUP : esc(S.backErr || 'Loading…'));
-    return '<div class="grid" style="grid-template-columns:repeat(4,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr))">' + nw.map(function (s, i) {
-      if (!s) return '<div class="tile">' + note('No story') + '</div>';
-      return '<button type="button" class="tap tile" data-open="news:' + i + '" style="flex-direction:column;gap:6px;padding:10px;min-height:0">' + thumb(s.image, '100%', 96) +
-        '<div class="lbl">' + esc(s.src) + '</div><div class="clamp3" style="font-size:16px;font-weight:700;line-height:1.25">' + esc(s.title) + '</div>' +
-        '<div class="muted" style="font-size:12px;margin-top:auto">' + (s.date ? esc(whenLabel(new Date(s.date))) : '') + '</div></button>';
-    }).join('') + '</div>';
+  // ------------------------------------------------------------ pages: Scores, News and Weather cycle through full-screen pages
+  function featureGames() { // your teams' latest final and next game, Morris, and anything live
+    return S.games.filter(function (g) { return g.followed || g.morris || g.state === 'in'; }).slice(0, 4);
+  }
+  function pageList(screen) {
+    if (screen === 'scores') return S.games.length ? ['grid'].concat(featureGames().map(function (g) { return 'g:' + g.id; })) : ['grid'];
+    if (screen === 'news') { var nw = newsStories(); return nw && nw.length ? nw.map(function (s, i) { return 's:' + i; }) : ['empty']; }
+    if (screen === 'weather') return S.wx ? ['now', 'hours', 'week', 'sky', 'radar'] : ['empty'];
+    return ['main'];
+  }
+  function pageDur() {
+    var t = C.timing;
+    if (S.screen === 'home') return t.home;
+    if (S.screen === 'news') return t.story || 10;
+    if (S.screen === 'scores') return S.page === 0 ? (t.scoresGrid || 15) : (t.page || 12);
+    if (S.screen === 'weather') return t.page || 12;
+    return t.screen;
+  }
+  function curPage() { var pg = pageList(S.screen); return pg[S.page < pg.length ? S.page : 0]; }
+  function dotsHTML(pg) {
+    if (pg.length < 2) return '';
+    return '<div class="dots">' + pg.map(function (p, i) { return '<button type="button" data-page="' + i + '" class="' + (i === S.page ? 'on' : '') + '" aria-label="Page ' + (i + 1) + '" style="--dur:' + pageDur() + 's"></button>'; }).join('') + '</div>';
   }
 
-  function weatherHTML() {
+  // ---- scores
+  function scoresBody(p) {
+    if (p === 'grid') return scoresHTML();
+    var id = p.slice(2), g = S.games.filter(function (x) { return String(x.id) === id; })[0];
+    if (!g) return note('Game not found');
+    var sum = S.sum[g.id] && S.sum[g.id].j;
+    if (!sum && !g.morris) ensureSummary(g);
+    var teams = g.teams.map(function (t, i) { // fill in records from the game summary
+      var r = sum && sum.recs && sum.recs[t.abbr]; return r && !t.rec ? Object.assign({}, t, { rec: r }) : t;
+    });
+    var gg = Object.assign({}, g, { teams: teams });
+    var badge = function (txt, live) { return '<div style="display:inline-flex;align-self:center;padding:4px 14px;border-radius:999px;font-size:14px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;' + (live ? 'background:#c62828;color:#fff' : 'background:rgba(255,255,255,.14)') + '">' + esc(txt) + '</div>'; };
+    if (g.state === 'pre') {
+      var d = g.date, center = '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;line-height:1">' + badge(sameDay(d, now()) ? 'Today' : DOWL[d.getDay()]) +
+        '<div style="font-size:54px;font-weight:800">' + esc(hm(d).replace(' ', ' ')) + '</div><div class="muted" style="font-size:16px">' + esc(MONL[d.getMonth()] + ' ' + d.getDate()) + '</div></div>';
+      return '<div style="display:flex;flex-direction:column;gap:16px;flex:1;min-height:0">' + matchupHTML(gg, 'page', center) +
+        '<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:14px;flex:1;min-height:0">' + gameInfoHTML(g, sum) + storyHTML(g, sum) + '</div></div>';
+    }
+    var scoreMid = '<div style="display:flex;flex-direction:column;align-items:center;gap:10px">' + badge(g.state === 'in' ? 'Live · ' + g.status : g.status, g.state === 'in') +
+      '<div style="display:flex;align-items:center;gap:16px;font-size:88px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1">' +
+      '<span style="' + (g.state === 'post' && !teams[0].winner ? 'opacity:.5' : '') + '">' + esc(teams[0].score) + '</span><span style="opacity:.35;font-weight:400">–</span>' +
+      '<span style="' + (g.state === 'post' && !teams[1].winner ? 'opacity:.5' : '') + '">' + esc(teams[1].score) + '</span></div></div>';
+    return '<div style="display:flex;flex-direction:column;gap:16px;flex:1;min-height:0">' + matchupHTML(gg, 'page', scoreMid) +
+      '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;flex:1;min-height:0">' + lineScoreHTML(g, sum) + leadersHTML(g, sum) + '</div></div>';
+  }
+  function panel(label, inner, extra) { return '<div class="tile" style="display:flex;flex-direction:column;gap:10px;padding:16px 20px;min-height:0;overflow:hidden;' + (extra || '') + '"><div class="lbl">' + label + '</div>' + inner + '</div>'; }
+  function lineScoreHTML(g, sum) {
+    if (g.morris) return panel('Final', '<div style="font-size:18px">' + esc((g.morris.home ? 'vs ' : 'at ') + (g.morris.opponent || '')) + '</div><div class="muted" style="font-size:16px">' + esc(g.morris.notes || '') + '</div>');
+    if (DEMO) return panel('Box score', note('Quarter-by-quarter scoring from ESPN'));
+    if (!sum) return panel('Box score', note('Loading…'));
+    var rows = sum.lines, n = Math.max.apply(null, rows.map(function (r) { return r.ls.length; }).concat([4]));
+    var per = function (i) { return i <= 4 ? (g.sport === 'basketball' || g.sport === 'football' ? 'Q' + i : String(i)) : (n > 5 ? 'OT' + (i - 4) : 'OT'); };
+    var cols = 'grid-template-columns:minmax(0,2.2fr) repeat(' + (n + 1) + ',minmax(0,1fr))';
+    var head = '<div class="muted" style="display:grid;' + cols + ';gap:6px;font-size:14px;font-weight:700;text-align:center"><span></span>';
+    for (var i = 1; i <= n; i++) head += '<span>' + per(i) + '</span>';
+    head += '<span>T</span></div>';
+    var body = rows.map(function (r) {
+      var t = g.teams.filter(function (x) { return x.abbr === r.abbr; })[0] || { abbr: r.abbr, logo: r.logo, c1: NEUTRAL.c1 };
+      var ls = r.ls.map(function (v) { return '<span>' + esc(v) + '</span>'; }).join(''); for (var k = r.ls.length; k < n; k++) ls += '<span class="muted">–</span>';
+      return '<div style="display:grid;' + cols + ';gap:6px;align-items:center;font-size:24px;font-weight:700;text-align:center;font-variant-numeric:tabular-nums">' +
+        '<span style="display:flex;align-items:center;gap:10px;text-align:left">' + logoHTML(t, 30) + esc(r.abbr) + '</span>' + ls + '<span style="font-weight:800">' + esc(r.total) + '</span></div>';
+    }).join('');
+    var stats = (sum.stats || []).slice(0, 3).map(function (s) {
+      return '<div style="display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:center;font-size:17px"><b style="text-align:left">' + esc(s.a) + '</b><span class="muted" style="font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase">' + esc(s.label) + '</span><b style="text-align:right">' + esc(s.b) + '</b></div>';
+    }).join('');
+    return panel('Box score', head + body + (stats ? '<div style="height:1px;background:rgba(255,255,255,.12);margin:2px 0"></div>' + stats : ''), 'gap:8px');
+  }
+  function leadersHTML(g, sum) {
+    if (g.morris) return panel('Where', '<div style="font-size:18px">' + esc(g.morris.location || (g.morris.home ? 'Morris' : '')) + '</div>');
+    if (DEMO) return panel('Game leaders', note('Top performers for each team from ESPN'));
+    if (!sum) return panel('Game leaders', note('Loading…'));
+    if (!sum.leaders.length) return panel('Game leaders', note('Not available yet'));
+    var person = function (x, right) {
+      if (!x) return '<div></div>';
+      var face = x.head ? '<img src="' + esc(x.head) + '" alt="" style="width:46px;height:46px;border-radius:50%;object-fit:cover;background:rgba(255,255,255,.12);flex-shrink:0" onerror="this.style.visibility=\'hidden\'">' : '<div style="width:46px;height:46px;border-radius:50%;background:rgba(255,255,255,.12);flex-shrink:0"></div>';
+      return '<div style="display:flex;align-items:center;gap:10px;min-width:0;' + (right ? 'flex-direction:row-reverse;text-align:right' : '') + '">' + face +
+        '<div style="min-width:0"><div class="ellip" style="font-size:16px;font-weight:800">' + esc(x.name) + '</div><div class="muted ellip" style="font-size:14px">' + esc(x.stat) + '</div></div></div>';
+    };
+    return panel('Game leaders', sum.leaders.slice(0, 3).map(function (c) {
+      return '<div style="display:grid;grid-template-columns:minmax(0,1fr) 92px minmax(0,1fr);gap:10px;align-items:center">' + person(c.a, false) +
+        '<div class="muted" style="text-align:center;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;line-height:1.2">' + esc(c.label) + '</div>' + person(c.b, true) + '</div>';
+    }).join(''), 'justify-content:flex-start');
+  }
+  function gameInfoHTML(g, sum) {
+    var rows = [];
+    if (g.morris) { rows.push(['Where', g.morris.location || (g.morris.home ? 'Morris' : '')]); if (g.morris.notes) rows.push(['Notes', g.morris.notes]); }
+    else if (DEMO) rows = [['Where', '[Stadium]'], ['TV', '[Network]'], ['Line', '[Spread] · O/U [Total]']];
+    else if (sum) { if (sum.venue) rows.push(['Where', sum.venue]); if (sum.tv) rows.push(['TV', sum.tv]); if (sum.line) rows.push(['Line', sum.line]); }
+    var inner = rows.length ? rows.map(function (r) { return '<div style="display:flex;flex-direction:column;gap:2px"><div class="muted" style="font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase">' + esc(r[0]) + '</div><div style="font-size:20px;font-weight:700;line-height:1.25">' + esc(r[1]) + '</div></div>'; }).join('') : note(sum || g.morris ? 'Details closer to game day' : 'Loading…');
+    return panel('Game info', inner, 'gap:14px');
+  }
+  function storyHTML(g, sum) {
+    var a = sum && sum.story;
+    if (g.morris) return panel('Preview', note('Game notes come from your dashboard sheet'));
+    if (DEMO) a = { headline: '[Game preview headline from ESPN]', description: '[A couple of lines from the preview story about the matchup]', image: '' };
+    if (!a) return panel('Preview', note(sum ? 'No preview story yet — check back closer to game day' : 'Loading…'));
+    return '<div class="tile" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:18px;padding:14px;min-height:0;overflow:hidden">' +
+      '<div style="border-radius:calc(var(--r2) * .8);overflow:hidden;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center">' + (a.image ? '<img src="' + esc(a.image) + '" alt="" style="width:100%;height:100%;object-fit:cover" onerror="this.remove()">' : icon('photo', 40, 1.3)) + '</div>' +
+      '<div style="display:flex;flex-direction:column;gap:10px;min-height:0;padding:4px 6px 4px 0"><div class="lbl">Preview · ESPN</div><div class="head clamp3" style="font-size:26px;line-height:1.15">' + esc(a.headline) + '</div><div class="muted clamp4" style="font-size:17px;line-height:1.45">' + esc(a.description || '') + '</div></div></div>';
+  }
+  function ensureSummary(g) {
+    if (DEMO || g.morris || !g.sport) return;
+    var c = S.sum[g.id], age = c ? Date.now() - c.t : 1e12, ttl = g.state === 'in' ? 45000 : 30 * 60000;
+    if (c && (c.loading || age < ttl)) return;
+    S.sum[g.id] = { t: Date.now(), j: c && c.j, loading: true };
+    getJSON(ESPN + g.sport + '/' + g.league + '/summary?event=' + g.id).then(function (j) {
+      var comp = j.header && j.header.competitions && j.header.competitions[0], cs = comp ? comp.competitors.slice() : [];
+      cs.sort(function (a, b) { return a.homeAway === 'away' ? -1 : b.homeAway === 'away' ? 1 : 0; });
+      var recs = {}; cs.forEach(function (c) { var r = recOf(c); if (r && c.team) recs[c.team.abbreviation] = r; });
+      var lines = cs.map(function (c) { return { abbr: c.team ? c.team.abbreviation : '', logo: c.team && c.team.logos && c.team.logos[0] ? c.team.logos[0].href : '', ls: (c.linescores || []).map(function (x) { return x.displayValue != null ? x.displayValue : x.value; }), total: scoreVal(c.score) }; });
+      // a few team stats, side by side
+      var want = g.sport === 'basketball' ? ['fieldGoalPct', 'threePointFieldGoalPct', 'totalRebounds', 'turnovers'] : ['totalYards', 'turnovers', 'possessionTime', 'firstDowns'];
+      var bt = (j.boxscore && j.boxscore.teams || []).slice().sort(function (a, b) { return a.homeAway === 'away' ? -1 : b.homeAway === 'away' ? 1 : 0; });
+      if (bt.length === 2 && cs[0] && bt[0].team && bt[0].team.id !== cs[0].team.id) bt.reverse();
+      var stats = [];
+      if (bt.length === 2) want.forEach(function (k) {
+        var f = function (t) { return (t.statistics || []).filter(function (s) { return s.name === k; })[0]; }, x = f(bt[0]), y = f(bt[1]);
+        if (x && y) stats.push({ label: x.label || x.name, a: x.displayValue, b: y.displayValue });
+      });
+      // leaders: same category for both teams
+      var lead = (j.leaders || []).slice(), cats = [];
+      if (lead.length === 2 && cs[0] && lead[0].team && lead[0].team.id !== cs[0].team.id) lead.reverse();
+      var pick = function (tm, name) { var c = ((tm && tm.leaders) || []).filter(function (x) { return x.name === name; })[0], a = c && c.leaders && c.leaders[0]; return a ? { name: a.athlete ? a.athlete.shortName || a.athlete.displayName : '', stat: a.displayValue || '', head: a.athlete && a.athlete.headshot ? a.athlete.headshot.href : '' } : null; };
+      ((lead[0] && lead[0].leaders) || []).slice(0, 3).forEach(function (c) { cats.push({ label: c.displayName || c.name, a: pick(lead[0], c.name), b: pick(lead[1], c.name) }); });
+      var pc = (j.pickcenter || [])[0], bc = comp && comp.broadcasts && comp.broadcasts[0];
+      var art = (j.news && j.news.articles || []).filter(function (x) { return x.headline; })[0] || (j.article && j.article.headline ? j.article : null);
+      var story = art ? { headline: art.headline, description: art.description || '', image: art.images && art.images[0] ? art.images[0].url : '' } : null;
+      S.sum[g.id] = { t: Date.now(), j: { recs: recs, lines: lines, stats: stats, leaders: cats, venue: j.gameInfo && j.gameInfo.venue ? j.gameInfo.venue.fullName : '',
+        tv: bc ? (bc.media && bc.media.shortName) || (bc.names || []).join(', ') : '', line: pc ? [pc.details, pc.overUnder != null ? 'O/U ' + pc.overUnder : ''].filter(Boolean).join(' · ') : '', story: story } };
+      if (!story && g.state === 'pre') return teamStory(g).then(function (s) { if (s) S.sum[g.id].j.story = s; });
+    }).catch(function () { S.sum[g.id] = { t: Date.now(), j: c && c.j }; }).then(function () { if (S.screen === 'scores' || S.detail) render(); });
+  }
+  function teamStory(g) { // league news that mentions either team
+    return getJSON(ESPN + g.sport + '/' + g.league + '/news?limit=30').then(function (j) {
+      var names = g.teams.map(function (t) { return t.name; }).filter(Boolean);
+      var a = (j.articles || []).filter(function (x) { return names.some(function (n) { return (x.headline + ' ' + (x.description || '')).indexOf(n) >= 0; }); })[0];
+      return a ? { headline: a.headline, description: a.description || '', image: a.images && a.images[0] ? a.images[0].url : '' } : null;
+    }).catch(function () { return null; });
+  }
+
+  // ---- news
+  function newsStories() { return newsList(); }
+  function newsPage(i) {
+    var nw = newsStories(), s = nw && nw[i];
+    if (!s) return note(S.backErr === 'setup' ? SETUP : esc(S.backErr || 'Loading…'));
+    return '<div style="display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:28px;flex:1;min-height:0">' +
+      '<div style="position:relative;border-radius:var(--r2);overflow:hidden;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center">' + icon('photo', 56, 1.2) +
+      (s.image ? '<img src="' + esc(s.image) + '" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" onerror="this.remove()">' : '') +
+      '<div style="position:absolute;left:16px;top:16px;padding:7px 14px;border-radius:999px;background:var(--accent);color:var(--ink);font-weight:800;font-size:15px;letter-spacing:.06em;text-transform:uppercase">' + esc(s.src) + '</div></div>' +
+      '<div style="display:flex;flex-direction:column;gap:14px;min-height:0;padding:4px 0">' +
+      '<div class="muted" style="font-size:17px;font-weight:600">' + (s.date ? esc(whenLabel(new Date(s.date))) : '') + '</div>' +
+      '<div class="head clamp4" style="font-size:40px;line-height:1.1">' + esc(s.title) + '</div>' +
+      '<div class="muted clamp4" style="font-size:20px;line-height:1.45">' + esc(s.summary || '') + '</div>' +
+      '<div style="display:flex;align-items:center;gap:16px;margin-top:auto"><div id="qr" style="width:104px;height:104px;border-radius:10px;background:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0"></div><div class="muted" style="font-size:16px">Scan to read the whole story on your phone</div></div></div></div>';
+  }
+
+  // ---- weather
+  function num(v) { return typeof v === 'number' && isFinite(v); }
+  function wxIcon(name, size) { // larger animated version of the weather icon
+    return '<div class="wxbig wx-' + name + '" style="width:' + size + 'px;height:' + size + 'px;color:var(--accent)">' + icon(name, size, 1.3) + '</div>';
+  }
+  function vibe(w) {
+    var n = w.now || {}, t = n.temp, ic = n.icon || '';
+    if (!num(t)) return { head: '[A one-line take on today’s weather]', sub: '[What to expect the rest of the day]' };
+    var head;
+    if (ic === 'storm') head = 'Storms around — stay weather aware';
+    else if (ic === 'snow') head = t <= 28 ? 'Snow day energy' : 'Snowflakes in the air';
+    else if (ic === 'sleet') head = 'Icy mix — take it slow out there';
+    else if (ic === 'rain') head = 'Grab an umbrella';
+    else if (ic === 'fog') head = 'Foggy out — headlights on';
+    else if (t < 10) head = 'Dangerously cold — bundle up';
+    else if (t < 25) head = 'Bitter cold — hats and gloves';
+    else if (t < 40) head = 'Winter coat weather';
+    else if (t < 52) head = 'Jacket weather';
+    else if (t < 64) head = 'Hoodie weather';
+    else if (t < 78) head = ic === 'sun' ? 'Absolutely beautiful out' : 'Pretty much perfect';
+    else if (t < 88) head = 'Shorts weather';
+    else head = 'Hot one — stay hydrated';
+    if (num(n.wind) && n.wind >= 20 && ic !== 'storm') head += n.wind >= 30 ? ', and very windy' : ', and breezy';
+    var sub = (n.text || '') + ' right now. ';
+    if (num(w.hi) && w.hi > t + 2 && now().getHours() < 15) sub += 'Climbing to ' + w.hi + '° this afternoon.';
+    else if (num(w.lo)) sub += 'Down to ' + w.lo + '° tonight.';
+    var wet = (w.hours || []).slice(1).filter(function (h) { return num(h.pop) && h.pop >= 40; })[0];
+    if (wet && ic !== 'rain' && ic !== 'storm' && ic !== 'snow') sub += ' Precipitation chances pick up around ' + wet.t + '.';
+    return { head: head, sub: sub };
+  }
+  function weatherPage(p) {
     var w = S.wx; if (!w) return note(esc(S.wxErr || 'Loading weather…'));
-    var hours = (w.hours || []).map(function (h) {
-      return '<div style="display:flex;flex-direction:column;align-items:center;justify-content:space-between"><div class="muted" style="font-size:13px;font-weight:700">' + h.t + '</div>' + icon(h.icon, 26) +
-        '<div style="font-size:18px;font-weight:800">' + h.temp + '°</div><div style="font-size:12px;color:var(--accent)">' + (h.pop || 0) + '%</div></div>';
-    }).join('');
-    var days = (w.days || []).map(function (d) {
-      return '<div class="tile" style="display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:10px 6px" title="' + esc(d.text) + '"><div style="font-size:15px;font-weight:800">' + d.label + '</div>' + icon(d.icon, 34, 1.5) +
-        '<div style="font-size:18px;font-weight:800">' + d.hi + '° <span class="muted" style="font-weight:500">' + d.lo + '°</span></div><div style="font-size:12px;color:var(--accent)">' + (d.pop || 0) + '% precip</div></div>';
-    }).join('');
-    var nw = w.now || {}, m = w.moon;
-    return '<div style="display:flex;flex-direction:column;gap:12px;flex:1;min-height:0">' +
-      '<div class="tile" style="display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:6px;padding:12px;height:120px">' + hours + '</div>' +
-      '<div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px;height:140px">' + days + '</div>' +
-      '<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;flex:1;min-height:0">' +
-      '<div class="tile" style="display:flex;flex-direction:column;gap:5px;padding:12px 16px"><div class="lbl">Now</div><div style="font-size:16px"><b>' + (nw.temp != null ? nw.temp + '°' : '—') + '</b> · feels <b>' + (nw.feels != null ? nw.feels + '°' : '—') + '</b></div>' +
-      '<div style="font-size:16px">Wind <b>' + (nw.wind != null ? nw.wind : '—') + '</b> mph ' + esc(nw.dir || '') + ' · gusts <b>' + (nw.gust != null ? nw.gust : '—') + '</b></div>' +
-      '<div style="font-size:16px">Humidity <b>' + (nw.hum != null ? nw.hum + '%' : '—') + '</b> · UV <b>' + (w.uv != null ? w.uv : '—') + '</b></div>' +
-      '<div style="font-size:16px">Air quality <b>' + (w.aqi != null ? w.aqi : '—') + '</b> <span class="muted">' + aqiLabel(w.aqi) + '</span></div></div>' +
-      '<div class="tile" style="display:flex;flex-direction:column;gap:6px;padding:12px 16px"><div class="lbl">Sun</div><div style="font-size:16px">Sunrise <b>' + (w.rise || '—') + '</b></div><div style="font-size:16px">Sunset <b>' + (w.set || '—') + '</b></div><div class="muted" style="font-size:14px">' + (w.daylight ? w.daylight + ' of daylight' : '') + '</div></div>' +
-      '<div class="tile" style="display:flex;align-items:center;gap:14px;padding:12px 16px">' + moonSvg(m, 64) + '<div style="display:flex;flex-direction:column;gap:4px"><div class="lbl">Moon</div><div style="font-size:16px;font-weight:800">' + m.name + '</div><div class="muted" style="font-size:14px">' + m.illum + '% lit · full ' + m.nextFull + '</div></div></div>' +
-      '<button type="button" class="tap tile" data-open="radar" style="flex-direction:column;gap:6px;padding:12px 16px"><div class="lbl">Radar</div><div style="flex:1;border-radius:8px;background:rgba(255,255,255,0.10);display:flex;align-items:center;justify-content:center;font-size:13px" class="muted">' + icon('rain', 30, 1.4) + '</div><div class="muted" style="font-size:12px">Tap for the live radar loop</div></button>' +
-      '</div></div>';
+    var n = w.now || {}, d = function (v) { return num(v) ? v + '°' : '—'; };
+    if (p === 'now') {
+      var v = vibe(w), chip = function (label, val, sub) { return '<div class="tile" style="display:flex;flex-direction:column;justify-content:center;gap:4px;padding:14px 20px"><div class="lbl">' + label + '</div><div style="font-size:30px;font-weight:800;line-height:1.1">' + val + '</div><div class="muted" style="font-size:15px">' + (sub || '&nbsp;') + '</div></div>'; };
+      return '<div style="display:flex;flex-direction:column;gap:14px;flex:1;min-height:0">' +
+        '<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;flex:1;min-height:0">' +
+        '<div class="tile" style="display:flex;align-items:center;justify-content:center;gap:28px;padding:16px">' + wxIcon(n.icon || 'cloud', 168) +
+        '<div style="display:flex;flex-direction:column;gap:4px"><div style="font-size:132px;font-weight:800;line-height:.9;letter-spacing:-.03em">' + d(n.temp) + '</div><div style="font-size:24px;font-weight:700">' + esc(n.text || '') + '</div><div class="muted" style="font-size:18px">Feels like ' + d(n.feels) + '</div></div></div>' +
+        '<div class="tile" style="display:flex;flex-direction:column;justify-content:center;gap:16px;padding:22px 28px"><div class="lbl">Today in ' + esc(L.name.split(',')[0]) + '</div>' +
+        '<div class="head" style="font-size:44px;line-height:1.08">' + esc(v.head) + '</div><div class="muted" style="font-size:19px;line-height:1.45">' + esc(v.sub) + '</div>' +
+        '<div style="display:flex;gap:30px;margin-top:4px"><div><div class="muted" style="font-size:14px;font-weight:700;letter-spacing:.08em">HIGH</div><div style="font-size:44px;font-weight:800;line-height:1">' + d(w.hi) + '</div></div>' +
+        '<div><div class="muted" style="font-size:14px;font-weight:700;letter-spacing:.08em">LOW</div><div style="font-size:44px;font-weight:800;line-height:1">' + d(w.lo) + '</div></div></div></div></div>' +
+        '<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;height:112px">' +
+        chip('Wind', (num(n.wind) ? n.wind : '—') + ' <span style="font-size:18px">mph ' + esc(n.dir || '') + '</span>', num(n.gust) ? 'Gusts to ' + n.gust + ' mph' : '') +
+        chip('Humidity', num(n.hum) ? n.hum + '%' : '—', '') + chip('UV index', num(w.uv) ? w.uv : '—', num(w.uv) ? (w.uv <= 2 ? 'Low' : w.uv <= 5 ? 'Moderate' : w.uv <= 7 ? 'High' : 'Very high') : '') +
+        chip('Air quality', num(w.aqi) ? w.aqi : '—', aqiLabel(w.aqi)) + '</div></div>';
+    }
+    if (p === 'hours') {
+      var hrs = (w.hours || []).slice(0, 12), wet = hrs.filter(function (h) { return num(h.pop) && h.pop >= 40; })[0];
+      var temps = hrs.map(function (h) { return h.temp; }).filter(num), hi = Math.max.apply(null, temps), lo = Math.min.apply(null, temps);
+      var kind = wet ? ({ snow: 'Snow', sleet: 'Icy mix', storm: 'Storm' }[wet.icon] || 'Rain') : '';
+      var head = !temps.length ? '[The next 12 hours at a glance]' : wet ? (wet.t === 'Now' ? kind + ' around right now' : kind + ' chances pick up around ' + wet.t) : 'Dry for the next 12 hours';
+      var sub = temps.length ? 'Temperatures from ' + lo + '° to ' + hi + '°' : '';
+      return '<div style="display:flex;flex-direction:column;gap:12px;flex:1;min-height:0"><div style="display:flex;align-items:baseline;gap:16px"><div class="head" style="font-size:34px">' + esc(head) + '</div><div class="muted" style="font-size:18px">' + esc(sub) + '</div></div>' +
+        '<div class="tile" style="flex:1;min-height:0;padding:10px 14px">' + hourChart(hrs, 1132, 360) + '</div></div>';
+    }
+    if (p === 'week') {
+      var days = w.days || [], his = days.map(function (x) { return x.hi; }).filter(num), los = days.map(function (x) { return x.lo; }).filter(num);
+      var top = Math.max.apply(null, his.concat(los)), bot = Math.min.apply(null, los.concat(his)), span = Math.max(1, top - bot);
+      var warm = days.filter(function (x) { return x.hi === top; })[0], cold = days.filter(function (x) { return num(x.lo) && x.lo === bot; })[0];
+      var head2 = his.length ? 'Warmest ' + (warm ? warm.label : '') + ' at ' + top + '°' + (cold ? ' · coldest ' + cold.label + ' night at ' + bot + '°' : '') : '[The week ahead at a glance]';
+      return '<div style="display:flex;flex-direction:column;gap:12px;flex:1;min-height:0"><div class="head" style="font-size:34px">' + esc(head2) + '</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:12px;flex:1;min-height:0">' + days.map(function (x) {
+          var ok = num(x.hi) && num(x.lo), t0 = ok ? (top - x.hi) / span * 100 : 20, t1 = ok ? (x.lo - bot) / span * 100 : 20;
+          return '<div class="tile" style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 8px;min-height:0" title="' + esc(x.text || '') + '">' +
+            '<div style="font-size:20px;font-weight:800">' + esc(x.label) + '</div><div style="color:var(--accent)">' + icon(x.icon, 50, 1.4) + '</div>' +
+            '<div style="font-size:26px;font-weight:800">' + d(x.hi) + '</div>' +
+            '<div style="flex:1;width:14px;position:relative;border-radius:7px;background:rgba(255,255,255,.08)"><div style="position:absolute;left:0;right:0;top:' + t0.toFixed(1) + '%;bottom:' + t1.toFixed(1) + '%;border-radius:7px;background:linear-gradient(#ffb35c,#6fb7ff)"></div></div>' +
+            '<div class="muted" style="font-size:22px;font-weight:700">' + d(x.lo) + '</div>' +
+            '<div style="font-size:15px;font-weight:700;color:' + (num(x.pop) && x.pop >= 40 ? '#8fc8ff' : 'var(--muted)') + '">💧 ' + (num(x.pop) ? x.pop + '%' : '—') + '</div></div>';
+        }).join('') + '</div></div>';
+    }
+    if (p === 'sky') {
+      var m = w.moon;
+      return '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;flex:1;min-height:0">' +
+        '<div class="tile" style="display:flex;flex-direction:column;gap:6px;padding:18px 24px;min-height:0"><div class="lbl">Sun</div>' + sunArc(w, 520, 210) +
+        '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">' +
+        '<div><div class="muted" style="font-size:14px;font-weight:700;letter-spacing:.08em">SUNRISE</div><div style="font-size:34px;font-weight:800">' + esc(w.rise || '—') + '</div></div>' +
+        '<div style="text-align:right"><div class="muted" style="font-size:14px;font-weight:700;letter-spacing:.08em">SUNSET</div><div style="font-size:34px;font-weight:800">' + esc(w.set || '—') + '</div></div></div>' +
+        '<div class="muted" style="font-size:17px;text-align:center">' + esc(w.daylight ? w.daylight + ' of daylight' + (num(w.dayDelta) && w.dayDelta !== 0 ? ' · ' + Math.abs(w.dayDelta) + ' min ' + (w.dayDelta < 0 ? 'shorter' : 'longer') + ' tomorrow' : '') : '') + '</div></div>' +
+        '<div class="tile" style="display:flex;align-items:center;justify-content:center;gap:34px;padding:18px 24px"><div class="wxbig wx-moon">' + moonSvg(m, 210) + '</div>' +
+        '<div style="display:flex;flex-direction:column;gap:8px"><div class="lbl">Moon</div><div class="head" style="font-size:40px;line-height:1.05">' + esc(m.name) + '</div>' +
+        '<div style="font-size:22px">' + m.illum + '% lit</div><div class="muted" style="font-size:18px">Next full moon ' + esc(m.nextFull) + '</div></div></div></div>';
+    }
+    if (p === 'radar') {
+      return '<div style="display:flex;flex-direction:column;gap:8px;flex:1;min-height:0"><div id="radar" style="flex:1;position:relative;overflow:hidden;border-radius:var(--r2);background:#0b0f17"></div>' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:16px"><div class="muted" id="radarnote" style="font-size:13px">Loading radar…</div>' +
+        '<div style="display:flex;align-items:center;gap:8px;font-size:13px" class="muted">Light<div style="width:160px;height:8px;border-radius:4px;background:linear-gradient(90deg,#88ddee,#0077cc,#ffee00,#ff8800,#ff0000,#cc00cc)"></div>Heavy</div></div></div>';
+    }
+    return note('Loading weather…');
+  }
+  function smooth(pts) { // Catmull-Rom → cubic Bézier path
+    if (pts.length < 2) return '';
+    var dd = 'M' + pts[0][0].toFixed(1) + ',' + pts[0][1].toFixed(1);
+    for (var i = 0; i < pts.length - 1; i++) {
+      var p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+      dd += ' C' + (p1[0] + (p2[0] - p0[0]) / 6).toFixed(1) + ',' + (p1[1] + (p2[1] - p0[1]) / 6).toFixed(1) + ' ' + (p2[0] - (p3[0] - p1[0]) / 6).toFixed(1) + ',' + (p2[1] - (p3[1] - p1[1]) / 6).toFixed(1) + ' ' + p2[0].toFixed(1) + ',' + p2[1].toFixed(1);
+    }
+    return dd;
+  }
+  function hourChart(hrs, W, H) {
+    var n = hrs.length || 1, px = 46, step = (W - 2 * px) / Math.max(1, n - 1), xs = hrs.map(function (h, i) { return px + i * step; });
+    var temps = hrs.map(function (h) { return h.temp; }), ok = temps.filter(num), hi = ok.length ? Math.max.apply(null, ok) : 1, lo = ok.length ? Math.min.apply(null, ok) : 0;
+    var y0 = 128, y1 = 238, ty = function (t) { return num(t) ? y1 - (t - lo) / Math.max(1, hi - lo) * (y1 - y0) : (y0 + y1) / 2; };
+    var pts = hrs.map(function (h, i) { return [xs[i], ty(h.temp)]; }), line = smooth(pts);
+    var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style="display:block;color:#fff">' +
+      '<defs><linearGradient id="tfill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--accent)" stop-opacity=".45"/><stop offset="1" stop-color="var(--accent)" stop-opacity="0"/></linearGradient></defs>';
+    if (pts.length > 1) s += '<path d="' + line + ' L' + xs[n - 1] + ',' + (y1 + 22) + ' L' + xs[0] + ',' + (y1 + 22) + 'Z" fill="url(#tfill)"/><path d="' + line + '" fill="none" stroke="var(--accent)" stroke-width="4" stroke-linecap="round"' + (ok.length ? '' : ' stroke-dasharray="8 8" opacity=".5"') + '/>';
+    hrs.forEach(function (h, i) {
+      var x = xs[i];
+      s += '<text x="' + x + '" y="26" text-anchor="middle" font-size="17" font-weight="700" fill="currentColor" opacity=".7">' + esc(h.t) + '</text>';
+      s += '<svg x="' + (x - 19) + '" y="40" width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">' + (ICON[h.icon] || ICON.cloud) + '</svg>';
+      s += '<circle cx="' + x + '" cy="' + pts[i][1].toFixed(1) + '" r="6" fill="var(--accent)" stroke="#fff" stroke-width="2"/>';
+      s += '<text x="' + x + '" y="' + (pts[i][1] - 16).toFixed(1) + '" text-anchor="middle" font-size="24" font-weight="800" fill="currentColor">' + (num(h.temp) ? h.temp + '°' : '—') + '</text>';
+      var pop = num(h.pop) ? h.pop : 0, bh = pop / 100 * 64;
+      s += '<rect x="' + (x - 14) + '" y="' + (H - 34 - bh).toFixed(1) + '" width="28" height="' + Math.max(2, bh).toFixed(1) + '" rx="5" fill="#6fb7ff" opacity="' + (pop >= 40 ? .95 : .55) + '"/>';
+      s += '<text x="' + x + '" y="' + (H - 10) + '" text-anchor="middle" font-size="15" font-weight="700" fill="#8fc8ff">' + (num(h.pop) ? h.pop + '%' : '—') + '</text>';
+    });
+    return s + '</svg>';
+  }
+  function sunArc(w, W, H) {
+    var cx = W / 2, cy = H - 22, rx = W / 2 - 40, ry = H - 52, n = now(), f = null;
+    if (w.riseD && w.setD) f = (n - w.riseD) / (w.setD - w.riseD);
+    var up = f != null && f >= 0 && f <= 1, ff = f == null ? 0.5 : Math.max(0, Math.min(1, f)), ang = Math.PI * (1 - ff);
+    var sx = cx + rx * Math.cos(ang), sy = cy - ry * Math.sin(ang);
+    var arc = 'M' + (cx - rx) + ',' + cy + ' A' + rx + ',' + ry + ' 0 0 1 ' + (cx + rx) + ',' + cy;
+    var done = up ? 'M' + (cx - rx) + ',' + cy + ' A' + rx + ',' + ry + ' 0 0 1 ' + sx.toFixed(1) + ',' + sy.toFixed(1) : '';
+    return '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="display:block;flex:1;min-height:0">' +
+      '<path d="' + arc + '" fill="none" stroke="rgba(255,255,255,.28)" stroke-width="3" stroke-dasharray="2 9" stroke-linecap="round"/>' +
+      (done ? '<path d="' + done + '" fill="none" stroke="#ffc65c" stroke-width="4" stroke-linecap="round"/>' : '') +
+      '<line x1="18" y1="' + cy + '" x2="' + (W - 18) + '" y2="' + cy + '" stroke="rgba(255,255,255,.35)" stroke-width="2"/>' +
+      (up ? '<circle cx="' + sx.toFixed(1) + '" cy="' + sy.toFixed(1) + '" r="30" fill="#ffc65c" opacity=".25"/><circle cx="' + sx.toFixed(1) + '" cy="' + sy.toFixed(1) + '" r="17" fill="#ffd27a"/>'
+        : '<text x="' + cx + '" y="' + (cy - ry / 2) + '" text-anchor="middle" font-size="20" fill="rgba(255,255,255,.6)">' + (f != null && f > 1 ? 'The sun has set' : f != null ? 'Before sunrise' : '') + '</text>') + '</svg>';
   }
 
   // ------------------------------------------------------------ details
@@ -708,19 +1002,22 @@
   function setScreen(name) {
     if (S.detail) { S.detail = null; $('overlay').className = ''; stopRadar(); }
     if (name === 'photos' && S.screen !== 'photos') S.photoIdx++;
-    S.screen = name; render(); schedule();
+    S.screen = name; S.page = 0; render(); schedule();
   }
   function schedule() {
     clearTimeout(S.timer); if (STATIC) return;
-    var t = C.timing, s = S.detail ? t.detail : (S.screen === 'home' ? t.home : t.screen);
+    var s = S.detail ? C.timing.detail : pageDur();
     S.timer = setTimeout(function () {
-      if (S.detail) closeDetail();
-      else setScreen(ORDER[(ORDER.indexOf(S.screen) + 1) % ORDER.length]);
+      if (S.detail) return closeDetail();
+      var pg = pageList(S.screen);
+      if (S.screen !== 'home' && S.page < pg.length - 1) { S.page++; render(); schedule(); return; }
+      setScreen(ORDER[(ORDER.indexOf(S.screen) + 1) % ORDER.length]);
     }, s * 1000);
   }
   document.addEventListener('click', function (e) {
-    var el = e.target.closest('[data-go],[data-open],[data-close]'); if (!el) return;
+    var el = e.target.closest('[data-go],[data-open],[data-close],[data-page]'); if (!el) return;
     if (el.hasAttribute('data-close')) return closeDetail();
+    if (el.hasAttribute('data-page')) { S.page = +el.getAttribute('data-page'); render(); schedule(); return; }
     if (el.hasAttribute('data-go')) return setScreen(el.getAttribute('data-go'));
     var p = el.getAttribute('data-open').split(':');
     openDetail(p[0], +p[1], +p[2]);

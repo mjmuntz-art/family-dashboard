@@ -27,21 +27,36 @@ button { font: inherit; color: inherit; }
 .head { font-family: var(--head); font-weight: var(--headW); letter-spacing: var(--headLs); }
 .clamp2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .clamp3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.clamp4 { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+/* page dots: the active one fills up while that page is showing */
+.dots { display: flex; gap: 8px; }
+.dots button { position: relative; width: 12px; height: 12px; padding: 0; border: none; border-radius: 6px; background: rgba(255,255,255,0.28); cursor: pointer; overflow: hidden; transition: width .3s; }
+.dots button.on { width: 40px; }
+.dots button.on::after { content: ""; position: absolute; inset: 0; background: var(--accent); transform-origin: left; animation: dotFill var(--dur) linear forwards; }
+@keyframes dotFill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+/* big weather icons breathe a little */
+.wxbig { display: flex; align-items: center; justify-content: center; animation: wxFloat 6s ease-in-out infinite alternate; filter: drop-shadow(0 6px 18px rgba(0,0,0,.35)); }
+.wxbig.wx-moon > svg { animation: wxGlow 4s ease-in-out infinite alternate; }
+.wxbig.wx-sun svg { animation: wxSpin 60s linear infinite; }
+@keyframes wxFloat { from { transform: translateY(-5px); } to { transform: translateY(5px); } }
+@keyframes wxSpin { to { transform: rotate(360deg); } }
+@keyframes wxGlow { from { filter: drop-shadow(0 0 4px rgba(255,220,150,.2)); } to { filter: drop-shadow(0 0 22px rgba(255,220,150,.55)); } }
 .ellip { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ---------- top bar ---------- */
-#topbar { position: absolute; top: 28px; left: 32px; right: 32px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; gap: 16px; z-index: 5; }
-.clock { justify-self: start; display: flex; align-items: flex-end; gap: 14px; padding: 12px 22px; }
-.clock .t { font-size: 60px; font-weight: 700; line-height: 0.95; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-.clock .ap { font-size: 22px; font-weight: 600; margin-left: 6px; color: var(--muted); }
-.banner { justify-self: center; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 14px 30px; max-width: 520px; }
+#topbar { position: absolute; top: 20px; left: 32px; right: 32px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 16px; z-index: 5; }
+.clock { justify-self: start; display: flex; align-items: flex-end; gap: 16px; padding: 10px 26px 12px; }
+.clock .t { font-size: 96px; font-weight: 700; line-height: 0.95; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.clock .ap { font-size: 30px; font-weight: 600; margin-left: 6px; color: var(--muted); }
+.banner { justify-self: center; align-self: stretch; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 12px 36px; max-width: 100%; overflow: hidden; }
 .banner .title { font-size: var(--titleSize); line-height: 1.05; white-space: nowrap; }
-.banner .sub { font-size: 15px; font-weight: 600; color: var(--accent); white-space: nowrap; }
-.wxpill { justify-self: end; display: flex; align-items: center; gap: 12px; padding: 12px 22px; }
-.wxpill .temp { font-size: 40px; font-weight: 700; line-height: 1; }
+.banner .sub { font-size: 22px; font-weight: 600; color: var(--accent); white-space: nowrap; }
+.wxpill { justify-self: end; align-self: stretch; display: flex; align-items: center; gap: 14px; padding: 10px 26px; }
+.wxpill .temp { font-size: 72px; font-weight: 700; line-height: .95; letter-spacing: -0.02em; }
+.wxpill .hilo { font-size: 21px; font-weight: 700; color: var(--muted); white-space: nowrap; }
 
 /* ---------- alert banner ---------- */
-#alert { position: absolute; left: 32px; right: 32px; top: 128px; z-index: 6; display: none; padding: 8px 16px; border-radius: 12px; background: #b3261e; font-weight: 700; font-size: 15px; }
+#alert { position: absolute; left: 32px; right: 32px; top: 146px; z-index: 6; display: none; padding: 8px 16px; border-radius: 12px; background: #b3261e; font-weight: 700; font-size: 15px; }
 #alert.on { display: flex; gap: 10px; align-items: center; }
 
 /* ---------- home ---------- */
@@ -49,7 +64,7 @@ button { font: inherit; color: inherit; }
 .home > .tap { flex-direction: column; gap: 10px; padding: 16px; overflow: hidden; }
 
 /* ---------- full screens ---------- */
-.full { position: absolute; top: 140px; left: 32px; right: 32px; bottom: 104px; padding: 22px 28px; display: flex; flex-direction: column; gap: 14px; }
+.full { position: absolute; top: 152px; left: 32px; right: 32px; bottom: 104px; padding: 22px 28px; display: flex; flex-direction: column; gap: 14px; }
 .full > header { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
 .full > header h1 { margin: 0; font-size: var(--h2); font-family: var(--head); font-weight: var(--headW); letter-spacing: var(--headLs); }
 .full > header .muted { font-size: 15px; }
@@ -151,4 +166,4 @@ button { font: inherit; color: inherit; }
 @keyframes aBeam { from { opacity: .2; } to { opacity: .9; } }
 @keyframes efIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 @keyframes efPop { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { #scene * , .screen-in, #overlay .card { animation: none !important; } #scene .a-lightning { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { #scene * , .screen-in, #overlay .card, .wxbig, .wxbig svg, .dots button.on::after { animation: none !important; } #scene .a-lightning { opacity: 0; } }

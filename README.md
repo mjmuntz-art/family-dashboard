@@ -37,7 +37,9 @@ Test it on a computer first. Add `?demo` to the end of the address to see it fil
    - `DASHBOARD_SHEET_ID`: optional. Make a Google Sheet with a tab named **Morris**, using the columns `Date | Time | Sport | Opponent | Home/Away | Morris | Opp | Status | Location | Notes | Opp Color`. Games within 10 days of today appear on the Scores screen.
    - `PLAY_MODELS`: for each model, fill in the spreadsheet ID and the tab that lists the day's plays. Then match the `{Header}` names to the column headers in that tab. Only rows dated today are shown.
 4. In the left sidebar, click **Services (+)**, add **Drive API**, and click Add. The photos need this.
-5. At the top, choose the `testAll` function and click **Run**. Approve the permissions; Google will warn that the app isn't verified, which is normal for your own script. Then check the log output.
+5. At the top, choose the `testAll` function and click **Run**. Approve the permissions; Google will warn that the app isn't verified, which is normal for your own script. Then check the log output. `testCalendars` lists each calendar as OK or FAIL, and `testNews` shows how many stories each news source returned.
+
+   **Updating Code.gs later:** keep your settings at the top (everything above the `=====` line) and replace everything below it. Any setting your old block is missing falls back to a default. After every change: **Deploy → Manage deployments → pencil → Version: New version → Deploy**.
 6. Click **Deploy → New deployment**, choose type **Web app**, set *Execute as* to **Me**, and set *Who has access* to **Anyone**. Click Deploy and copy the web app URL.
 7. In `config.js`, paste that URL into `appsScriptUrl` and your KEY into `appsScriptKey`. Upload the updated `config.js` to GitHub.
 
@@ -56,13 +58,15 @@ To stop the Echo from going back to its own home screen:
 
 ## Settings you might change (`config.js`)
 
-- `timing`: home 60 s, other screens 30 s, pop-ups 20 s.
+- `timing`: home 60 s, other screens 30 s, pop-ups 20 s. Scores, News and Weather cycle through pages: the Scores overview shows for `scoresGrid` (15 s), then each of your teams' games for `page` (12 s); each news story shows for `story` (10 s); each weather page for `page` (12 s).
 - `teams`: teams that always get a Scores tile. They use ESPN team codes, for example `{ sport: 'basketball', league: 'nba', team: 'chi', name: 'Bulls' }`. Logos and colors come from ESPN automatically.
 - `fillLeagues`: which leagues fill the remaining Scores tiles with today's games.
 - `birthdays`: each person's name and birthday, like `{ name: 'Mom', date: '03-14', year: 1985 }`. On that day the whole dashboard switches to the birthday look and says "Happy Birthday, Mom!", with "Turning 41 today" if you include the year. A week ahead, the top banner counts down to it.
 - `lowPower: true`: fewer falling leaves and snowflakes, no paper-grain texture, and no blur behind the panels. Use it if the Echo ever feels sluggish.
 
 ## Preview tricks (add to the end of the address)
+
+- `?screen=weather&page=2`: jump to a page of a cycling screen (pages count from 0).
 
 | Add | What it does |
 |---|---|
