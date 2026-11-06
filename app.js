@@ -168,9 +168,9 @@
       '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset,uv_index_max' +
       '&hourly=temperature_2m,precipitation_probability,weather_code,is_day');
     var aq = getJSON('https://air-quality-api.open-meteo.com/v1/air-quality?' + ll + '&current=us_aqi&timezone=' + tz);
-    var pt = load('nwsPoint', 7 * 86400000);
+    var pt = load('nwsPoint:' + L.lat.toFixed(3) + ',' + L.lon.toFixed(3), 7 * 86400000);
     var nws = (pt ? Promise.resolve(pt) : getJSON('https://api.weather.gov/points/' + L.lat.toFixed(4) + ',' + L.lon.toFixed(4)).then(function (j) {
-      var v = { forecast: j.properties.forecast, hourly: j.properties.forecastHourly }; save('nwsPoint', v); return v;
+      var v = { forecast: j.properties.forecast, hourly: j.properties.forecastHourly }; save('nwsPoint:' + L.lat.toFixed(3) + ',' + L.lon.toFixed(3), v); return v;
     })).then(function (p) { return Promise.all([getJSON(p.forecast), getJSON(p.hourly)]); });
     return Promise.allSettled([om, aq, nws]).then(function (r) {
       if (r[0].status !== 'fulfilled' && r[2].status !== 'fulfilled') { S.wxErr = 'Weather services unreachable — retrying'; render(); return; }
@@ -339,15 +339,18 @@
     if (DEMO) { S.back = demoBack(); render(); return Promise.resolve(); }
     if (!C.appsScriptUrl) { S.backErr = 'setup'; render(); return Promise.resolve(); }
     return getJSON(C.appsScriptUrl + '?action=all&key=' + encodeURIComponent(C.appsScriptKey || ''), 45000).then(function (j) {
-      if (j.error) throw new Error(j.error);
+      if (j.error) throw new Error(j.error === 'bad key' ? 'the key in config.js doesn’t match KEY in Code.gs' : j.error);
       S.back = j; S.backErr = null; save('back', j); render();
     }).catch(function (e) {
-      S.backErr = 'Couldn’t reach your Google data (' + e.message + ') — retrying';
+      var why = /JSON|Unexpected token/i.test(e.message) ? 'the Apps Script sent a sign-in page — set its deployment to “Anyone”' : e.message;
+      S.backErr = 'Couldn’t reach your Google data (' + why + ') — retrying';
       if (!S.back) { S.back = load('back'); if (S.back) render(); }
     });
   }
   function events() {
     var b = S.back; if (!b || !b.calendar) return null;
+    if (b.calendar.error) { S.calErr = 'Calendar error: ' + b.calendar.error; return null; }
+    S.calErr = null;
     return (b.calendar.events || []).map(function (e) { return { title: e.title, start: new Date(e.start), end: new Date(e.end), allDay: e.allDay, who: e.calendar, color: e.color || '#ffb35c', location: e.location, description: e.description }; })
       .sort(function (a, b) { return a.start - b.start; });
   }
@@ -419,7 +422,7 @@
       list = ev.filter(function (e) { return sameDay(e.start, n) && (e.allDay || e.end > n); });
       if (!list.length) { label = 'Family tomorrow'; list = ev.filter(function (e) { return dayDiff(n, e.start) === 1; }); }
     }
-    var fam = '<div class="lbl">' + label + '</div>' + (!ev ? note(S.backErr === 'setup' ? 'Calendar not connected yet' : 'Loading…') :
+    var fam = '<div class="lbl">' + label + '</div>' + (!ev ? note(S.backErr === 'setup' ? 'Calendar not connected yet' : esc(S.calErr || (S.backErr ? 'Can\u2019t reach your Google data — open Family for details' : 'Loading…'))) :
       !list.length ? note('Nothing on the calendar') : list.slice(0, 4).map(function (e) {
         return '<div style="display:flex;align-items:center;gap:10px"><div style="width:9px;height:9px;border-radius:50%;background:' + esc(e.color) + ';flex-shrink:0"></div>' +
           '<div style="min-width:0"><div class="ellip" style="font-size:16px;font-weight:700">' + esc(e.title) + '</div><div class="muted ellip" style="font-size:13px">' + (e.allDay ? 'All day' : hm(e.start)) + ' · ' + esc(e.who) + '</div></div></div>';
@@ -434,7 +437,7 @@
     }).join('') : note(S.scoresErr || 'Loading scores…'));
     var md = models();
     var pl = '<div class="lbl">Today’s plays</div>' + (!md ? note(S.backErr === 'setup' ? 'Model sheets not connected yet' : 'Loading…') : md.slice(0, 4).map(function (m) {
-      var top = m.plays && m.plays[0] ? m.plays[0].play : 'No plays yet today';
+      var top = m.plays && m.plays[0] ? m.plays[0].play : (m.note || 'No plays yet today');
       return '<div style="display:flex;flex-direction:column;gap:4px;padding:8px 11px;border-radius:10px;background:' + m.bg + ';border:1px solid ' + m.edge + '">' +
         '<div style="font-family:' + m.font + ';font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:' + m.acc + '">' + esc(m.name) + '</div>' +
         '<div class="ellip" style="font-size:14px;font-weight:700">' + esc(top) + '</div></div>';
@@ -466,7 +469,7 @@
   }
 
   function familyHTML() {
-    var ev = events(); if (!ev) return note(S.backErr === 'setup' ? SETUP : esc(S.backErr || 'Loading…'));
+    var ev = events(); if (!ev) return note(S.backErr === 'setup' ? SETUP : esc(S.calErr || S.backErr || 'Loading…'));
     var n = now(), today = ev.filter(function (e) { return sameDay(e.start, n) && (e.allDay || e.end > n); }).slice(0, 5);
     var week = ev.filter(function (e) { var dd = dayDiff(n, e.start); return dd >= 1 && dd <= 6; }).slice(0, 5);
     var row = function (e, showDay, i) {
@@ -512,7 +515,7 @@
       }).join('');
       return '<div style="display:flex;flex-direction:column;gap:6px;padding:12px 18px;border-radius:14px;background:' + m.bg + ';border:1px solid ' + m.edge + ';min-height:0">' +
         '<div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-family:' + m.font + ';font-size:20px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:' + m.acc + '">' + esc(m.name) + '</span><span style="font-size:13px;color:#dfe5ee">' + esc(m.record || '') + '</span></div>' +
-        (rows || '<div class="note" style="color:#dfe5ee">No plays yet today</div>') + '<div style="font-size:11px;color:#dfe5ee;margin-top:auto">' + esc(m.source || '') + '</div></div>';
+        (rows || '<div class="note" style="color:#dfe5ee">' + esc(m.note || 'No plays yet today') + '</div>') + '<div style="font-size:11px;color:#dfe5ee;margin-top:auto">' + esc(m.source || '') + '</div></div>';
     });
     while (cards.length < 4) cards.push('<div class="tile">' + note('Add another model in Code.gs') + '</div>');
     return '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr))">' + cards.join('') + '</div>';
