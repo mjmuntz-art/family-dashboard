@@ -1,0 +1,154 @@
+/* ===================================================================
+   Muntz Family Dashboard — layout for the Echo Show 10 (1280×800)
+   Theme values arrive as CSS variables set from themes.js
+   =================================================================== */
+:root {
+  --panel: rgba(40,18,6,0.62); --solid: rgba(44,22,8,0.95); --edge: rgba(255,214,170,0.24); --tile: rgba(255,230,200,0.10);
+  --accent: #ffb35c; --ink: #2a1606; --muted: #efdcc8; --r: 22px; --r2: 14px;
+  --head: Georgia, serif; --body: system-ui, sans-serif; --headW: 700; --headLs: 0; --titleSize: 34px; --h2: 34px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+body { color: #fff; font-family: var(--body); -webkit-font-smoothing: antialiased; cursor: default; }
+button { font: inherit; color: inherit; }
+
+#stage { position: absolute; left: 0; top: 0; width: 1280px; height: 800px; overflow: hidden; transform-origin: 0 0; background: #1a1a1a; }
+#scene { position: absolute; inset: 0; }
+#scene svg { display: block; width: 1280px; height: 800px; }
+
+/* ---------- frosted panels ---------- */
+.tap { all: unset; box-sizing: border-box; cursor: pointer; display: flex; }
+.tap:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+.frost { background: var(--panel); border: 1px solid var(--edge); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-radius: var(--r); }
+.low .frost { backdrop-filter: none; -webkit-backdrop-filter: none; }
+.tile { background: var(--tile); border-radius: var(--r2); }
+.lbl { font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
+.muted { color: var(--muted); }
+.head { font-family: var(--head); font-weight: var(--headW); letter-spacing: var(--headLs); }
+.clamp2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.clamp3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.ellip { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- top bar ---------- */
+#topbar { position: absolute; top: 28px; left: 32px; right: 32px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; gap: 16px; z-index: 5; }
+.clock { justify-self: start; display: flex; align-items: flex-end; gap: 14px; padding: 12px 22px; }
+.clock .t { font-size: 60px; font-weight: 700; line-height: 0.95; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.clock .ap { font-size: 22px; font-weight: 600; margin-left: 6px; color: var(--muted); }
+.banner { justify-self: center; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 14px 30px; max-width: 520px; }
+.banner .title { font-size: var(--titleSize); line-height: 1.05; white-space: nowrap; }
+.banner .sub { font-size: 15px; font-weight: 600; color: var(--accent); white-space: nowrap; }
+.wxpill { justify-self: end; display: flex; align-items: center; gap: 12px; padding: 12px 22px; }
+.wxpill .temp { font-size: 40px; font-weight: 700; line-height: 1; }
+
+/* ---------- alert banner ---------- */
+#alert { position: absolute; left: 32px; right: 32px; top: 128px; z-index: 6; display: none; padding: 8px 16px; border-radius: 12px; background: #b3261e; font-weight: 700; font-size: 15px; }
+#alert.on { display: flex; gap: 10px; align-items: center; }
+
+/* ---------- home ---------- */
+.home { position: absolute; left: 32px; right: 32px; bottom: 28px; height: 340px; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
+.home > .tap { flex-direction: column; gap: 10px; padding: 16px; overflow: hidden; }
+
+/* ---------- full screens ---------- */
+.full { position: absolute; top: 140px; left: 32px; right: 32px; bottom: 104px; padding: 22px 28px; display: flex; flex-direction: column; gap: 14px; }
+.full > header { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+.full > header h1 { margin: 0; font-size: var(--h2); font-family: var(--head); font-weight: var(--headW); letter-spacing: var(--headLs); }
+.full > header .muted { font-size: 15px; }
+.grid { display: grid; gap: 14px; flex: 1; min-height: 0; }
+
+#nav { position: absolute; left: 0; right: 0; bottom: 30px; display: flex; justify-content: center; z-index: 5; }
+#nav .bar { display: flex; gap: 6px; padding: 6px; border-radius: 999px; }
+#nav button { height: 44px; padding: 0 18px; border-radius: 999px; border: none; background: transparent; font-family: var(--body); font-size: 15px; font-weight: 700; cursor: pointer; color: #fff; }
+#nav button.on { background: var(--accent); color: var(--ink); }
+
+/* score bugs */
+.bug { display: flex; border-radius: 7px; overflow: hidden; }
+.bug .logo { display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.bug .logo img { width: 78%; height: 78%; object-fit: contain; }
+.bug .nm { flex: 1; display: flex; align-items: center; padding: 0 10px; font-weight: 700; min-width: 0; }
+.bug .sc { display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.45); font-weight: 800; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.bug.dim .nm, .bug.dim .sc { opacity: 0.72; }
+.live { color: #ff6b6b; }
+
+/* detail overlay */
+#overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.5); z-index: 10; display: none; }
+#overlay.on { display: block; }
+#overlay .card { position: absolute; left: 150px; right: 150px; top: 100px; bottom: 80px; padding: 28px 32px; display: flex; flex-direction: column; gap: 16px; background: var(--solid); border: 1px solid var(--edge); border-radius: var(--r); animation: efPop 0.35s ease-out; }
+#overlay .x { position: absolute; top: 16px; right: 16px; width: 44px; height: 44px; border-radius: 50%; border: none; background: rgba(255,255,255,0.14); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+
+/* start screen (needed once so the browser allows full screen) */
+#start { position: absolute; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.35); }
+#start button { padding: 22px 40px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.4); background: rgba(0,0,0,0.6); font-size: 24px; font-weight: 700; cursor: pointer; }
+#keepalive { position: absolute; width: 2px; height: 2px; opacity: 0.01; left: 0; bottom: 0; pointer-events: none; }
+#demo { position: absolute; right: 36px; bottom: 4px; z-index: 6; font-size: 11px; color: rgba(255,255,255,0.8); }
+
+.screen-in { animation: efIn 0.6s ease-out; }
+.note { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 8px; flex: 1; color: var(--muted); font-size: 16px; padding: 10px; }
+
+/* ===================== Scene motion ===================== */
+.a-glow { transform-box: fill-box; transform-origin: center; animation: aGlow 7s ease-in-out infinite alternate; }
+@keyframes aGlow { from { transform: scale(.95); opacity: .85; } to { transform: scale(1.05); opacity: 1; } }
+.a-cloud { animation: aCloud 90s ease-in-out infinite alternate; }
+@keyframes aCloud { from { transform: translateX(-70px); } to { transform: translateX(70px); } }
+.a-shimmer { animation: aShim 6s ease-in-out infinite alternate; }
+@keyframes aShim { from { transform: translateX(-14px); opacity: .65; } to { transform: translateX(14px); opacity: 1; } }
+.a-surf { animation: aSurf 5s ease-in-out infinite alternate; }
+@keyframes aSurf { from { transform: translate(-30px, -2px); } to { transform: translate(30px, 3px); } }
+.a-sway { transform-box: fill-box; transform-origin: 50% 100%; animation: aSway 7s ease-in-out infinite alternate; }
+@keyframes aSway { from { transform: rotate(-.9deg); } to { transform: rotate(.9deg); } }
+.a-grass { transform-box: fill-box; transform-origin: 50% 100%; animation: aGrass 4.5s ease-in-out infinite alternate; }
+@keyframes aGrass { from { transform: skewX(-3deg); } to { transform: skewX(3deg); } }
+.a-geese { animation: aGeese 75s linear infinite; }
+@keyframes aGeese { from { transform: translate(-320px, 40px); } to { transform: translate(1500px, -70px); } }
+.a-gull { animation-name: aGull; animation-timing-function: ease-in-out; animation-iteration-count: infinite; animation-direction: alternate; }
+@keyframes aGull { from { transform: translate(-60px, 10px); } to { transform: translate(80px, -16px); } }
+.a-leaf { transform-box: fill-box; transform-origin: center; animation-name: aLeaf; animation-timing-function: linear; animation-iteration-count: infinite; }
+@keyframes aLeaf { 0% { transform: translate(0,0) rotate(0); } 25% { transform: translate(30px,215px) rotate(120deg); } 50% { transform: translate(-10px,430px) rotate(240deg); } 75% { transform: translate(26px,645px) rotate(330deg); } 100% { transform: translate(0,860px) rotate(420deg); } }
+.a-snow { animation-name: aSnow; animation-timing-function: linear; animation-iteration-count: infinite; }
+@keyframes aSnow { 0% { transform: translate(0,0); } 50% { transform: translate(16px,420px); } 100% { transform: translate(-8px,840px); } }
+.a-rain { animation-name: aRain; animation-timing-function: linear; animation-iteration-count: infinite; }
+@keyframes aRain { from { transform: translate(0,0); } to { transform: translate(-150px,880px); } }
+.a-twinkle { animation: aTw 3.5s ease-in-out infinite alternate; }
+@keyframes aTw { from { opacity: .25; } to { opacity: 1; } }
+.a-window { animation: aWin 3s ease-in-out infinite alternate; }
+@keyframes aWin { from { opacity: .75; } to { opacity: 1; } }
+.a-balloon, .a-lantern { animation-name: aRise; animation-timing-function: linear; animation-iteration-count: infinite; }
+@keyframes aRise { 0% { transform: translate(0,0); } 25% { transform: translate(18px,-260px); } 50% { transform: translate(-12px,-520px); } 75% { transform: translate(14px,-780px); } 100% { transform: translate(0,-1040px); } }
+.a-orb { animation: aOrb 9s ease-in-out infinite alternate; }
+@keyframes aOrb { from { transform: translate(0,0); opacity: .2; } to { transform: translate(24px,-30px); opacity: .8; } }
+.a-firefly { animation-name: aFly; animation-timing-function: ease-in-out; animation-iteration-count: infinite; animation-direction: alternate; }
+@keyframes aFly { 0% { transform: translate(0,0); opacity: .1; } 40% { opacity: 1; } 100% { transform: translate(34px,-40px); opacity: .2; } }
+.a-burst { transform-box: fill-box; transform-origin: center; animation-name: aBurst; animation-timing-function: ease-out; animation-iteration-count: infinite; }
+@keyframes aBurst { 0% { transform: scale(.08); opacity: 0; } 8% { opacity: 1; } 55% { transform: scale(1); opacity: .95; } 100% { transform: scale(1.12) translateY(14px); opacity: 0; } }
+.a-spin { animation-name: aSpin; animation-timing-function: linear; animation-iteration-count: infinite; }
+@keyframes aSpin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+.a-smoke { transform-box: fill-box; transform-origin: center; animation: aSmoke 8s linear infinite; }
+@keyframes aSmoke { 0% { transform: translate(0,0) scale(.6); opacity: .55; } 100% { transform: translate(40px,-110px) scale(2.4); opacity: 0; } }
+.a-train { animation: aTrain 70s linear infinite; }
+@keyframes aTrain { from { transform: translateX(-80px); } to { transform: translateX(1900px); } }
+.a-crawl { animation: aCrawl 60s ease-in-out infinite alternate; }
+@keyframes aCrawl { from { transform: translateX(-160px); } to { transform: translateX(160px); } }
+.a-boat { animation: aBoat 40s ease-in-out infinite alternate; }
+@keyframes aBoat { 0% { transform: translate(-60px,0) rotate(-1deg); } 50% { transform: translate(0,3px) rotate(1deg); } 100% { transform: translate(60px,0) rotate(-1deg); } }
+.a-bob { animation: aBob 5s ease-in-out infinite alternate; }
+@keyframes aBob { from { transform: translateY(-2px) rotate(-.6deg); } to { transform: translateY(2px) rotate(.6deg); } }
+.a-wave { transform-origin: 0 50%; animation: aWave 5s ease-in-out infinite alternate; }
+@keyframes aWave { from { transform: skewY(-1.2deg) scaleX(.985); } to { transform: skewY(1.2deg) scaleX(1); } }
+.a-slide { animation: aSlide 9s linear infinite; }
+@keyframes aSlide { from { transform: translateX(0); } to { transform: translateX(320px); } }
+.a-flit { animation-name: aFlit; animation-timing-function: ease-in-out; animation-iteration-count: infinite; animation-direction: alternate; }
+@keyframes aFlit { 0% { transform: translate(0,0); } 33% { transform: translate(60px,-30px); } 66% { transform: translate(20px,20px); } 100% { transform: translate(110px,-10px); } }
+.a-flap { transform-box: fill-box; transform-origin: center; animation: aFlap .35s ease-in-out infinite alternate; }
+@keyframes aFlap { from { transform: scaleX(1); } to { transform: scaleX(.35); } }
+.a-bat { animation-name: aBat; animation-timing-function: linear; animation-iteration-count: infinite; }
+@keyframes aBat { 0% { transform: translate(0,0); } 25% { transform: translate(350px,-30px); } 50% { transform: translate(700px,10px); } 75% { transform: translate(1050px,-20px); } 100% { transform: translate(1420px,0); } }
+.a-lightning { animation: aBolt 9s linear infinite; opacity: 0; }
+@keyframes aBolt { 0%, 88%, 92%, 96%, 100% { opacity: 0; } 89%, 94% { opacity: 1; } }
+.a-fog { animation: aFog 50s ease-in-out infinite alternate; }
+@keyframes aFog { from { transform: translateX(-90px); } to { transform: translateX(90px); } }
+.a-rays { animation: aRays 10s ease-in-out infinite alternate; }
+@keyframes aRays { from { opacity: .1; } to { opacity: .22; } }
+.a-beam { animation: aBeam 8s ease-in-out infinite alternate; transform-box: view-box; }
+@keyframes aBeam { from { opacity: .2; } to { opacity: .9; } }
+@keyframes efIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes efPop { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { #scene * , .screen-in, #overlay .card { animation: none !important; } #scene .a-lightning { opacity: 0; } }
