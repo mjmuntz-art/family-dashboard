@@ -563,7 +563,8 @@
       for (var j = 0; j < chicago.length; j++) if (!chicago[j]._u) { chicago[j]._u = 1; return chicago[j]; }
       return null;
     };
-    var ap = function (k) { var s = take('AP', k); return s ? Object.assign({ src: 'AP' }, s) : null; };
+    var apList = src['AP'] || [], apShift = apList.length > 2 ? Math.floor(Date.now() / 7200000) * 2 % apList.length : 0; // walk through AP's list two stories at a time, every 2 hours
+    var ap = function (k) { var s = apList.length ? apList[(apShift + k) % apList.length] : null; return s ? Object.assign({ src: 'AP' }, s) : null; };
     var sl = function (k) { var s = take('Shaw Local', k); return s ? Object.assign({ src: 'Shaw Local' }, s) : null; };
     var list = [ap(0), pickChicago(), sl(0), ap(1), pickChicago(), sl(1)].map(function (x) { return x || pickChicago(); });
     return list.filter(Boolean);
