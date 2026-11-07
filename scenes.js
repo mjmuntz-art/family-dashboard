@@ -373,6 +373,15 @@
   // ------------------------------------------------------------------ particles
   var P = {};
   P.leaves = function (c, n, colors, min, max) { var r = c.r, s = ''; for (var i = 0; i < c.count(n); i++) s += '<g class="a-leaf" style="' + dl(r, (min || 14) + r() * ((max || 26) - (min || 14))) + '"><path transform="translate(' + f(r() * W) + ' -14) rotate(' + f(r() * 360) + ')" d="M0,-6 C4,-3 4,3 0,6 C-4,3 -4,-3 0,-6Z" fill="' + pick(r, colors) + '" opacity="0.9"/></g>'; return c.add(s); };
+  P.clovers = function (c, n, colors) { // four-leaf clovers tumbling down
+    var r = c.r, s = '';
+    for (var i = 0; i < c.count(n); i++) {
+      var col = pick(r, colors), leaf = function (a) { return '<path transform="rotate(' + a + ')" d="M0,0 C-2,-4 -9,-6 -9,-10 C-9,-14 -3,-15 0,-10 C3,-15 9,-14 9,-10 C9,-6 2,-4 0,0Z" fill="' + col + '"/>'; };
+      s += '<g class="a-leaf" style="' + dl(r, 15 + r() * 11) + '"><g transform="translate(' + f(r() * W) + ' -30) scale(' + f(1.1 + r() * 0.9) + ') rotate(' + f(r() * 90) + ')" opacity="0.92">' +
+        leaf(0) + leaf(90) + leaf(180) + leaf(270) + '<path d="M0,0 Q4,8 2,16" stroke="' + col + '" stroke-width="1.8" fill="none"/></g></g>';
+    }
+    return c.add(s);
+  };
   P.petals = function (c, n, colors) { var r = c.r, s = ''; for (var i = 0; i < c.count(n); i++) s += '<g class="a-leaf" style="' + dl(r, 16 + r() * 12) + '"><ellipse cx="' + f(r() * W) + '" cy="-12" rx="5" ry="3" fill="' + pick(r, colors) + '" opacity="0.9"/></g>'; return c.add(s); };
   P.snow = function (c, far, mid, near) {
     var r = c.r, s = '', bl = c.blur(1.6);
@@ -671,11 +680,27 @@
     // February: hearts fall until Valentine's Day, blossom petals after. dusk = the string-lights image, just after sunset.
     february: { dusk: true, fall: function (d) { return d.getDate() < 14 ? ['hearts', 20, ['#ff5d8f', '#ff8fb1', '#e8325a', '#ffc2d4']] : ['petals', 32, ['#ffc4dc', '#ffd9e8', '#f7a8c8', '#ffffff']]; },
       suns: { morning: [1072, 645, 150], evening: [1069, 638, 170] }, stars: [700, 1260, 20, 520], sparkle: [300, 1250, 705, 790],
-      bulbs: { dusk: [[200, 48], [292, 104], [232, 116], [120, 108], [66, 152], [440, 54], [512, 48], [598, 20], [770, 164], [845, 44], [700, 114], [808, 140]] } } };
+      bulbs: { dusk: [[200, 48], [292, 104], [232, 116], [120, 108], [66, 152], [440, 54], [512, 48], [598, 20], [770, 164], [845, 44], [700, 114], [808, 140]] } },
+    // March: four-leaf clovers fall all month; morning mist over the field; string lights on the fence at dusk
+    march: { dusk: true, fall: function () { return ['clovers', 18, ['#3f9b3a', '#5cb84a', '#2f7d2e', '#7bcf5a']]; },
+      suns: { morning: [885, 478, 170], evening: [1178, 483, 170] }, mist: { morning: [592, '#fff1dc'] }, stars: [620, 1260, 20, 400], sparkle: [560, 1250, 650, 790],
+      bulbs: { dusk: [[305, 32], [338, 52], [375, 62], [440, 62], [478, 68], [548, 72], [732, 62], [775, 68], [822, 58], [938, 30], [62, 62], [128, 100], [200, 410], [290, 425], [298, 505], [358, 525], [415, 532], [470, 532], [500, 468], [590, 530]] } },
+    // April: blossom petals fall all month; candles flicker in the lanterns; butterflies by day, fireflies after dark
+    april: { dusk: true, fall: function () { return ['petals', 30, ['#ffffff', '#ffe4ee', '#ffd0e0', '#fff4f8']]; },
+      lights: { morning: [[255, 215, 46, 'lamp'], [425, 684, 52, 'lamp']], midday: [[244, 209, 40, 'lamp'], [425, 684, 46, 'lamp']], afternoon: [[425, 684, 48, 'lamp']], evening: [[425, 684, 54, 'lamp']],
+        dusk: [[183, 209, 52, 'lamp'], [425, 680, 58, 'lamp'], [915, 465, 16, 'window']], night: [[218, 232, 60, 'lamp'], [418, 650, 64, 'lamp'], [912, 462, 16, 'window']] },
+      suns: { morning: [725, 380, 170], evening: [857, 396, 170] }, moon: { night: [1152, 122, 70] }, mist: { morning: [440, '#ffe9d2'] }, stars: [560, 1260, 20, 330],
+      butterflies: { midday: [480, 720], afternoon: [480, 720], morning: [500, 720] }, fireflies: { dusk: [430, 760], night: [400, 770] },
+      bulbs: { night: [[20, 22], [50, 45], [78, 72], [375, 88], [330, 100], [290, 205], [265, 225], [30, 262], [18, 196]] } } };
   var LIGHT = { morning: 0.5, midday: 0.25, afternoon: 0.45, evening: 0.85, dusk: 0.95, night: 1 };
   function photoFx(c, cfg, tod, low) {
     var r = c.r, k = LIGHT[tod] != null ? LIGHT[tod] : 0.8, out = '', blur = c.blur(5);
-    (cfg.lights || []).forEach(function (L) { // warm glow: lamps flicker, windows breathe
+    var lights = cfg.lights && !Array.isArray(cfg.lights) ? cfg.lights[tod] || [] : cfg.lights || [];
+    var moon = cfg.moon && cfg.moon[tod];
+    if (moon) out += '<circle class="a-pulse" cx="' + moon[0] + '" cy="' + moon[1] + '" r="' + moon[2] + '" fill="' + c.rad([[0, '#eef3ff', 0.6], [0.4, '#cfdcff', 0.25], [1, '#cfdcff', 0]]) + '"/>';
+    var mist = cfg.mist && cfg.mist[tod];
+    if (mist && !low) { out += '<g filter="' + c.blur(16) + '">'; for (var mi = 0; mi < 6; mi++) out += '<ellipse class="a-fog" style="animation-delay:-' + f(r() * 40) + 's" cx="' + f(r() * W) + '" cy="' + f(mist[0] + (r() - 0.5) * 30) + '" rx="' + f(200 + r() * 220) + '" ry="' + f(14 + r() * 12) + '" fill="' + mist[1] + '" opacity="0.4"/>'; out += '</g>'; }
+    lights.forEach(function (L) { // warm glow: lamps flicker, windows breathe
       var g = c.rad([[0, '#ffd590', 0.9 * k], [0.4, '#ffc06a', 0.35 * k], [1, '#ffb050', 0]]);
       out += '<circle class="' + (L[3] === 'lamp' ? 'a-flicker' : 'a-pulse') + '" style="animation-delay:-' + f(r() * 5) + 's" cx="' + L[0] + '" cy="' + L[1] + '" r="' + L[2] + '" fill="' + g + '"/>';
       if (L[3] === 'lamp' && k > 0.6) out += '<ellipse class="a-pulse" cx="' + L[0] + '" cy="' + (L[1] + L[2] * 1.5) + '" rx="' + f(L[2] * 1.8) + '" ry="' + f(L[2] * 0.35) + '" fill="' + c.rad([[0, '#ffcf8a', 0.35 * k], [1, '#ffcf8a', 0]]) + '"/>';
@@ -695,6 +720,8 @@
     if (cfg.sparkle && tod !== 'night' && !low) { var gb = cfg.sparkle; for (var q = 0; q < 26; q++) { var x = gb[0] + r() * (gb[1] - gb[0]), y = gb[2] + r() * (gb[3] - gb[2]), z = 1.5 + r() * 2.5;
       out += '<path class="a-twinkle" style="animation-delay:-' + f(r() * 6) + 's;animation-duration:' + f(3 + r() * 4) + 's" d="M' + f(x) + ',' + f(y - z * 2) + ' L' + f(x + z * 0.4) + ',' + f(y) + ' L' + f(x) + ',' + f(y + z * 2) + ' L' + f(x - z * 0.4) + ',' + f(y) + 'Z M' + f(x - z * 2) + ',' + f(y) + ' L' + f(x) + ',' + f(y + z * 0.4) + ' L' + f(x + z * 2) + ',' + f(y) + ' L' + f(x) + ',' + f(y - z * 0.4) + 'Z" fill="#ffffff"/>'; } }
     c.add(out);
+    var bf = cfg.butterflies && cfg.butterflies[tod]; if (bf) K.butterflies(c, 6, bf[0], bf[1], ['#ffd84d', '#ffffff', '#f7a8c8', '#9ad0ff', '#ff9f43']);
+    var ff = cfg.fireflies && cfg.fireflies[tod]; if (ff) P.fireflies(c, tod === 'night' ? 26 : 16, ff[0], ff[1]);
   }
   window.sceneHasTimes = function (id) { return !!PHOTO[id]; };
   window.sceneImage = function (id, tod) { if (!PHOTO[id]) return null; if (tod === 'dusk' && !PHOTO[id].dusk) tod = 'evening'; return 'scenes/' + id + '-' + (tod || 'evening') + '.jpg'; };
