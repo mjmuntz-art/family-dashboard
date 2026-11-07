@@ -241,3 +241,10 @@ body.low .urgent-frame, body.low [style*="blink"] { animation: none; }
 .a-meteor { animation: aMeteor 14s linear infinite; }
 @keyframes aApple { 0% { transform: translateY(0); opacity: 0; } 2% { opacity: 1; } 14% { transform: translateY(var(--d)); animation-timing-function: ease-out; } 17% { transform: translateY(calc(var(--d) - 14px)); animation-timing-function: ease-in; } 20% { transform: translateY(var(--d)); opacity: 1; } 30% { transform: translateY(var(--d)); opacity: 0; } 100% { transform: translateY(var(--d)); opacity: 0; } }
 .a-apple { animation: aApple 16s ease-in infinite; }
+
+/* ---- Home: scene first, then the cards slide up ---- */
+.home > * { transition: transform 1.1s cubic-bezier(.2,.8,.2,1), opacity .9s ease; }
+.home > *:nth-child(2) { transition-delay: .08s; } .home > *:nth-child(3) { transition-delay: .16s; } .home > *:nth-child(4) { transition-delay: .24s; } .home > *:nth-child(5) { transition-delay: .32s; }
+.home.parked > * { transform: translateY(400px); opacity: 0; pointer-events: none; }
+.brief > * { transition: transform 1.1s cubic-bezier(.2,.8,.2,1), opacity 1s ease; }
+.brief.parked > * { transform: translateY(40px); opacity: 0; pointer-events: none; }

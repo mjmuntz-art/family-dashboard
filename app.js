@@ -11,7 +11,7 @@
   var ORDER = ['home', 'family', 'photos', 'scores', 'plays', 'news', 'weather'];
   var LABELS = { home: 'Home', family: 'Family', photos: 'Photos', scores: 'Scores', plays: 'Plays', news: 'News', weather: 'Weather' };
   var S = { screen: ORDER.concat(['live', 'alert', 'night']).indexOf(Q.get('screen')) >= 0 ? Q.get('screen') : 'home', detail: null, theme: null, lastScreen: null,
-    wx: null, alerts: [], games: [], back: null, backErr: null, wxErr: null, scoresErr: null, photoIdx: 0, timer: null, page: +(Q.get('page') || 0), lastPage: null, sum: {},
+    wx: null, alerts: [], games: [], back: null, backErr: null, wxErr: null, scoresErr: null, photoIdx: 0, timer: null, page: +(Q.get('page') || 0), lastPage: null, sum: {}, homePhase: 'scene',
     alShown: {}, wasLive: {}, finalShown: load('finalShown', 3 * 86400000) || {}, resume: null, wakeUntil: 0, standings: {} };
   var $ = function (id) { return document.getElementById(id); };
 
@@ -584,7 +584,7 @@
     var el = $('screen'), fresh = S.lastScreen !== S.screen || S.lastPage !== S.page;
     S.lastScreen = S.screen; S.lastPage = S.page;
     var brief = S.screen === 'home' && isBriefing();
-    var html = brief ? '<section class="bleed">' + briefingBleed() + '</section>' : S.screen === 'home' ? homeHTML() : fullHTML();
+    var html = brief ? '<section class="bleed brief' + (S.homePhase === 'scene' ? ' parked' : '') + '">' + briefingBleed() + '</section>' : S.screen === 'home' ? homeHTML() : fullHTML();
     var cur = el.lastElementChild;
     if (fresh || !cur) { // new screen or page: fade it in over the old one, then remove the old one
       var olds = [].slice.call(el.children);
@@ -592,7 +592,7 @@
       var layer = document.createElement('div'); layer.className = 'layer' + (STATIC ? '' : ' entering'); layer.innerHTML = html; el.appendChild(layer);
     } else cur.innerHTML = html;
     var st = $('stage'), imm = S.screen !== 'home' || brief; st.classList.toggle('immersive', imm); if (!imm) st.classList.remove('peek');
-    st.classList.toggle('night', S.screen === 'night'); st.classList.toggle('nocorner', brief || S.screen === 'night' || S.screen === 'alert');
+    st.classList.toggle('night', S.screen === 'night'); st.classList.toggle('nocorner', (brief && S.homePhase !== 'scene') || S.screen === 'night' || S.screen === 'alert');
     $('nav').style.display = imm && S.screen !== 'night' ? 'flex' : 'none'; corner();
     $('navbar').innerHTML = ORDER.map(function (k) { return '<button type="button" data-go="' + k + '" class="' + (k === S.screen ? 'on' : '') + '">' + LABELS[k] + '</button>'; }).join('');
     if (S.screen === 'photos' || S.screen === 'home') hookPhotos();
@@ -635,7 +635,7 @@
       return '<div style="display:flex;gap:10px;align-items:center">' + thumb(s.image, 52, 52) +
         '<div style="min-width:0"><div class="clamp2" style="font-size:14px;font-weight:700;line-height:1.2">' + esc(s.title) + '</div><div class="muted" style="font-size:12px">' + esc(s.src) + '</div></div></div>';
     }).join(''));
-    return '<div class="home">' +
+    return '<div class="home' + (S.homePhase === 'scene' ? ' parked' : '') + '">' +
       '<button type="button" class="tap frost" data-go="family">' + fam + '</button>' +
       '<button type="button" class="tap frost" data-go="photos" style="padding:12px">' + photo + '</button>' +
       '<button type="button" class="tap frost" data-go="scores">' + sc + '</button>' +
@@ -826,7 +826,11 @@
   }
   function pageDur() {
     var t = C.timing;
-    if (S.screen === 'home') return t.home;
+    if (S.screen === 'home') { // Home starts with just the scene, then the cards (or the morning briefing) slide in
+      var bf = isBriefing();
+      if (S.homePhase === 'scene') return bf ? (t.briefingScene != null ? t.briefingScene : 25) : (t.homeScene != null ? t.homeScene : 40);
+      return bf ? (t.briefing || 60) : (t.homeCards || 40);
+    }
     var cp = String(curPage());
     if (S.screen === 'night') return 60;
     if (S.screen === 'alert') return Math.max(DEMO ? 2 : 30, Math.round(((C.alerts && C.alerts.takeoverSec) || 150) / Math.max(1, pageList('alert').length)));
@@ -1849,6 +1853,7 @@
   function setScreen(name) {
     if (S.detail) { S.detail = null; $('overlay').className = ''; stopRadar(); }
     if (name === 'photos' && S.screen !== 'photos') S.photoIdx += 3;
+    if (name === 'home') S.homePhase = 'scene';
     S.screen = name; S.page = 0; render(); schedule();
   }
   function schedule() {
@@ -1856,9 +1861,16 @@
     var s = S.detail ? C.timing.detail : pageDur();
     S.timer = setTimeout(advance, s * 1000);
   }
+  function revealHome() { // slide the cards (or briefing) up over the scene
+    S.homePhase = 'cards';
+    var l = $('screen').lastElementChild, h = l && l.querySelector('.home.parked, .brief.parked');
+    if (h) h.classList.remove('parked');
+    $('stage').classList.toggle('nocorner', isBriefing());
+  }
   function advance() {
     if (S.detail) return closeDetail();
     if (S.screen === 'night') { if (!isNight()) return setScreen('home'); render(); schedule(); return; }
+    if (S.screen === 'home' && S.homePhase === 'scene') { revealHome(); schedule(); return; }
     var pg = pageList(S.screen);
     if (S.screen !== 'home' && S.page < pg.length - 1) { S.page++; render(); schedule(); return; }
     if (S.screen === 'alert') { var back = S.resume; S.resume = null; return setScreen(isNight() ? 'night' : back && back !== 'alert' && back !== 'night' ? back : 'home'); }
@@ -1870,6 +1882,7 @@
   var peekT = null;
   document.addEventListener('click', function (e) {
     if (window.dashStart) window.dashStart();
+    if (S.screen === 'home' && S.homePhase === 'scene' && !e.target.closest('#nav,#overlay')) { revealHome(); schedule(); return; }
     var el = e.target.closest('[data-go],[data-open],[data-close],[data-page]');
     var st = $('stage');
     if (st.classList.contains('immersive') && !e.target.closest('#overlay')) { // full screens: a tap shows the menu for a few seconds

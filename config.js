@@ -13,7 +13,10 @@ window.DASH_CONFIG = {
 
   // How long each screen stays up (seconds).
   timing: {            // seconds
-    home: 60,          // home dashboard
+    homeScene: 40,     // Home: just the scene (clock, date, weather) before the cards slide up
+    homeCards: 40,     // Home: the cards
+    briefingScene: 25, // morning: just the scene before the briefing slides in
+    briefing: 60,      // morning briefing
     screen: 60,        // Family, Photos and Plays
     scoresGrid: 15,    // Scores overview (all games)
     game: 22,          // each of your teams' game pages (box score / up next)
