@@ -676,24 +676,24 @@
   // sparkle: snow box for glints in daylight. Coordinates are on the 1280×800 screen.
   var PHOTO = { january: { snow: [46, 24, 7],
     lights: [[148, 515, 74, 'lamp'], [410, 522, 24, 'lamp'], [612, 516, 20, 'lamp'], [966, 440, 52, 'window'], [966, 398, 14, 'window'], [1042, 438, 18, 'window']],
-    smoke: [1021, 336], stars: [560, 1230, 20, 290], sparkle: [220, 1180, 560, 770] },
+    smoke: [1021, 336], stars: [560, 1180, 20, 205], sparkle: [220, 1180, 560, 770], skyMask: 'scenes/january-sky.png' },
     // February: hearts fall until Valentine's Day, blossom petals after. dusk = the string-lights image, just after sunset.
-    february: { dusk: true, fall: function (d) { return d.getDate() < 14 ? ['hearts', 20, ['#ff5d8f', '#ff8fb1', '#e8325a', '#ffc2d4']] : ['petals', 32, ['#ffc4dc', '#ffd9e8', '#f7a8c8', '#ffffff']]; },
+    february: { dusk: true, skyMask: 'scenes/february-sky.png', fall: function (d) { return d.getDate() < 14 ? ['hearts', 20, ['#ff5d8f', '#ff8fb1', '#e8325a', '#ffc2d4']] : ['petals', 32, ['#ffc4dc', '#ffd9e8', '#f7a8c8', '#ffffff']]; },
       suns: { morning: [1072, 645, 150], evening: [1069, 638, 170] }, stars: [700, 1260, 20, 520], sparkle: [300, 1250, 705, 790],
       bulbs: { dusk: [[200, 48], [292, 104], [232, 116], [120, 108], [66, 152], [440, 54], [512, 48], [598, 20], [770, 164], [845, 44], [700, 114], [808, 140]] } },
     // March: four-leaf clovers fall all month; morning mist over the field; string lights on the fence at dusk
-    march: { dusk: true, fall: function () { return ['clovers', 18, ['#3f9b3a', '#5cb84a', '#2f7d2e', '#7bcf5a']]; },
+    march: { dusk: true, skyMask: 'scenes/march-sky.png', fall: function () { return ['clovers', 18, ['#3f9b3a', '#5cb84a', '#2f7d2e', '#7bcf5a']]; },
       suns: { morning: [885, 478, 170], evening: [1178, 483, 170] }, mist: { morning: [592, '#fff1dc'] }, stars: [620, 1260, 20, 400], sparkle: [560, 1250, 650, 790],
       bulbs: { dusk: [[305, 32], [338, 52], [375, 62], [440, 62], [478, 68], [548, 72], [732, 62], [775, 68], [822, 58], [938, 30], [62, 62], [128, 100], [200, 410], [290, 425], [298, 505], [358, 525], [415, 532], [470, 532], [500, 468], [590, 530]] } },
     // April: blossom petals fall all month; candles flicker in the lanterns; butterflies by day, fireflies after dark
-    april: { dusk: true, fall: function () { return ['petals', 30, ['#ffffff', '#ffe4ee', '#ffd0e0', '#fff4f8']]; },
+    april: { dusk: true, skyMask: 'scenes/april-sky.png', fall: function () { return ['petals', 30, ['#ffffff', '#ffe4ee', '#ffd0e0', '#fff4f8']]; },
       lights: { morning: [[255, 215, 46, 'lamp'], [425, 684, 52, 'lamp']], midday: [[244, 209, 40, 'lamp'], [425, 684, 46, 'lamp']], afternoon: [[425, 684, 48, 'lamp']], evening: [[425, 684, 54, 'lamp']],
         dusk: [[183, 209, 52, 'lamp'], [425, 680, 58, 'lamp'], [915, 465, 16, 'window']], night: [[218, 232, 60, 'lamp'], [418, 650, 64, 'lamp'], [912, 462, 16, 'window']] },
       suns: { morning: [725, 380, 170], evening: [857, 396, 170] }, moon: { night: [1152, 122, 70] }, mist: { morning: [440, '#ffe9d2'] }, stars: [560, 1260, 20, 330],
       butterflies: { midday: [480, 720], afternoon: [480, 720], morning: [500, 720] }, fireflies: { dusk: [430, 760], night: [400, 770] },
       bulbs: { night: [[20, 22], [50, 45], [78, 72], [375, 88], [330, 100], [290, 205], [265, 225], [30, 262], [18, 196]] } },
     // June: beach cottage. Lanterns glow, sun or moon sparkles on the water, gulls by day, lightning bugs in the dunes at night
-    june: { dusk: true, lights: [[202, 262, 50, 'lamp'], [342, 492, 34, 'lamp'], [566, 608, 44, 'lamp'], [1182, 690, 54, 'lamp']],
+    june: { dusk: true, skyMask: 'scenes/june-sky.png', lights: [[202, 262, 50, 'lamp'], [342, 492, 34, 'lamp'], [566, 608, 44, 'lamp'], [1182, 690, 54, 'lamp']],
       suns: { morning: [1080, 372, 170], afternoon: [1182, 286, 150], evening: [1079, 376, 170], dusk: [1077, 382, 180] }, moon: { night: [1086, 186, 70] }, stars: [520, 1260, 20, 330],
       glints: { morning: [620, 1270, 410, 500], midday: [620, 1270, 410, 500], afternoon: [620, 1270, 410, 500], evening: [900, 1260, 400, 500], dusk: [980, 1180, 395, 520], night: [1030, 1140, 400, 540] },
       gulls: { morning: [70, 300], midday: [60, 280], afternoon: [60, 280] }, fireflies: { dusk: [400, 650], night: [380, 660] },
@@ -706,6 +706,12 @@
       fireworks: { dusk: 3, night: 7, box: [300, 1260, 40, 200], reflect: null, mask: 'scenes/july-sky.png' },
       bulbs: { evening: [[115, 55], [248, 82], [320, 82], [415, 100], [507, 100], [594, 86], [668, 50], [733, 18]], dusk: [[115, 55], [248, 82], [320, 82], [415, 100], [507, 100], [594, 86], [668, 50], [733, 18]], night: [[115, 55], [248, 82], [320, 82], [415, 100], [507, 100], [594, 86], [668, 50], [733, 18]] } },
     // August: sunflower field. Bees by day, golden pollen in the low sun, shooting stars (the Perseids) and lightning bugs at night
+    // May: lakeside terrace. Blossom petals drift down, butterflies by day, the lantern glows, sun or moon sparkles on the water
+    may: { dusk: true, skyMask: 'scenes/may-sky.png', fall: function () { return ['petals', 26, ['#ffd0e0', '#ffffff', '#f7a8c8', '#d9c2f0']]; },
+      lights: [[223, 168, 50, 'lamp']], suns: { morning: [1032, 371, 170], evening: [1036, 361, 180] }, moon: { night: [1057, 183, 70] }, stars: [560, 1260, 20, 380],
+      mist: { morning: [430, '#fff0ea'] },
+      glints: { morning: [880, 1180, 420, 560], midday: [600, 1270, 420, 560], afternoon: [600, 1270, 420, 560], evening: [960, 1120, 410, 560], dusk: [700, 1270, 420, 560], night: [1000, 1110, 420, 560] },
+      butterflies: { morning: [440, 700], midday: [440, 700], afternoon: [440, 700] }, fireflies: { night: [520, 760] } },
     august: { dusk: true, skyMask: 'scenes/august-sky.png',
       suns: { morning: [315, 321, 170], afternoon: [370, 225, 150], evening: [335, 302, 180], dusk: [329, 315, 190] }, moon: { night: [325, 223, 70] },
       mist: { morning: [372, '#fff3df'] }, stars: [600, 1270, 20, 290], meteors: { night: 6 },
@@ -758,7 +764,9 @@
         '<ellipse cx="0" cy="0" rx="6" ry="4" fill="#f4b81c"/><rect x="-1.6" y="-4" width="2" height="8" fill="#2a1d10"/><rect x="2.4" y="-3.6" width="1.6" height="7.2" fill="#2a1d10"/></g></g>'; } }); c.add(bs); }
     var mo = cfg.motes && cfg.motes[tod];
     if (mo && !low) { var ms = ''; for (var mi2 = 0; mi2 < 28; mi2++) ms += '<circle class="a-mote" style="animation-duration:' + f(8 + r() * 8) + 's;animation-delay:-' + f(r() * 14) + 's" cx="' + f(mo[0] + r() * (mo[1] - mo[0])) + '" cy="' + f(mo[2] + r() * (mo[3] - mo[2])) + '" r="' + f(1.2 + r() * 2) + '" fill="' + c.rad([[0, '#fff2c0', 1], [1, '#ffd36a', 0]]) + '"/>'; c.add(ms); }
-    var gl = cfg.gulls && cfg.gulls[tod]; if (gl) K.birds(c, 4, gl[0], gl[1], '#3a3f4a');
+    var gl = cfg.gulls && cfg.gulls[tod];
+    if (gl) { if (cfg.skyMask) { var gm = c.uid('k'); c.defs += '<mask id="' + gm + '" maskUnits="userSpaceOnUse" x="-71.1" y="0" width="1422.2" height="800"><image href="' + cfg.skyMask + '" x="-71.1" y="0" width="1422.2" height="800" preserveAspectRatio="none"/></mask>'; c.add('<g mask="url(#' + gm + ')">'); }
+      K.birds(c, 4, gl[0], gl[1], '#3a3f4a'); if (cfg.skyMask) c.add('</g>'); }
     var fw = cfg.fireworks;
     if (fw && fw[tod]) { // only in the open sky: a mask made from the photo keeps the porch, lights and trees in front
       var mid = c.uid('m');
