@@ -1101,10 +1101,13 @@
       '<div style="position:absolute;right:56px;bottom:52px;display:flex;flex-direction:column;align-items:center;gap:10px"><div id="qr" style="width:150px;height:150px;padding:8px;box-sizing:border-box;border-radius:14px;background:#fff;overflow:hidden"></div><div style="font-size:14px;color:rgba(255,255,255,.75)">Scan to read</div></div>';
   }
   // ---- your team's game page: TV scorebug (two big team-color bars)
-  function logoDisc(t, px) { // just the team logo, with a soft white glow so it stands out on its team color
-    var glow = 'filter:drop-shadow(0 0 1.5px rgba(255,255,255,.95)) drop-shadow(0 0 ' + Math.round(px * .09) + 'px rgba(255,255,255,.55)) drop-shadow(0 6px 14px rgba(0,0,0,.35))';
-    var txt = '<span style="font-weight:900;font-size:' + Math.round(px * .34) + 'px;color:#fff;text-shadow:0 0 2px #fff,0 0 ' + Math.round(px * .12) + 'px rgba(255,255,255,.7),0 4px 12px rgba(0,0,0,.4)">' + esc(t.abbr) + '</span>';
-    var inner = t.logo ? '<img src="' + esc(t.logo) + '" alt="" style="width:' + px + 'px;height:' + px + 'px;object-fit:contain;' + glow + '" onerror="this.outerHTML=\'' + txt.replace(/'/g, "\\'").replace(/"/g, '&quot;') + '\'">' : txt;
+  // ESPN keeps a version of most logos made for dark backgrounds (light edges on dark parts): use it, fall back to the normal logo
+  function darkLogo(url) { return String(url || '').replace(/\/500\//, '/500-dark/').replace(/\/500-dark\/scoreboard\//, '/500-dark/'); }
+  function logoDisc(t, px) {
+    var txt = '<span style="font-weight:900;font-size:' + Math.round(px * .34) + 'px;color:#fff;text-shadow:0 4px 12px rgba(0,0,0,.45)">' + esc(t.abbr) + '</span>';
+    var dark = darkLogo(t.logo), shadow = 'filter:drop-shadow(0 6px 14px rgba(0,0,0,.35))';
+    var fallback = "this.onerror=function(){this.outerHTML=\'" + txt.replace(/'/g, "\\'").replace(/"/g, '&quot;') + "\'};this.src=\'" + esc(t.logo) + "\'";
+    var inner = t.logo ? '<img src="' + esc(dark) + '" alt="" style="width:' + px + 'px;height:' + px + 'px;object-fit:contain;' + shadow + '" onerror="' + (dark !== t.logo ? fallback : "this.outerHTML=\'" + txt.replace(/'/g, "\\'").replace(/"/g, '&quot;') + "\'") + '">' : txt;
     return '<div style="width:' + px + 'px;height:' + px + 'px;display:flex;align-items:center;justify-content:center;flex-shrink:0">' + inner + '</div>';
   }
   function bigStat(s) { // "22/31, 254 YDS, 2 TD" → 254 + "YDS · 22/31, 2 TD"
