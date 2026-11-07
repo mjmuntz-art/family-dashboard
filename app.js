@@ -152,6 +152,12 @@
     el.style.fontSize = size + 'px';
     while (el.scrollWidth > room && size > 26) { size -= 2; el.style.fontSize = size + 'px'; }
   }
+  function corner() { // small time + temperature pill shown on the full screens
+    var el = $('corner'); if (!el) return;
+    var n = now(), h = n.getHours(), m = n.getMinutes(), w = S.wx && S.wx.now;
+    var extra = S.screen === 'weather' ? DOW[n.getDay()] + ', ' + MON[n.getMonth()] + ' ' + n.getDate() : (w && typeof w.temp === 'number' ? w.temp + '°' : '');
+    el.innerHTML = (h % 12 || 12) + ':' + (m < 10 ? '0' : '') + m + '<span>' + (h < 12 ? 'AM' : 'PM') + (extra ? ' · ' + esc(extra) : '') + '</span>';
+  }
   function tick() {
     var n = now(), h = n.getHours(), m = n.getMinutes();
     $('time').textContent = (h % 12 || 12) + ':' + (m < 10 ? '0' : '') + m;
@@ -159,6 +165,7 @@
     $('dow').textContent = DOWL[n.getDay()];
     $('date').textContent = MONL[n.getMonth()] + ' ' + n.getDate();
     $('cdate').style.display = S.theme && S.theme.isHoliday ? 'flex' : 'none';
+    if (n.getSeconds() === 0 || !$('corner').innerHTML) corner();
     if (n.getSeconds() === 0) {
       applyTheme();
       var hh = (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
@@ -512,7 +519,8 @@
     S.lastScreen = S.screen; S.lastPage = S.page;
     var html = S.screen === 'home' ? homeHTML() : fullHTML();
     el.innerHTML = '<div class="' + (fresh ? 'screen-in' : '') + '">' + html + '</div>';
-    $('nav').style.display = S.screen === 'home' ? 'none' : 'flex';
+    var st = $('stage'); st.classList.toggle('immersive', S.screen !== 'home'); if (S.screen === 'home') st.classList.remove('peek');
+    $('nav').style.display = S.screen === 'home' ? 'none' : 'flex'; corner();
     $('navbar').innerHTML = ORDER.map(function (k) { return '<button type="button" data-go="' + k + '" class="' + (k === S.screen ? 'on' : '') + '">' + LABELS[k] + '</button>'; }).join('');
     if (S.screen === 'photos' || S.screen === 'home') hookPhotos();
     var p = S.screen === 'home' ? '' : curPage();
@@ -566,6 +574,7 @@
 
   function fullHTML() {
     var pg = pageList(S.screen), p = curPage();
+    if (isBleed(p)) return '<section class="bleed">' + bleedHTML(p) + '</section>';
     var WXT = { now: 'Right now', hours: 'Next 12 hours', week: 'The week ahead', sky: 'Sun & moon', radar: 'Live radar' };
     var t = { family: ['Family schedule', 'From the family calendar'], photos: [S.theme && S.theme.birthdayNames ? S.theme.birthdayNames.join(' & ') + '\u2019s photos' : 'Family photos', ''],
       scores: ['Scores & games', String(p).indexOf('grid') === 0 ? (S.teamMiss && S.teamMiss.length ? 'Couldn\u2019t find ' + S.teamMiss.join(', ') + ' — check config.js' : 'Tap a game for the box score') : ''], plays: ['Today’s plays', 'Tap a play for the breakdown · 1 unit flat'],
@@ -646,7 +655,7 @@
     var ph = photos(); if (!ph || !ph.length) return [];
     var P = ph.filter(function (o) { return o.o === 'p'; }), Lp = ph.filter(function (o) { return o.o !== 'p'; });
     var chunk = function (arr, k) { var out = []; for (var i = 0; i < arr.length; i += k) { var g = []; for (var j = 0; j < Math.min(k, arr.length); j++) g.push(arr[(i + j) % arr.length]); out.push(g); } return out; };
-    var pg = chunk(P, 3), lg = chunk(Lp, 2), out = [];
+    var pg = chunk(P, 2), lg = chunk(Lp, 1), out = []; // full screen: two tall photos side by side, or one wide photo
     for (var i = 0; i < Math.max(pg.length, lg.length); i++) { if (pg[i]) out.push(pg[i]); if (lg[i]) out.push(lg[i]); }
     return out;
   }
@@ -1021,6 +1030,125 @@
         : '<text x="' + cx + '" y="' + (cy - ry / 2) + '" text-anchor="middle" font-size="20" fill="rgba(255,255,255,.6)">' + (f != null && f > 1 ? 'The sun has set' : f != null ? 'Before sunrise' : '') + '</text>') + '</svg>';
   }
 
+  // ------------------------------------------------------------ full-screen ("bleed") pages: photos, news, your team's games, weather
+  function isBleed(p) { return S.screen === 'photos' || S.screen === 'news' || S.screen === 'weather' || (S.screen === 'scores' && String(p).indexOf('g:') === 0); }
+  function btag(txt) { return '<div class="btag">' + txt + '</div>'; }
+  function bleedHTML(p) {
+    var pg = pageList(S.screen), top = dotsHTML(pg);
+    if (S.screen === 'photos') return photosBleed(top);
+    if (S.screen === 'news') return newsBleed(p, top);
+    if (S.screen === 'scores') return gameBleed(findGame(p.slice(2)), top);
+    return weatherBleed(p, top);
+  }
+  function photosBleed(top) {
+    var ph = photos();
+    if (!ph || !ph.length) return '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">' + note(!ph ? (S.backErr === 'setup' ? SETUP : esc(S.backErr || 'Loading…')) : 'Add photos to your dashboard photo folder in Google Drive.') + '</div>';
+    var g = curGroup() || [];
+    return '<div style="position:absolute;inset:0;background:#000;display:grid;grid-template-columns:repeat(' + g.length + ',minmax(0,1fr));gap:6px">' + g.map(function (it, i) {
+      var d = it.taken ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(it.taken) ? it.taken + 'T12:00:00' : String(it.taken).replace(' ', 'T')) : null; if (d && isNaN(d)) d = null;
+      return '<div style="position:relative;overflow:hidden;background:#111"><div id="pc' + i + '" style="position:absolute;inset:0;background:center/cover no-repeat;opacity:0;transition:opacity .8s"></div>' +
+        (d ? '<div style="position:absolute;left:22px;bottom:22px;padding:7px 14px;border-radius:999px;background:rgba(0,0,0,.5);font-size:16px;font-weight:700">' + esc((it.person ? it.person + ' · ' : '') + MON[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear()) + '</div>' : '') + '</div>';
+    }).join('') + '</div>' + top;
+  }
+  function newsBleed(p, top) {
+    var nw = newsStories(), s = nw && p && p.indexOf('s:') === 0 ? nw[+p.slice(2)] : null;
+    if (!s) return '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">' + note(S.backErr === 'setup' ? SETUP : esc(S.backErr || 'Loading…')) + '</div>';
+    var len = s.title.length, fs = len > 110 ? 42 : len > 80 ? 48 : 56;
+    return '<div style="position:absolute;inset:0;background:linear-gradient(135deg,var(--accent) -40%,#1b2433 45%,#140f1c)"></div>' +
+      (s.image ? '<img src="' + esc(s.image) + '" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" onerror="this.remove()">' : '') +
+      '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.4) 0%,rgba(0,0,0,0) 22%,rgba(0,0,0,.2) 42%,rgba(0,0,0,.9) 100%)"></div>' +
+      '<div class="btag" style="background:var(--accent);color:var(--ink)">' + esc(s.src) + ' · Top news</div>' + top +
+      '<div style="position:absolute;left:56px;right:290px;bottom:52px;display:flex;flex-direction:column;gap:14px">' +
+      '<div style="font-size:18px;font-weight:700;color:rgba(255,255,255,.8)">' + (s.date ? esc(whenLabel(new Date(s.date))) : '') + '</div>' +
+      '<div class="head clamp3" style="font-size:' + fs + 'px;line-height:1.08;text-shadow:0 2px 12px rgba(0,0,0,.5)">' + esc(s.title) + '</div>' +
+      (s.summary ? '<div class="clamp2" style="font-size:21px;line-height:1.45;color:rgba(255,255,255,.82)">' + esc(s.summary) + '</div>' : '') + '</div>' +
+      '<div style="position:absolute;right:56px;bottom:52px;display:flex;flex-direction:column;align-items:center;gap:10px"><div id="qr" style="width:150px;height:150px;padding:8px;box-sizing:border-box;border-radius:14px;background:#fff;overflow:hidden"></div><div style="font-size:14px;color:rgba(255,255,255,.75)">Scan to read</div></div>';
+  }
+  function gameBleed(g, top) {
+    if (!g) return '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">' + note('Game not found') + '</div>';
+    var sum = S.sum[g.id] && S.sum[g.id].j; if (!sum && !g.morris) ensureSummary(g);
+    var teams = g.teams.map(function (t) { var r = sum && sum.recs && sum.recs[t.abbr]; return r && !t.rec ? Object.assign({}, t, { rec: r }) : t; }), a = teams[0], b = teams[1];
+    var colA = teamBg(a), colB = teamBg(b);
+    var side = function (t) {
+      return '<div style="display:flex;flex-direction:column;align-items:center;gap:12px;' + (g.state === 'post' && !t.winner ? 'opacity:.7' : '') + '">' + logoHTML(t, 190) +
+        '<div class="ellip" style="max-width:360px;font-size:34px;font-weight:800;text-shadow:0 2px 10px rgba(0,0,0,.4)">' + esc(t.name) + '</div>' + (t.rec ? '<div style="font-size:22px;font-weight:700;color:rgba(255,255,255,.8)">' + esc(t.rec) + '</div>' : '') + '</div>';
+    };
+    var pill = function (txt, live) { return '<div style="padding:6px 18px;border-radius:999px;font-size:16px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;' + (live ? 'background:#c62828' : 'background:rgba(255,255,255,.18)') + '">' + esc(txt) + '</div>'; };
+    var mid = g.state === 'pre'
+      ? '<div style="display:flex;flex-direction:column;align-items:center;gap:10px">' + pill(sameDay(g.date, now()) ? 'Today' : DOWL[g.date.getDay()]) + '<div style="font-size:84px;font-weight:900;line-height:.95">' + esc(hm(g.date).replace(' ', ' ')) + '</div><div style="font-size:20px;color:rgba(255,255,255,.8)">' + esc(MONL[g.date.getMonth()] + ' ' + g.date.getDate()) + '</div></div>'
+      : '<div style="display:flex;flex-direction:column;align-items:center;gap:10px">' + pill(g.state === 'in' ? 'Live · ' + g.status : g.status, g.state === 'in') +
+        '<div style="font-size:150px;font-weight:900;line-height:.9;font-variant-numeric:tabular-nums;white-space:nowrap"><span style="' + (g.state === 'post' && !a.winner ? 'opacity:.55' : '') + '">' + esc(a.score) + '</span><span style="opacity:.4;font-weight:300"> – </span><span style="' + (g.state === 'post' && !b.winner ? 'opacity:.55' : '') + '">' + esc(b.score) + '</span></div></div>';
+    var bottom = g.state === 'pre' ? previewStrip(g, sum) : boxStrip(g, sum, teams);
+    return '<div style="position:absolute;inset:0;background:linear-gradient(105deg,' + colA + ' 0%,' + colA + ' 49.8%,' + colB + ' 50.2%,' + colB + ' 100%)"></div>' +
+      '<div style="position:absolute;inset:0;background:radial-gradient(circle at 24% 36%,' + (a.c2 || '#fff') + '55,transparent 42%),radial-gradient(circle at 76% 36%,' + (b.c2 || '#fff') + '55,transparent 42%),linear-gradient(180deg,rgba(0,0,0,.1) 0%,rgba(0,0,0,0) 35%,rgba(0,0,0,.6) 100%)"></div>' +
+      btag(esc(g.lg) + (g.state === 'pre' ? ' · Up next' : g.state === 'in' ? ' · Live' : ' · Final')) + top +
+      '<div style="position:absolute;left:0;right:0;top:92px;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center">' + side(a) + mid + side(b) + '</div>' + bottom;
+  }
+  function boxStrip(g, sum, teams) {
+    var inner;
+    if (g.morris) inner = '<div style="display:flex;flex-direction:column;gap:8px"><div class="lbl">Notes</div><div style="font-size:20px">' + esc(g.morris.notes || g.morris.location || '') + '</div></div>';
+    else if (!sum) inner = note(DEMO ? 'Box score and game leaders from ESPN' : 'Loading box score…');
+    else {
+      var n = Math.max.apply(null, sum.lines.map(function (r) { return r.ls.length; }).concat([g.sport === 'hockey' ? 3 : /college-basketball/.test(g.league) ? 2 : g.sport === 'baseball' ? 9 : 4]));
+      var reg = g.sport === 'baseball' ? 99 : g.sport === 'hockey' ? 3 : /college-basketball/.test(g.league) ? 2 : 4;
+      var per = function (i) { return i > reg ? (n - reg > 1 ? 'OT' + (i - reg) : 'OT') : g.sport === 'hockey' ? 'P' + i : reg === 2 ? 'H' + i : g.sport === 'baseball' ? String(i) : 'Q' + i; };
+      var cols = 'display:grid;grid-template-columns:minmax(0,1.8fr) repeat(' + (n + 1) + ',minmax(0,1fr));text-align:center';
+      var head = '<div style="' + cols + ';font-size:14px;font-weight:800;color:rgba(255,255,255,.7)"><span></span>'; for (var i = 1; i <= n; i++) head += '<span>' + per(i) + '</span>'; head += '<span>T</span></div>';
+      var body = sum.lines.map(function (r, k) {
+        var t = teams.filter(function (x) { return x.abbr === r.abbr; })[0] || {}, ls = r.ls.map(function (v) { return '<span>' + esc(v) + '</span>'; }).join(''); for (var j = r.ls.length; j < n; j++) ls += '<span style="opacity:.4">–</span>';
+        return '<div style="' + cols + ';font-size:' + (n > 6 ? 22 : 28) + 'px;font-weight:800;font-variant-numeric:tabular-nums;' + (g.state === 'post' && !t.winner ? 'opacity:.7' : '') + '"><span style="text-align:left">' + esc(r.abbr) + '</span>' + ls + '<span>' + esc(r.total) + '</span></div>';
+      }).join('');
+      var leaders = sum.leaders.slice(0, 3).map(function (c) {
+        return '<div style="display:grid;grid-template-columns:96px minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:center;font-size:15px"><span style="font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.7)">' + esc(c.label) + '</span>' +
+          '<b class="ellip">' + esc(c.a ? c.a.name + ' · ' + c.a.stat : '') + '</b><span class="ellip" style="color:rgba(255,255,255,.75)">' + esc(c.b ? c.b.name + ' · ' + c.b.stat : '') + '</span></div>';
+      }).join('') || '<div style="color:rgba(255,255,255,.7)">Not available yet</div>';
+      inner = '<div style="display:flex;flex-direction:column;gap:10px;min-width:0"><div class="lbl">Box score</div>' + head + body + '</div><div style="background:rgba(255,255,255,.15)"></div>' +
+        '<div style="display:flex;flex-direction:column;gap:10px;min-width:0"><div class="lbl">Game leaders</div>' + leaders + '</div>';
+    }
+    return '<div class="glass" style="position:absolute;left:40px;right:40px;bottom:36px;height:196px;display:grid;grid-template-columns:minmax(0,1fr) 1px minmax(0,1.2fr);gap:26px;padding:22px 30px">' + inner + '</div>';
+  }
+  function previewStrip(g, sum) {
+    var info = [];
+    if (g.morris) { info.push(['Where', g.morris.location || (g.morris.home ? 'Morris' : '')]); if (g.morris.notes) info.push(['Notes', g.morris.notes]); }
+    else if (DEMO) info = [['Where', '[Stadium]'], ['TV', '[Network]'], ['Line', '[Spread] · O/U [Total]']];
+    else if (sum) { if (sum.venue) info.push(['Where', sum.venue]); if (sum.tv) info.push(['TV', sum.tv]); if (sum.line) info.push(['Line', sum.line]); }
+    var st = sum && sum.story; if (DEMO && !st) st = { headline: '[Game preview headline from ESPN]', description: '[A couple of lines from the preview story]', image: '' };
+    var left = '<div style="display:flex;flex-direction:column;gap:10px;min-width:0"><div class="lbl">Game info</div>' + (info.length ? info.map(function (r) { return '<div style="display:flex;gap:12px;align-items:baseline"><span style="width:58px;flex-shrink:0;font-size:13px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.7)">' + esc(r[0]) + '</span><span class="ellip" style="font-size:20px;font-weight:700">' + esc(r[1]) + '</span></div>'; }).join('') : '<div style="color:rgba(255,255,255,.7)">' + (sum ? 'Details closer to game day' : 'Loading…') + '</div>') + '</div>';
+    var right = st ? '<div style="display:flex;gap:18px;min-width:0">' + (st.image ? '<img src="' + esc(st.image) + '" alt="" style="width:200px;height:150px;object-fit:cover;border-radius:12px;flex-shrink:0" onerror="this.remove()">' : '') +
+      '<div style="display:flex;flex-direction:column;gap:8px;min-width:0"><div class="lbl">Preview · ESPN</div><div class="head clamp2" style="font-size:26px;line-height:1.15">' + esc(st.headline) + '</div><div class="clamp2" style="font-size:16px;line-height:1.4;color:rgba(255,255,255,.8)">' + esc(st.description || '') + '</div></div></div>'
+      : '<div style="display:flex;flex-direction:column;gap:8px"><div class="lbl">Preview</div><div style="color:rgba(255,255,255,.7)">' + (g.morris ? 'Game notes come from your dashboard sheet' : sum ? 'No preview story yet — check back closer to game day' : 'Loading…') + '</div></div>';
+    return '<div class="glass" style="position:absolute;left:40px;right:40px;bottom:36px;height:196px;display:grid;grid-template-columns:minmax(0,1fr) 1px minmax(0,1.7fr);gap:26px;padding:22px 30px">' + left + '<div style="background:rgba(255,255,255,.15)"></div>' + right + '</div>';
+  }
+  function weatherBleed(p, top) {
+    var w = S.wx, names = { now: 'Right now', hours: 'Next 12 hours', week: 'The week ahead', sky: 'Sun & moon', radar: 'Live radar' };
+    var tag = btag('Weather · ' + (names[p] || '')) + top;
+    if (!w) return '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">' + note(esc(S.wxErr || 'Loading weather…')) + '</div>';
+    if (p === 'radar') return '<div id="radar" style="position:absolute;inset:0;background:#0b0f17"></div>' + tag +
+      '<div class="glass" style="position:absolute;left:24px;right:24px;bottom:24px;display:flex;justify-content:space-between;align-items:center;gap:16px;padding:12px 18px"><div id="radarnote" style="font-size:14px;color:rgba(255,255,255,.8)">Loading radar…</div>' +
+      '<div style="display:flex;align-items:center;gap:8px;font-size:14px;color:rgba(255,255,255,.8)">Light<div style="width:180px;height:9px;border-radius:5px;background:linear-gradient(90deg,#88ddee,#0077cc,#ffee00,#ff8800,#ff0000,#cc00cc)"></div>Heavy</div></div>';
+    var n = w.now || {}, d = function (v) { return num(v) ? v + '°' : '—'; };
+    if (p === 'now') {
+      var v = vibe(w), hrs = (w.hours || []).slice(0, 6);
+      var bits = [num(n.wind) ? 'Wind ' + n.wind + ' mph ' + (n.dir || '') : '', num(n.hum) ? 'Humidity ' + n.hum + '%' : '', num(w.uv) ? 'UV ' + w.uv : '', num(w.aqi) ? 'Air quality ' + w.aqi + ' ' + aqiLabel(w.aqi) : ''].filter(Boolean).join('  ·  ');
+      return '<div style="position:absolute;inset:0;background:linear-gradient(90deg,rgba(10,6,18,.8) 0%,rgba(10,6,18,.4) 55%,rgba(10,6,18,.05) 80%),linear-gradient(180deg,rgba(0,0,0,0) 55%,rgba(0,0,0,.6) 100%)"></div>' + tag +
+        '<div style="position:absolute;left:64px;top:104px;right:260px;display:flex;flex-direction:column;gap:6px">' +
+        '<div class="lbl">' + esc(L.name.split(',')[0]) + ' right now</div>' +
+        '<div style="display:flex;align-items:flex-start;gap:22px"><div style="font-size:210px;font-weight:800;line-height:.86;letter-spacing:-.04em;text-shadow:0 4px 24px rgba(0,0,0,.35)">' + d(n.temp) + '</div>' +
+        '<div style="display:flex;flex-direction:column;gap:6px;padding-top:14px">' + wxIcon(n.icon || 'cloud', 92) + '<div style="font-size:26px;font-weight:700">' + esc(n.text || '') + '</div><div style="font-size:20px;color:rgba(255,255,255,.8)">Feels like ' + d(n.feels) + '</div></div></div>' +
+        '<div class="head" style="font-size:52px;line-height:1.05;margin-top:16px">' + esc(v.head) + '</div>' +
+        '<div style="font-size:21px;line-height:1.45;color:rgba(255,255,255,.85);max-width:720px">' + esc(v.sub) + '</div>' +
+        (bits ? '<div style="font-size:17px;font-weight:600;color:rgba(255,255,255,.7);margin-top:4px">' + esc(bits) + '</div>' : '') + '</div>' +
+        '<div class="glass" style="position:absolute;left:40px;right:40px;bottom:36px;height:128px;display:grid;grid-template-columns:repeat(8,minmax(0,1fr));align-items:center;text-align:center;padding:0 14px">' +
+        hrs.map(function (h) { return '<div style="display:flex;flex-direction:column;align-items:center;gap:4px"><div style="font-size:15px;font-weight:700;color:rgba(255,255,255,.75)">' + esc(h.t) + '</div><div style="color:var(--accent)">' + icon(h.icon, 32, 1.5) + '</div><div style="font-size:24px;font-weight:800">' + d(h.temp) + '</div></div>'; }).join('') +
+        '<div style="border-left:1px solid rgba(255,255,255,.2)"><div style="font-size:14px;font-weight:800;letter-spacing:.08em;color:rgba(255,255,255,.75)">HIGH</div><div style="font-size:36px;font-weight:800">' + d(w.hi) + '</div></div>' +
+        '<div><div style="font-size:14px;font-weight:800;letter-spacing:.08em;color:rgba(255,255,255,.75)">LOW</div><div style="font-size:36px;font-weight:800">' + d(w.lo) + '</div></div></div>';
+    }
+    // hours, week, sun & moon: the regular layouts on glass, over the scene
+    var body = weatherPage(p).replace(/class="tile"/g, 'class="glass"');
+    return '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,6,18,.55) 0%,rgba(10,6,18,.3) 40%,rgba(10,6,18,.65) 100%)"></div>' + tag +
+      '<div style="position:absolute;left:40px;right:40px;top:96px;bottom:36px;display:flex;flex-direction:column">' + body + '</div>';
+  }
+
   // ------------------------------------------------------------ details
   function openDetail(kind, a, b) { S.detail = { kind: kind, a: a, b: b }; drawDetail(); schedule(); }
   function closeDetail() { S.detail = null; $('overlay').className = ''; $('card').innerHTML = ''; stopRadar(); schedule(); }
@@ -1127,7 +1255,7 @@
       var step = function () {
         if (!layers.length) return;
         layers[k].style.opacity = 0; k = (k + 1) % layers.length; layers[k].style.opacity = 0.9;
-        noteEl.textContent = 'Radar ' + hm(new Date(frames[k].time * 1000)) + ' · RainViewer · map © OpenStreetMap contributors © CARTO';
+        noteEl.textContent = 'Radar ' + hm(new Date(frames[k].time * 1000)) + ' · RainViewer · map © Esri, HERE, Garmin, © OpenStreetMap contributors';
         RADAR.timer = setTimeout(step, k === layers.length - 1 ? 2000 : 600);
       };
       step();
@@ -1137,15 +1265,19 @@
       var frames = (j.radar && j.radar.past || []).slice(-6); if (!frames.length) throw new Error('no frames');
       var z = 7, scale = 1.7, n = Math.pow(2, z), latR = L.lat * Math.PI / 180;
       var px = (L.lon + 180) / 360 * n * 256, py = (1 - Math.log(Math.tan(latR) + 1 / Math.cos(latR)) / Math.PI) / 2 * n * 256;
-      var tx0 = Math.floor((px - 380) / 256), tx1 = Math.floor((px + 380) / 256), ty0 = Math.floor((py - 170) / 256), ty1 = Math.floor((py + 170) / 256);
-      var layer = function (urlFn, cls, extra) {
+      var tx0 = Math.floor((px - 400) / 256), tx1 = Math.floor((px + 400) / 256), ty0 = Math.floor((py - 250) / 256), ty1 = Math.floor((py + 250) / 256);
+      var layer = function (urlFn, cls, extra, backup) {
         var h = '<div class="' + cls + '" style="position:absolute;left:50%;top:50%;width:0;height:0;transform:scale(' + scale + ');transform-origin:0 0;' + (extra || '') + '">';
         for (var ty = ty0; ty <= ty1; ty++) for (var tx = tx0; tx <= tx1; tx++)
-          h += '<img alt="" src="' + urlFn(tx, ty) + '" style="position:absolute;width:256px;height:256px;max-width:none;left:' + (tx * 256 - px).toFixed(1) + 'px;top:' + (ty * 256 - py).toFixed(1) + 'px" onerror="this.style.visibility=\'hidden\'">';
+          h += '<img alt="" src="' + urlFn(tx, ty) + '" style="position:absolute;width:256px;height:256px;max-width:none;left:' + (tx * 256 - px).toFixed(1) + 'px;top:' + (ty * 256 - py).toFixed(1) + 'px" onerror="' +
+            (backup ? 'this.onerror=function(){this.style.visibility=\'hidden\'};this.src=\'' + backup(tx, ty) + '\';this.style.filter=\'invert(1) hue-rotate(180deg) brightness(.75)\'' : 'this.style.visibility=\'hidden\'') + '">';
         return h + '</div>';
       };
-      var html = layer(function (x, y) { return 'https://a.basemaps.cartocdn.com/dark_all/' + z + '/' + x + '/' + y + '.png'; }, 'base');
+      // Esri's dark gray map (free, no key); if a tile fails it falls back to OpenStreetMap
+      var esri = 'https://services.arcgisonline.com/arcgis/rest/services/Canvas/';
+      var html = layer(function (x, y) { return esri + 'World_Dark_Gray_Base/MapServer/tile/' + z + '/' + y + '/' + x; }, 'base', '', function (x, y) { return 'https://tile.openstreetmap.org/' + z + '/' + x + '/' + y + '.png'; });
       frames.forEach(function (f) { html += layer(function (x, y) { return j.host + f.path + '/256/' + z + '/' + x + '/' + y + '/2/1_1.png'; }, 'rf', 'opacity:0;transition:opacity .3s'); });
+      html += layer(function (x, y) { return esri + 'World_Dark_Gray_Reference/MapServer/tile/' + z + '/' + y + '/' + x; }, 'labels'); // city names on top of the radar
       html += '<div style="position:absolute;left:50%;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px rgba(0,0,0,.4)"></div>' +
         '<div style="position:absolute;left:50%;top:50%;margin:12px 0 0 -50px;width:100px;text-align:center;font-size:14px;font-weight:700;text-shadow:0 1px 3px #000">' + esc(L.name.split(',')[0]) + '</div>';
       RADAR.html = html; RADAR.frames = frames; RADAR.t = Date.now();
@@ -1170,8 +1302,14 @@
       setScreen(ORDER[(ORDER.indexOf(S.screen) + 1) % ORDER.length]);
     }, s * 1000);
   }
+  var peekT = null;
   document.addEventListener('click', function (e) {
-    var el = e.target.closest('[data-go],[data-open],[data-close],[data-page]'); if (!el) return;
+    var el = e.target.closest('[data-go],[data-open],[data-close],[data-page]');
+    var st = $('stage');
+    if (st.classList.contains('immersive') && !e.target.closest('#overlay')) { // full screens: a tap shows the menu for a few seconds
+      st.classList.add('peek'); clearTimeout(peekT); peekT = setTimeout(function () { st.classList.remove('peek'); }, 6000);
+    }
+    if (!el) return;
     if (el.hasAttribute('data-close')) return closeDetail();
     if (el.hasAttribute('data-page')) { S.page = +el.getAttribute('data-page'); render(); schedule(); return; }
     if (el.hasAttribute('data-go')) return setScreen(el.getAttribute('data-go'));
