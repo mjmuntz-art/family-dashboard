@@ -396,10 +396,10 @@
   P.hearts = function (c, n, colors) { var r = c.r, s = ''; for (var i = 0; i < c.count(n); i++) s += '<g class="a-leaf" style="' + dl(r, 16 + r() * 12) + '"><path transform="translate(' + f(r() * W) + ' -20) scale(' + f(0.4 + r() * 0.4) + ')" d="M0,6 C0,-4 -12,-4 -12,6 C-12,12 0,18 0,22 C0,18 12,12 12,6 C12,-4 0,-4 0,6Z" fill="' + pick(r, colors) + '" opacity="0.85"/></g>'; return c.add(s); };
   P.shamrocks = function (c, n, colors) { var r = c.r, s = ''; for (var i = 0; i < c.count(n); i++) s += '<g class="a-leaf" style="' + dl(r, 16 + r() * 10) + '"><g transform="translate(' + f(r() * W) + ' -20) scale(' + f(0.5 + r() * 0.4) + ')" fill="' + pick(r, colors) + '" opacity="0.85"><circle cy="-7" r="6"/><circle cx="-7" cy="2" r="6"/><circle cx="7" cy="2" r="6"/><rect x="-1" y="4" width="2" height="12"/></g></g>'; return c.add(s); };
   P.bats = function (c, n) { var r = c.r, s = ''; for (var i = 0; i < c.count(n); i++) s += '<g class="a-bat" style="' + dl(r, 14 + r() * 10) + '"><g transform="translate(-60 ' + f(70 + r() * 230) + ') scale(' + f(0.7 + r() * 0.6) + ')"><path class="a-flap" d="M0,0 q8,-10 16,-2 q4,-6 8,0 q4,-6 8,0 q8,-8 16,2 q-10,-2 -16,6 q-4,-4 -8,0 q-4,-4 -8,0 q-6,-8 -16,-6Z" fill="#120d1c"/></g></g>'; return c.add(s); };
-  P.fireworks = function (c, n, colors, y0, y1, reflectY) {
+  P.fireworks = function (c, n, colors, y0, y1, reflectY, x0, x1) {
     var r = c.r, s = '';
     for (var i = 0; i < c.count(n); i++) {
-      var x = 100 + r() * 1080, y = (y0 || 80) + r() * ((y1 || 300) - (y0 || 80)), col = pick(r, colors), d = 3 + r() * 1.6, rays = '', sty = dl(r, d), rad = 40 + r() * 34;
+      var x = (x0 != null ? x0 : 100) + r() * ((x1 != null ? x1 : 1180) - (x0 != null ? x0 : 100)), y = (y0 || 80) + r() * ((y1 || 300) - (y0 || 80)), col = pick(r, colors), d = 3 + r() * 1.6, rays = '', sty = dl(r, d), rad = 40 + r() * 34;
       for (var k = 0; k < 18; k++) { var a = k * Math.PI * 2 / 18; rays += '<line x1="' + f(Math.cos(a) * rad * 0.25) + '" y1="' + f(Math.sin(a) * rad * 0.25) + '" x2="' + f(Math.cos(a) * rad) + '" y2="' + f(Math.sin(a) * rad + rad * 0.12) + '" stroke="' + col + '" stroke-width="2.4" stroke-linecap="round"/><circle cx="' + f(Math.cos(a) * rad * 1.08) + '" cy="' + f(Math.sin(a) * rad * 1.08 + rad * 0.16) + '" r="1.6" fill="#fff"/>'; }
       s += '<g transform="translate(' + f(x) + ' ' + f(y) + ')"><g class="a-burst" style="' + sty + '">' + rays + '<circle r="' + f(rad * 1.6) + '" fill="' + c.rad([[0, col, 0.25], [1, col, 0]]) + '"/></g></g>';
       if (reflectY) s += '<g transform="translate(' + f(x) + ' ' + f(2 * reflectY - y + 40) + ') scale(1 -0.35)" opacity="0.4"><g class="a-burst" style="' + sty + '">' + rays + '</g></g>';
@@ -691,7 +691,20 @@
         dusk: [[183, 209, 52, 'lamp'], [425, 680, 58, 'lamp'], [915, 465, 16, 'window']], night: [[218, 232, 60, 'lamp'], [418, 650, 64, 'lamp'], [912, 462, 16, 'window']] },
       suns: { morning: [725, 380, 170], evening: [857, 396, 170] }, moon: { night: [1152, 122, 70] }, mist: { morning: [440, '#ffe9d2'] }, stars: [560, 1260, 20, 330],
       butterflies: { midday: [480, 720], afternoon: [480, 720], morning: [500, 720] }, fireflies: { dusk: [430, 760], night: [400, 770] },
-      bulbs: { night: [[20, 22], [50, 45], [78, 72], [375, 88], [330, 100], [290, 205], [265, 225], [30, 262], [18, 196]] } } };
+      bulbs: { night: [[20, 22], [50, 45], [78, 72], [375, 88], [330, 100], [290, 205], [265, 225], [30, 262], [18, 196]] } },
+    // June: beach cottage. Lanterns glow, sun or moon sparkles on the water, gulls by day, lightning bugs in the dunes at night
+    june: { dusk: true, lights: [[202, 262, 50, 'lamp'], [342, 492, 34, 'lamp'], [566, 608, 44, 'lamp'], [1182, 690, 54, 'lamp']],
+      suns: { morning: [1080, 372, 170], afternoon: [1182, 286, 150], evening: [1079, 376, 170], dusk: [1077, 382, 180] }, moon: { night: [1086, 186, 70] }, stars: [520, 1260, 20, 330],
+      glints: { morning: [620, 1270, 410, 500], midday: [620, 1270, 410, 500], afternoon: [620, 1270, 410, 500], evening: [900, 1260, 400, 500], dusk: [980, 1180, 395, 520], night: [1030, 1140, 400, 540] },
+      gulls: { morning: [70, 300], midday: [60, 280], afternoon: [60, 280] }, fireflies: { dusk: [400, 650], night: [380, 660] },
+      bulbs: { evening: [[8, 110], [38, 128], [90, 78], [100, 112], [150, 124], [212, 146], [300, 92], [332, 96]], dusk: [[8, 110], [38, 128], [90, 78], [100, 112], [150, 124], [212, 146], [300, 92], [332, 96]], night: [[8, 110], [38, 128], [90, 78], [100, 112], [150, 124], [212, 146], [300, 92], [332, 96]] } },
+    // July: lake porch. Fireworks over the water at dusk and night, string lights and the wall lantern glow, sailboat-water sparkle by day
+    july: { dusk: true, lights: [[175, 105, 56, 'lamp']],
+      suns: { morning: [1255, 229, 160], evening: [1270, 200, 180] }, moon: { night: [1175, 70, 60] }, stars: [790, 1260, 20, 180],
+      glints: { morning: [290, 1270, 250, 322], midday: [290, 1270, 250, 322], afternoon: [290, 1270, 250, 322], evening: [800, 1270, 250, 322], night: [1110, 1240, 255, 330] },
+      gulls: { morning: [110, 210], midday: [100, 200], afternoon: [100, 200] },
+      fireworks: { dusk: 3, night: 7, box: [300, 1260, 50, 180], reflect: null },
+      bulbs: { evening: [[115, 55], [248, 82], [320, 82], [415, 100], [507, 100], [594, 86], [668, 50], [733, 18]], dusk: [[115, 55], [248, 82], [320, 82], [415, 100], [507, 100], [594, 86], [668, 50], [733, 18]], night: [[115, 55], [248, 82], [320, 82], [415, 100], [507, 100], [594, 86], [668, 50], [733, 18]] } } };
   var LIGHT = { morning: 0.5, midday: 0.25, afternoon: 0.45, evening: 0.85, dusk: 0.95, night: 1 };
   function photoFx(c, cfg, tod, low) {
     var r = c.r, k = LIGHT[tod] != null ? LIGHT[tod] : 0.8, out = '', blur = c.blur(5);
@@ -717,11 +730,14 @@
       out += '</g>';
     }
     if (cfg.stars && (tod === 'night' || tod === 'evening')) { var sb = cfg.stars; for (var j = 0; j < (tod === 'night' ? 34 : 12); j++) out += '<circle class="a-twinkle" style="animation-delay:-' + f(r() * 4) + 's;animation-duration:' + f(2 + r() * 3) + 's" cx="' + f(sb[0] + r() * (sb[1] - sb[0])) + '" cy="' + f(sb[2] + r() * (sb[3] - sb[2])) + '" r="' + f(0.8 + r() * 1.4) + '" fill="#ffffff"/>'; }
-    if (cfg.sparkle && tod !== 'night' && !low) { var gb = cfg.sparkle; for (var q = 0; q < 26; q++) { var x = gb[0] + r() * (gb[1] - gb[0]), y = gb[2] + r() * (gb[3] - gb[2]), z = 1.5 + r() * 2.5;
+    var spk = cfg.glints ? cfg.glints[tod] : (tod !== 'night' ? cfg.sparkle : null);
+    if (spk && !low) { var gb = spk; for (var q = 0; q < 26; q++) { var x = gb[0] + r() * (gb[1] - gb[0]), y = gb[2] + r() * (gb[3] - gb[2]), z = 1.5 + r() * 2.5;
       out += '<path class="a-twinkle" style="animation-delay:-' + f(r() * 6) + 's;animation-duration:' + f(3 + r() * 4) + 's" d="M' + f(x) + ',' + f(y - z * 2) + ' L' + f(x + z * 0.4) + ',' + f(y) + ' L' + f(x) + ',' + f(y + z * 2) + ' L' + f(x - z * 0.4) + ',' + f(y) + 'Z M' + f(x - z * 2) + ',' + f(y) + ' L' + f(x) + ',' + f(y + z * 0.4) + ' L' + f(x + z * 2) + ',' + f(y) + ' L' + f(x) + ',' + f(y - z * 0.4) + 'Z" fill="#ffffff"/>'; } }
     c.add(out);
     var bf = cfg.butterflies && cfg.butterflies[tod]; if (bf) K.butterflies(c, 6, bf[0], bf[1], ['#ffd84d', '#ffffff', '#f7a8c8', '#9ad0ff', '#ff9f43']);
     var ff = cfg.fireflies && cfg.fireflies[tod]; if (ff) P.fireflies(c, tod === 'night' ? 26 : 16, ff[0], ff[1]);
+    var gl = cfg.gulls && cfg.gulls[tod]; if (gl) K.birds(c, 4, gl[0], gl[1], '#3a3f4a');
+    var fw = cfg.fireworks; if (fw && fw[tod]) P.fireworks(c, fw[tod], ['#ff4d5e', '#ffffff', '#5aa0ff', '#ffd166', '#ff7ab6'], fw.box[2], fw.box[3], fw.reflect, fw.box[0], fw.box[1]);
   }
   window.sceneHasTimes = function (id) { return !!PHOTO[id]; };
   window.sceneImage = function (id, tod) { if (!PHOTO[id]) return null; if (tod === 'dusk' && !PHOTO[id].dusk) tod = 'evening'; return 'scenes/' + id + '-' + (tod || 'evening') + '.jpg'; };
