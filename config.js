@@ -78,6 +78,9 @@ window.DASH_CONFIG = {
   // Birthdays get their own look for the whole day: date is 'MM-DD'; add year to show their age.
   // Photos in a Drive subfolder named exactly like the person show on their day.
   birthdays: [
+    { name: 'Cate', date: '02-15', year: 1994 },
+    { name: 'Mike', date: '04-06', year: 1990 },
+    { name: 'Weston', date: '12-23', year: 2025 },
     // { name: 'Mom', date: '03-14', year: 1985 },
     // { name: 'Jack', date: '08-02', year: 2016 },
   ],
