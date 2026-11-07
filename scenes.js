@@ -704,7 +704,14 @@
       glints: { morning: [290, 1270, 250, 322], midday: [290, 1270, 250, 322], afternoon: [290, 1270, 250, 322], evening: [800, 1270, 250, 322], night: [1110, 1240, 255, 330] },
       gulls: { morning: [110, 210], midday: [100, 200], afternoon: [100, 200] },
       fireworks: { dusk: 3, night: 7, box: [300, 1260, 40, 200], reflect: null, mask: 'scenes/july-sky.png' },
-      bulbs: { evening: [[115, 55], [248, 82], [320, 82], [415, 100], [507, 100], [594, 86], [668, 50], [733, 18]], dusk: [[115, 55], [248, 82], [320, 82], [415, 100], [507, 100], [594, 86], [668, 50], [733, 18]], night: [[115, 55], [248, 82], [320, 82], [415, 100], [507, 100], [594, 86], [668, 50], [733, 18]] } } };
+      bulbs: { evening: [[115, 55], [248, 82], [320, 82], [415, 100], [507, 100], [594, 86], [668, 50], [733, 18]], dusk: [[115, 55], [248, 82], [320, 82], [415, 100], [507, 100], [594, 86], [668, 50], [733, 18]], night: [[115, 55], [248, 82], [320, 82], [415, 100], [507, 100], [594, 86], [668, 50], [733, 18]] } },
+    // August: sunflower field. Bees by day, golden pollen in the low sun, shooting stars (the Perseids) and lightning bugs at night
+    august: { dusk: true, skyMask: 'scenes/august-sky.png',
+      suns: { morning: [315, 321, 170], afternoon: [370, 225, 150], evening: [335, 302, 180], dusk: [329, 315, 190] }, moon: { night: [325, 223, 70] },
+      mist: { morning: [372, '#fff3df'] }, stars: [600, 1270, 20, 290], meteors: { night: 6 },
+      bees: { morning: [[40, 420, 430, 660], [480, 1180, 455, 525]], midday: [[40, 420, 430, 660], [480, 1180, 455, 525]], afternoon: [[40, 420, 430, 660], [480, 1180, 455, 525]] },
+      motes: { afternoon: [0, 1280, 300, 720], evening: [0, 1280, 300, 720], dusk: [0, 1280, 320, 720] },
+      butterflies: { afternoon: [470, 700] }, fireflies: { dusk: [460, 740], night: [430, 760] } } };
   var LIGHT = { morning: 0.5, midday: 0.25, afternoon: 0.45, evening: 0.85, dusk: 0.95, night: 1 };
   function photoFx(c, cfg, tod, low) {
     var r = c.r, k = LIGHT[tod] != null ? LIGHT[tod] : 0.8, out = '', blur = c.blur(5);
@@ -729,13 +736,28 @@
       for (var i = 0; i < 6; i++) out += '<ellipse class="a-smoke" style="animation-delay:-' + f(i * 1.6) + 's" cx="' + cfg.smoke[0] + '" cy="' + cfg.smoke[1] + '" rx="12" ry="9" fill="' + sc + '" opacity="0.85"/>';
       out += '</g>';
     }
-    if (cfg.stars && (tod === 'night' || tod === 'evening')) { var sb = cfg.stars; for (var j = 0; j < (tod === 'night' ? 34 : 12); j++) out += '<circle class="a-twinkle" style="animation-delay:-' + f(r() * 4) + 's;animation-duration:' + f(2 + r() * 3) + 's" cx="' + f(sb[0] + r() * (sb[1] - sb[0])) + '" cy="' + f(sb[2] + r() * (sb[3] - sb[2])) + '" r="' + f(0.8 + r() * 1.4) + '" fill="#ffffff"/>'; }
+    var skyIn = '', skyOut = '';
+    if (cfg.skyMask) { var smid = c.uid('k'); c.defs += '<mask id="' + smid + '" maskUnits="userSpaceOnUse" x="-71.1" y="0" width="1422.2" height="800"><image href="' + cfg.skyMask + '" x="-71.1" y="0" width="1422.2" height="800" preserveAspectRatio="none"/></mask>'; skyIn = '<g mask="url(#' + smid + ')">'; skyOut = '</g>'; }
+    if (cfg.meteors && cfg.meteors[tod]) { // shooting stars streak across the open sky now and then
+      out += skyIn;
+      for (var mt = 0; mt < cfg.meteors[tod]; mt++) { var mx = cfg.stars[0] + 120 + r() * (cfg.stars[1] - cfg.stars[0] - 60), my = cfg.stars[2] + r() * (cfg.stars[3] - cfg.stars[2]) * 0.6, len = 70 + r() * 70;
+        out += '<g class="a-meteor" style="animation-duration:' + f(9 + r() * 14) + 's;animation-delay:-' + f(r() * 20) + 's"><line x1="' + f(mx) + '" y1="' + f(my) + '" x2="' + f(mx + len) + '" y2="' + f(my - len * 0.5) + '" stroke="' + c.lin([[0, '#ffffff', 1], [1, '#ffffff', 0]], 1, 0) + '" stroke-width="2.2" stroke-linecap="round"/></g>'; }
+      out += skyOut;
+    }
+    if (cfg.stars && (tod === 'night' || tod === 'evening')) { out += skyIn; var sb = cfg.stars; for (var j = 0; j < (tod === 'night' ? 34 : 12); j++) out += '<circle class="a-twinkle" style="animation-delay:-' + f(r() * 4) + 's;animation-duration:' + f(2 + r() * 3) + 's" cx="' + f(sb[0] + r() * (sb[1] - sb[0])) + '" cy="' + f(sb[2] + r() * (sb[3] - sb[2])) + '" r="' + f(0.8 + r() * 1.4) + '" fill="#ffffff"/>'; out += skyOut; }
     var spk = cfg.glints ? cfg.glints[tod] : (tod !== 'night' ? cfg.sparkle : null);
     if (spk && !low) { var gb = spk; for (var q = 0; q < 26; q++) { var x = gb[0] + r() * (gb[1] - gb[0]), y = gb[2] + r() * (gb[3] - gb[2]), z = 1.5 + r() * 2.5;
       out += '<path class="a-twinkle" style="animation-delay:-' + f(r() * 6) + 's;animation-duration:' + f(3 + r() * 4) + 's" d="M' + f(x) + ',' + f(y - z * 2) + ' L' + f(x + z * 0.4) + ',' + f(y) + ' L' + f(x) + ',' + f(y + z * 2) + ' L' + f(x - z * 0.4) + ',' + f(y) + 'Z M' + f(x - z * 2) + ',' + f(y) + ' L' + f(x) + ',' + f(y + z * 0.4) + ' L' + f(x + z * 2) + ',' + f(y) + ' L' + f(x) + ',' + f(y - z * 0.4) + 'Z" fill="#ffffff"/>'; } }
     c.add(out);
     var bf = cfg.butterflies && cfg.butterflies[tod]; if (bf) K.butterflies(c, 6, bf[0], bf[1], ['#ffd84d', '#ffffff', '#f7a8c8', '#9ad0ff', '#ff9f43']);
     var ff = cfg.fireflies && cfg.fireflies[tod]; if (ff) P.fireflies(c, tod === 'night' ? 26 : 16, ff[0], ff[1]);
+    var bz = cfg.bees && cfg.bees[tod];
+    if (bz) { var bs = ''; bz.forEach(function (bx) { for (var bi = 0; bi < 5; bi++) { var x = bx[0] + r() * (bx[1] - bx[0]), y = bx[2] + r() * (bx[3] - bx[2]), sz = 0.8 + r() * 0.5;
+      bs += '<g class="a-bee" style="animation-duration:' + f(1.8 + r() * 1.6) + 's;animation-delay:-' + f(r() * 3) + 's"><g transform="translate(' + f(x) + ' ' + f(y) + ') scale(' + f(sz) + ')">' +
+        '<ellipse class="a-flap" cx="-1" cy="-5" rx="4" ry="3" fill="#ffffff" opacity="0.75"/><ellipse class="a-flap" cx="3" cy="-5" rx="4" ry="3" fill="#ffffff" opacity="0.6"/>' +
+        '<ellipse cx="0" cy="0" rx="6" ry="4" fill="#f4b81c"/><rect x="-1.6" y="-4" width="2" height="8" fill="#2a1d10"/><rect x="2.4" y="-3.6" width="1.6" height="7.2" fill="#2a1d10"/></g></g>'; } }); c.add(bs); }
+    var mo = cfg.motes && cfg.motes[tod];
+    if (mo && !low) { var ms = ''; for (var mi2 = 0; mi2 < 28; mi2++) ms += '<circle class="a-mote" style="animation-duration:' + f(8 + r() * 8) + 's;animation-delay:-' + f(r() * 14) + 's" cx="' + f(mo[0] + r() * (mo[1] - mo[0])) + '" cy="' + f(mo[2] + r() * (mo[3] - mo[2])) + '" r="' + f(1.2 + r() * 2) + '" fill="' + c.rad([[0, '#fff2c0', 1], [1, '#ffd36a', 0]]) + '"/>'; c.add(ms); }
     var gl = cfg.gulls && cfg.gulls[tod]; if (gl) K.birds(c, 4, gl[0], gl[1], '#3a3f4a');
     var fw = cfg.fireworks;
     if (fw && fw[tod]) { // only in the open sky: a mask made from the photo keeps the porch, lights and trees in front
