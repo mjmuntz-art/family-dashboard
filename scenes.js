@@ -705,14 +705,24 @@
   var PHOTO = { january: { snow: [46, 24, 7],
     lights: [[148, 515, 74, 'lamp'], [410, 522, 24, 'lamp'], [612, 516, 20, 'lamp'], [966, 440, 52, 'window'], [966, 398, 14, 'window'], [1042, 438, 18, 'window']],
     smoke: [1021, 336], stars: [560, 1180, 20, 205], sparkle: [220, 1180, 560, 770], skyMask: 'scenes/january-sky.png' },
-    // February: hearts fall until Valentine's Day, blossom petals after. dusk = the string-lights image, just after sunset.
-    february: { dusk: true, skyMask: 'scenes/february-sky.png', fall: function (d) { return d.getDate() < 14 ? ['hearts', 20, ['#ff5d8f', '#ff8fb1', '#e8325a', '#ffc2d4']] : ['petals', 32, ['#ffc4dc', '#ffd9e8', '#f7a8c8', '#ffffff']]; },
-      suns: { morning: [1072, 645, 150], evening: [1069, 638, 170] }, stars: [700, 1260, 20, 520], sparkle: [300, 1250, 705, 790],
-      bulbs: { dusk: [[200, 48], [292, 104], [232, 116], [120, 108], [66, 152], [440, 54], [512, 48], [598, 20], [770, 164], [845, 44], [700, 114], [808, 140]] } },
-    // March: four-leaf clovers fall all month; morning mist over the field; string lights on the fence at dusk
-    march: { dusk: true, skyMask: 'scenes/march-sky.png', fall: function () { return ['clovers', 18, ['#3f9b3a', '#5cb84a', '#2f7d2e', '#7bcf5a']]; },
-      suns: { morning: [885, 478, 170], evening: [1178, 483, 170] }, mist: { morning: [592, '#fff1dc'] }, stars: [620, 1260, 20, 400], sparkle: [560, 1250, 650, 790],
-      bulbs: { dusk: [[305, 32], [338, 52], [375, 62], [440, 62], [478, 68], [548, 72], [732, 62], [775, 68], [822, 58], [938, 30], [62, 62], [128, 100], [200, 410], [290, 425], [298, 505], [358, 525], [415, 532], [470, 532], [500, 468], [590, 530]] } },
+    // February (rebuilt): snowy farm with a red barn. Hearts fall until Valentine's Day, petals after; light snow; the lantern flickers,
+    // the barn windows glow, the wreath lights twinkle at dusk, string lights in the branches at dusk
+    february: { dusk: true, skyMask: 'scenes/february-sky.png', snow: [14, 6, 0],
+      fall: function (d) { return d.getDate() < 14 ? ['hearts', 16, ['#ff5d8f', '#ff8fb1', '#e8325a', '#ffc2d4']] : ['petals', 26, ['#ffc4dc', '#ffd9e8', '#f7a8c8', '#ffffff']]; },
+      lights: { morning: [[223, 322, 52, 'lamp'], [1036, 392, 18, 'window'], [1180, 393, 18, 'window']], midday: [[223, 322, 44, 'lamp']], afternoon: [[223, 322, 52, 'lamp'], [1036, 392, 18, 'window'], [1180, 393, 18, 'window']],
+        evening: [[223, 322, 60, 'lamp'], [1036, 392, 22, 'window'], [1180, 393, 22, 'window']], dusk: [[223, 322, 66, 'lamp'], [1036, 392, 24, 'window'], [1180, 393, 24, 'window']],
+        night: [[223, 322, 70, 'lamp'], [1036, 392, 24, 'window'], [1180, 393, 24, 'window']] },
+      suns: { morning: [761, 348, 160], afternoon: [762, 346, 160], evening: [760, 347, 180], dusk: [761, 349, 180] }, moon: { night: [833, 105, 60] },
+      stars: [380, 1270, 20, 300], glints: { morning: [600, 1270, 520, 790], midday: [600, 1270, 520, 790], afternoon: [600, 1270, 520, 790], night: [600, 1270, 520, 790] },
+      bulbR: 14, bulbs: { dusk: [[258, 46], [299, 39], [340, 34], [380, 30], [421, 30], [462, 32], [502, 35], [543, 41], [584, 48], [625, 55], [666, 61], [707, 64], [747, 65], [1085, 290], [1110, 290], [1098, 318]] } },
+    // March (rebuilt): spring farm with daffodils and blossoms. Clovers fall all month with a few blossom petals; the lantern flickers;
+    // morning mist over the meadow; songbirds by day; string lights in the blossoms at dusk
+    march: { dusk: true, skyMask: 'scenes/march-sky.png', fall: function () { return ['clovers', 14, ['#3f9b3a', '#5cb84a', '#2f7d2e', '#7bcf5a']]; }, petals: 10,
+      lights: { morning: [[275, 262, 50, 'lamp']], midday: [[275, 262, 42, 'lamp']], afternoon: [[275, 262, 50, 'lamp']], evening: [[275, 262, 60, 'lamp']], dusk: [[275, 262, 66, 'lamp']], night: [[275, 262, 70, 'lamp']] },
+      suns: { morning: [964, 266, 170], midday: [962, 265, 140], afternoon: [963, 266, 160], evening: [964, 267, 180], dusk: [964, 267, 180] }, moon: { night: [897, 104, 60] },
+      mist: { morning: [400, '#fff1dc', 480, 1280] }, stars: [380, 1270, 20, 300], gulls: { morning: [120, 250], midday: [110, 240], afternoon: [110, 240] },
+      glints: { morning: [480, 1280, 560, 790] }, butterflies: { midday: [480, 720], afternoon: [480, 720] },
+      bulbR: 14, bulbs: { dusk: [[292, 28], [335, 33], [377, 42], [418, 50], [460, 54], [503, 55], [545, 50], [588, 42], [630, 33], [672, 28], [714, 28], [757, 31], [800, 39], [842, 46], [882, 52]] } },
     // April: blossom petals fall all month; candles flicker in the lanterns; butterflies by day, fireflies after dark
     april: { dusk: true, skyMask: 'scenes/april-sky.png', fall: function () { return ['petals', 30, ['#ffffff', '#ffe4ee', '#ffd0e0', '#fff4f8']]; },
       lights: { morning: [[255, 215, 46, 'lamp'], [425, 684, 52, 'lamp']], midday: [[244, 209, 40, 'lamp'], [425, 684, 46, 'lamp']], afternoon: [[425, 684, 48, 'lamp']], evening: [[425, 684, 54, 'lamp']],
@@ -847,6 +857,7 @@
       var fz = PHOTO[id].flurries && PHOTO[id].flurries[tod]; if (fz) P.snow(sc, fz[0], fz[1], fz[2]);
       var fl = PHOTO[id].fall && PHOTO[id].fall(date || new Date());
       if (fl) P[fl[0]](sc, fl[1], fl[2]);
+      if (PHOTO[id].petals) P.petals(sc, PHOTO[id].petals, ['#ffffff', '#fff4f8', '#ffe4ee']);
       return '<div class="scimg" style="background-image:url(\'' + window.sceneImage(id, tod) + '\')"></div><div class="scshade"></div>' +
         '<svg width="' + W + '" height="' + H + '" viewBox="-71.1 0 1422.2 800" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><defs>' + sc.defs + '</defs>' + sc.body + '</svg>';
     }
