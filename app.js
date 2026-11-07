@@ -267,15 +267,23 @@
   var ESPN = 'https://site.api.espn.com/apis/site/v2/sports/';
   var NEUTRAL = { c1: '#3A3F4A', c2: '#A3ABB8' };
   function teamDirectory(sport, league) {
-    var key = 'teams:' + league, cached = load(key, 86400000);
+    var key = 'teams2:' + league, cached = load(key, 86400000);
     if (cached) return Promise.resolve(cached);
     return getJSON(ESPN + sport + '/' + league + '/teams?limit=1000').then(function (j) {
       var map = {};
       ((j.sports || [])[0] || { leagues: [] }).leagues[0].teams.forEach(function (x) {
-        var t = x.team; map[t.id] = { color: t.color ? '#' + t.color : null, alt: t.alternateColor ? '#' + t.alternateColor : null, logo: t.logos && t.logos[0] ? t.logos[0].href : null };
+        var t = x.team; map[t.id] = { color: t.color ? '#' + t.color : null, alt: t.alternateColor ? '#' + t.alternateColor : null, logo: t.logos && t.logos[0] ? t.logos[0].href : null,
+          keys: [t.id, t.abbreviation, t.slug, t.displayName, t.shortDisplayName, t.name, t.location, t.nickname].filter(Boolean).map(function (k) { return String(k).toLowerCase(); }) };
       });
       save(key, map); return map;
     }).catch(function () { return {}; });
+  }
+  // Finds a team in ESPN's list from whatever you typed in config.js: ID, abbreviation (chi), name (Bears), school (Illinois)…
+  function resolveTeam(dir, tm) {
+    var ids = Object.keys(dir); if (!ids.length) return String(tm.id || tm.team);
+    var want = [tm.team, tm.name].filter(Boolean).map(function (k) { return String(k).toLowerCase().trim(); });
+    for (var w = 0; w < want.length; w++) for (var i = 0; i < ids.length; i++) if ((dir[ids[i]].keys || []).indexOf(want[w]) >= 0) return ids[i];
+    return tm.id ? String(tm.id) : null;
   }
   function scoreVal(s) { if (s == null) return ''; if (typeof s === 'object') return s.displayValue != null ? s.displayValue : (s.value != null ? s.value : ''); return s; }
   function recOf(c) { // a team's record from any of ESPN's formats
@@ -289,19 +297,22 @@
       var t = c.team || {}, ref = (dir && dir[t.id]) || {};
       var c1 = t.color ? '#' + t.color : ref.color, c2 = t.alternateColor ? '#' + t.alternateColor : ref.alt;
       return { abbr: t.abbreviation || '', name: t.shortDisplayName || t.name || t.displayName || '', logo: t.logo || (t.logos && t.logos[0] && t.logos[0].href) || ref.logo || '',
-        c1: c1 || NEUTRAL.c1, c2: c2 || NEUTRAL.c2, score: st.state === 'pre' ? '' : scoreVal(c.score), winner: !!c.winner, home: c.homeAway === 'home', rec: recOf(c), id: t.id };
+        c1: c1 || NEUTRAL.c1, c2: c2 || NEUTRAL.c2, score: st.state === 'pre' ? '' : scoreVal(c.score), winner: !!c.winner, home: c.homeAway === 'home', rec: recOf(c), id: t.id,
+        full: t.displayName || '', nick: t.name || t.nickname || '', loc: t.location || '' };
     });
     var status = st.state === 'pre' ? whenLabel(d) : (st.shortDetail || st.detail || '');
     return { id: ev.id, sport: sport, league: league, lg: label, state: st.state, status: status, date: d, teams: teams };
   }
   function loadScores() {
     if (DEMO) { S.games = demoGames(); render(); return Promise.resolve(); }
-    var n = now(), out = [], seen = {};
+    var n = now(), out = [], seen = {}, miss = [];
     function add(g) { if (g && !seen[g.id]) { seen[g.id] = 1; out.push(g); } }
     var followed = C.teams.map(function (tm) {
-      var label = tm.league === 'nfl' ? 'NFL' : tm.league === 'nba' ? 'NBA' : tm.league === 'college-football' ? 'CFB' : tm.league.toUpperCase();
+      var label = { 'college-football': 'CFB', 'mens-college-basketball': 'CBB', 'womens-college-basketball': 'WCBB' }[tm.league] || tm.league.toUpperCase();
       return teamDirectory(tm.sport, tm.league).then(function (dir) {
-        return getJSON(ESPN + tm.sport + '/' + tm.league + '/teams/' + tm.team + '/schedule').then(function (j) {
+        var id = resolveTeam(dir, tm);
+        if (!id) { miss.push((tm.name || tm.team) + ' (' + label + ')'); return []; }
+        return getJSON(ESPN + tm.sport + '/' + tm.league + '/teams/' + id + '/schedule').then(function (j) {
           var mine = j.team || {}, evs = (j.events || []).map(function (e) {
             var g = parseEvent(e, tm.sport, tm.league, label, dir); g.followed = true;
             g.teams.forEach(function (t) { if (String(t.id) === String(mine.id) && mine.recordSummary && (g.state !== 'post' || !t.rec)) t.rec = mine.recordSummary; });
@@ -309,10 +320,10 @@
           });
           var live = evs.filter(function (g) { return g.state === 'in'; });
           var past = evs.filter(function (g) { return g.state === 'post' && (n - g.date) < 10 * 86400000; }).sort(function (a, b) { return b.date - a.date; });
-          var next = evs.filter(function (g) { return g.state === 'pre'; }).sort(function (a, b) { return a.date - b.date; });
+          var next = evs.filter(function (g) { return g.state === 'pre' && g.date - n < 10 * 86400000; }).sort(function (a, b) { return a.date - b.date; });
           return live.length ? [live[0], next[0]] : [past[0], next[0]];
         });
-      }).catch(function () { return []; });
+      }).catch(function () { miss.push((tm.name || tm.team) + ' (' + label + ')'); return []; });
     });
     var fills = C.fillLeagues.map(function (lg) {
       return getJSON(ESPN + lg.sport + '/' + lg.league + '/scoreboard').then(function (j) {
@@ -323,12 +334,21 @@
       var morris = morrisGames();
       // Live games first, then the followed teams, then Morris, then today's best of the rest
       var all = [].concat.apply([], r[0]).filter(Boolean), fillAll = [].concat.apply([], r[1]);
-      all.concat(fillAll).filter(function (g) { return g.state === 'in'; }).forEach(add);
-      all.forEach(add); morris.forEach(add);
+      // one tile per team: live > last night's final > next game this week > final in the last 10 days
+      var tile = function (pair) {
+        var a = pair.filter(Boolean), past = a.filter(function (g) { return g.state === 'post'; })[0], next = a.filter(function (g) { return g.state === 'pre'; })[0];
+        return a.filter(function (g) { return g.state === 'in'; })[0] || (past && n - past.date < 18 * 3600000 ? past : null) || (next && next.date - n < 7 * 86400000 ? next : null) || past || null;
+      };
+      var mineTiles = r[0].map(tile).filter(Boolean);
+      mineTiles.filter(function (g) { return g.state === 'in'; }).forEach(add);
+      mineTiles.forEach(add); morris.forEach(add);
+      var mine = out.length; // your teams always make it; other live games and today's slate fill the rest
+      fillAll.filter(function (g) { return g.state === 'in'; }).forEach(add);
       var rank = function (g) { return g.state === 'pre' ? 1 : 2; };
       fillAll.filter(function (g) { return dayDiff(n, g.date) >= -1 && dayDiff(n, g.date) <= 2; })
         .sort(function (a, b) { return rank(a) - rank(b) || (rank(a) === 1 ? a.date - b.date : b.date - a.date); }).forEach(add);
-      S.games = out.slice(0, 6); S.scoresErr = null; featureGames().forEach(ensureSummary); render();
+      var size = Math.min(12, Math.max(6, Math.ceil(mine / 6) * 6)); // full pages of 6 tiles
+      S.games = out.slice(0, Math.max(size, mine)); S.mine = all; S.teamMiss = miss; S.scoresErr = null; featureGames().forEach(ensureSummary); render();
     }).catch(function () { S.scoresErr = 'Scores unavailable — retrying'; render(); });
   }
   function morrisGames() {
@@ -517,9 +537,9 @@
     var pg = pageList(S.screen), p = curPage();
     var WXT = { now: 'Right now', hours: 'Next 12 hours', week: 'The week ahead', sky: 'Sun & moon', radar: 'Live radar' };
     var t = { family: ['Family schedule', 'From the family calendar'], photos: [S.theme && S.theme.birthdayNames ? S.theme.birthdayNames.join(' & ') + '\u2019s photos' : 'Family photos', ''],
-      scores: ['Scores & games', p === 'grid' ? 'Tap a game for the box score' : ''], plays: ['Today’s plays', 'Tap a play for the breakdown · 1 unit flat'],
+      scores: ['Scores & games', String(p).indexOf('grid') === 0 ? (S.teamMiss && S.teamMiss.length ? 'Couldn\u2019t find ' + S.teamMiss.join(', ') + ' — check config.js' : 'Tap a game for the box score') : ''], plays: ['Today’s plays', 'Tap a play for the breakdown · 1 unit flat'],
       news: ['Top news', pg.length > 1 ? 'Story ' + (S.page + 1) + ' of ' + pg.length : ''], weather: ['Weather', (WXT[p] || '') + ' · ' + L.name] }[S.screen];
-    if (S.screen === 'scores' && p !== 'grid') { var g = S.games.filter(function (x) { return 'g:' + x.id === p; })[0]; if (g) t = [g.teams[0].name + (g.teams[0].home ? ' vs ' : ' at ') + g.teams[1].name, g.lg + (g.state === 'pre' ? ' · Up next' : g.state === 'in' ? ' · Live' : ' · Final')]; }
+    if (S.screen === 'scores' && String(p).indexOf('grid') !== 0) { var g = findGame(p.slice(2)); if (g) t = [g.teams[0].name + (g.teams[0].home ? ' vs ' : ' at ') + g.teams[1].name, g.lg + (g.state === 'pre' ? ' · Up next' : g.state === 'in' ? ' · Live' : ' · Final')]; }
     var body = S.screen === 'scores' ? scoresBody(p) : S.screen === 'news' ? (p === 'empty' ? note(S.backErr === 'setup' ? SETUP : esc(S.backErr || 'Loading…')) : newsPage(+p.slice(2))) :
       S.screen === 'weather' ? weatherPage(p) : { family: familyHTML, photos: photosHTML, plays: playsHTML }[S.screen]();
     if (S.screen === 'photos') { var ph = photos(), cur = ph && ph.length ? ph[S.photoIdx % ph.length] : null; t[1] = cur ? [cur.album, cur.taken ? 'Taken ' + MON[new Date(cur.taken).getMonth()] + ' ' + new Date(cur.taken).getDate() + ', ' + new Date(cur.taken).getFullYear() : ''].filter(Boolean).join(' · ') : ''; }
@@ -552,9 +572,11 @@
   }
   function hookPhotos() { showPhoto(S.screen === 'home' ? 'homephoto' : 'bigphoto'); }
 
-  function scoresHTML() {
+  function scoresHTML(pg) {
     if (!S.games.length) return note(esc(S.scoresErr || 'Loading scores…'));
-    var tiles = S.games.slice(0, 6).map(function (g, i) {
+    pg = pg || 0;
+    var tiles = S.games.slice(pg * 6, pg * 6 + 6).map(function (g, k) {
+      var i = pg * 6 + k;
       return '<button type="button" class="tap tile" data-open="game:' + i + '" style="flex-direction:column;justify-content:center;gap:6px;padding:12px 14px">' +
         '<div class="muted" style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase"><span>' + esc(g.lg) + '</span>' + gameStatus(g) + '</div>' +
         matchupHTML(g, 'tile') + '</button>';
@@ -580,11 +602,19 @@
   }
 
   // ------------------------------------------------------------ pages: Scores, News and Weather cycle through full-screen pages
-  function featureGames() { // your teams' latest final and next game, Morris, and anything live
-    return S.games.filter(function (g) { return g.followed || g.morris || g.state === 'in'; }).slice(0, 4);
+  function findGame(id) { return S.games.concat(S.mine || []).filter(function (x) { return String(x.id) === String(id); })[0]; }
+  function featureGames() { // full pages: anything live, your teams' finals from the last 2 days, and their games in the next 4 days
+    var n = now(), seen = {}, list = S.games.concat(S.mine || []).filter(function (g) {
+      if (seen[g.id]) return false; seen[g.id] = 1;
+      if (g.state === 'in') return true;
+      if (!g.followed && !g.morris) return false;
+      return g.state === 'post' ? n - g.date < 2 * 86400000 : g.date - n < 4 * 86400000;
+    });
+    var rank = function (g) { return g.state === 'in' ? 0 : g.state === 'post' ? 1 : 2; };
+    return list.sort(function (a, b) { return rank(a) - rank(b) || (rank(a) === 1 ? b.date - a.date : a.date - b.date); }).slice(0, 8);
   }
   function pageList(screen) {
-    if (screen === 'scores') return S.games.length ? ['grid'].concat(featureGames().map(function (g) { return 'g:' + g.id; })) : ['grid'];
+    if (screen === 'scores') { var gp = []; for (var i = 0; i < Math.max(1, Math.ceil(S.games.length / 6)); i++) gp.push('grid:' + i); return gp.concat(featureGames().map(function (g) { return 'g:' + g.id; })); }
     if (screen === 'news') { var nw = newsStories(); return nw && nw.length ? nw.map(function (s, i) { return 's:' + i; }) : ['empty']; }
     if (screen === 'weather') return S.wx ? ['now', 'hours', 'week', 'sky', 'radar'] : ['empty'];
     return ['main'];
@@ -593,8 +623,8 @@
     var t = C.timing;
     if (S.screen === 'home') return t.home;
     if (S.screen === 'news') return t.story || 10;
-    if (S.screen === 'scores') return S.page === 0 ? (t.scoresGrid || 15) : (t.page || 12);
-    if (S.screen === 'weather') return t.page || 12;
+    if (S.screen === 'scores') return String(curPage()).indexOf('grid') === 0 ? (t.scoresGrid || 15) : (t.game || t.page || 12);
+    if (S.screen === 'weather') return t.weather || t.page || 12;
     return t.screen;
   }
   function curPage() { var pg = pageList(S.screen); return pg[S.page < pg.length ? S.page : 0]; }
@@ -605,8 +635,8 @@
 
   // ---- scores
   function scoresBody(p) {
-    if (p === 'grid') return scoresHTML();
-    var id = p.slice(2), g = S.games.filter(function (x) { return String(x.id) === id; })[0];
+    if (p.indexOf('grid') === 0) return scoresHTML(+p.split(':')[1] || 0);
+    var g = findGame(p.slice(2));
     if (!g) return note('Game not found');
     var sum = S.sum[g.id] && S.sum[g.id].j;
     if (!sum && !g.morris) ensureSummary(g);
@@ -633,8 +663,12 @@
     if (g.morris) return panel('Final', '<div style="font-size:18px">' + esc((g.morris.home ? 'vs ' : 'at ') + (g.morris.opponent || '')) + '</div><div class="muted" style="font-size:16px">' + esc(g.morris.notes || '') + '</div>');
     if (DEMO) return panel('Box score', note('Quarter-by-quarter scoring from ESPN'));
     if (!sum) return panel('Box score', note('Loading…'));
-    var rows = sum.lines, n = Math.max.apply(null, rows.map(function (r) { return r.ls.length; }).concat([4]));
-    var per = function (i) { return i <= 4 ? (g.sport === 'basketball' || g.sport === 'football' ? 'Q' + i : String(i)) : (n > 5 ? 'OT' + (i - 4) : 'OT'); };
+    var rows = sum.lines, n = Math.max.apply(null, rows.map(function (r) { return r.ls.length; }).concat([g.sport === 'baseball' ? 9 : g.sport === 'hockey' ? 3 : /college-basketball/.test(g.league) ? 2 : 4]));
+    var reg = g.sport === 'baseball' ? 99 : g.sport === 'hockey' ? 3 : /college-basketball/.test(g.league) ? 2 : 4;
+    var per = function (i) {
+      if (i > reg) return n - reg > 1 ? 'OT' + (i - reg) : 'OT';
+      return g.sport === 'hockey' ? 'P' + i : reg === 2 ? 'H' + i : g.sport === 'baseball' ? String(i) : 'Q' + i;
+    };
     var cols = 'grid-template-columns:minmax(0,2.2fr) repeat(' + (n + 1) + ',minmax(0,1fr))';
     var head = '<div class="muted" style="display:grid;' + cols + ';gap:6px;font-size:14px;font-weight:700;text-align:center"><span></span>';
     for (var i = 1; i <= n; i++) head += '<span>' + per(i) + '</span>';
@@ -708,19 +742,33 @@
       var pick = function (tm, name) { var c = ((tm && tm.leaders) || []).filter(function (x) { return x.name === name; })[0], a = c && c.leaders && c.leaders[0]; return a ? { name: a.athlete ? a.athlete.shortName || a.athlete.displayName : '', stat: a.displayValue || '', head: a.athlete && a.athlete.headshot ? a.athlete.headshot.href : '' } : null; };
       ((lead[0] && lead[0].leaders) || []).slice(0, 3).forEach(function (c) { cats.push({ label: c.displayName || c.name, a: pick(lead[0], c.name), b: pick(lead[1], c.name) }); });
       var pc = (j.pickcenter || [])[0], bc = comp && comp.broadcasts && comp.broadcasts[0];
-      var art = (j.news && j.news.articles || []).filter(function (x) { return x.headline; })[0] || (j.article && j.article.headline ? j.article : null);
-      var story = art ? { headline: art.headline, description: art.description || '', image: art.images && art.images[0] ? art.images[0].url : '' } : null;
+      var story = bestStory(g, (j.news && j.news.articles || []).concat(j.article && j.article.headline ? [j.article] : []));
       S.sum[g.id] = { t: Date.now(), j: { recs: recs, lines: lines, stats: stats, leaders: cats, venue: j.gameInfo && j.gameInfo.venue ? j.gameInfo.venue.fullName : '',
         tv: bc ? (bc.media && bc.media.shortName) || (bc.names || []).join(', ') : '', line: pc ? [pc.details, pc.overUnder != null ? 'O/U ' + pc.overUnder : ''].filter(Boolean).join(' · ') : '', story: story } };
-      if (!story && g.state === 'pre') return teamStory(g).then(function (s) { if (s) S.sum[g.id].j.story = s; });
+      if (g.state === 'pre' && !(story && story.both)) return teamStory(g).then(function (s) { if (s && (!story || s.score > story.score)) S.sum[g.id].j.story = s; });
     }).catch(function () { S.sum[g.id] = { t: Date.now(), j: c && c.j }; }).then(function () { if (S.screen === 'scores' || S.detail) render(); });
   }
-  function teamStory(g) { // league news that mentions either team
-    return getJSON(ESPN + g.sport + '/' + g.league + '/news?limit=30').then(function (j) {
-      var names = g.teams.map(function (t) { return t.name; }).filter(Boolean);
-      var a = (j.articles || []).filter(function (x) { return names.some(function (n) { return (x.headline + ' ' + (x.description || '')).indexOf(n) >= 0; }); })[0];
-      return a ? { headline: a.headline, description: a.description || '', image: a.images && a.images[0] ? a.images[0].url : '' } : null;
-    }).catch(function () { return null; });
+  // Picks the story most about THIS game: tagged with either team, or naming them in the headline. Generic league stories are skipped.
+  function bestStory(g, arts) {
+    var college = /college/.test(g.league), best = null;
+    var names = g.teams.map(function (t) { return [t.full, t.nick && t.nick.length > 3 ? t.nick : '', college ? t.loc : ''].filter(Boolean); });
+    (arts || []).forEach(function (a) {
+      if (!a || !a.headline) return;
+      var head = a.headline, text = head + ' ' + (a.description || ''), tagged = (a.categories || []).map(function (c) { return String(c.teamId || (c.team && c.team.id) || ''); });
+      var hits = g.teams.map(function (t, i) {
+        var sc = tagged.indexOf(String(t.id)) >= 0 ? 3 : 0;
+        names[i].forEach(function (nm) { if (head.indexOf(nm) >= 0) sc = Math.max(sc, 3); else if (text.indexOf(nm) >= 0) sc = Math.max(sc, 2); });
+        return sc;
+      });
+      var score = hits[0] + hits[1] + (hits[0] && hits[1] ? 4 : 0);
+      if (score >= 3 && (!best || score > best.score)) best = { headline: a.headline, description: a.description || '', image: a.images && a.images[0] ? a.images[0].url : '', score: score, both: !!(hits[0] && hits[1]) };
+    });
+    return best;
+  }
+  function teamStory(g) { // each team's own ESPN news feed
+    return Promise.all(g.teams.map(function (t) {
+      return t.id ? getJSON(ESPN + g.sport + '/' + g.league + '/news?team=' + t.id + '&limit=15').then(function (j) { return j.articles || []; }).catch(function () { return []; }) : Promise.resolve([]);
+    })).then(function (r) { return bestStory(g, r[0].concat(r[1])); });
   }
 
   // ---- news

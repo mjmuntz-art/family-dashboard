@@ -8,24 +8,37 @@ window.DASH_CONFIG = {
 
   // Your Google Apps Script web app (see README, step 2).
   // Leave blank until it's deployed — those screens show a setup note until then.
-  appsScriptUrl: 'https://script.google.com/macros/s/AKfycbz7k4Tst0Tj0AtIYF45mipxAJTrFF8xZ7nlkT3vtfmepS6Gl518MwO8FvnOnlo46TWL/exec',
-  appsScriptKey: 'FranklinandWestonarebabies604!',          // the same secret you put in Code.gs (KEY)
+  appsScriptUrl: '',
+  appsScriptKey: '',          // the same secret you put in Code.gs (KEY)
 
   // How long each screen stays up (seconds).
-  timing: { home: 60, screen: 30, detail: 20, page: 12, story: 10, scoresGrid: 15 }, // seconds; Scores, News and Weather cycle through pages
+  timing: {            // seconds
+    home: 60,          // home dashboard
+    screen: 30,        // Family, Photos and Plays
+    scoresGrid: 15,    // Scores overview (all games)
+    game: 12,          // each of your teams' game pages (box score / up next)
+    story: 10,         // each news story (6 stories)
+    weather: 12,       // each weather page (5 pages: now, hours, week, sun & moon, radar)
+    detail: 20         // pop-ups after you tap something
+  },
 
-  // Teams that always get a spot on the Scores screen (ESPN team codes).
-  // Logos and colors come from ESPN automatically.
+  // Your teams: they always get a tile, plus full-screen pages for their last final and next game.
+  // team can be the abbreviation ('chi'), the nickname ('Bears'), the school ('Illinois') or ESPN's ID number.
+  // Every line needs a comma after it except the last one. Logos and colors come from ESPN automatically.
+  // league options: nfl, nba, wnba, mlb, nhl, college-football, mens-college-basketball
+  // sport options:  football, basketball, baseball, hockey
   teams: [
-     { sport: 'football', league: 'nfl', team: 'ten', name: 'Titans' },
-    { sport: 'football', league: 'nfl', team: 'det', name: 'Lions' },
-    { sport: 'football', league: 'college-football', team: 'nd', name: 'Notre Dame' },
-    { sport: 'basketball', league: 'nba', team: 'chi', name: 'Bulls' },
-    { sport: 'basketball', league: 'college-basketball', team: 'msu', name: 'Michigan State' },
-    { sport: 'hockey', league: 'nhl', team: 'chi', name: 'Blackhawks' },
-    // Add more, e.g.:
-    // { sport: 'basketball', league: 'nba', team: 'chi', name: 'Bulls' },
-    // { sport: 'football', league: 'college-football', team: '356', name: 'Illinois' },
+    { sport: 'football',   league: 'nfl',                     team: 'ten',            name: 'Titans' },
+    { sport: 'football',   league: 'nfl',                     team: 'det',            name: 'Lions' },
+    { sport: 'baseball',   league: 'mlb',                     team: 'stl',            name: 'Cardinals' },
+    { sport: 'baseball',   league: 'mlb',                     team: 'det',            name: 'Tigers' },
+    { sport: 'hockey',     league: 'nhl',                     team: 'chi',            name: 'Blackhawks' },
+    { sport: 'hockey',     league: 'nhl',                     team: 'det',            name: 'Red Wings' },
+    { sport: 'basketball', league: 'nba',                     team: 'chi',            name: 'Bulls' },
+    { sport: 'basketball', league: 'mens-college-basketball', team: 'Michigan State', name: 'Michigan State', id: '127' },
+    { sport: 'basketball', league: 'mens-college-basketball', team: 'Illinois State', name: 'Illinois State', id: '2287' },
+    { sport: 'football',   league: 'college-football',        team: 'Notre Dame',     name: 'Notre Dame',     id: '87' },
+    { sport: 'football',   league: 'college-football',        team: 'Illinois State', name: 'Illinois State', id: '2287' }
   ],
 
   // Leagues used to fill the remaining Scores tiles with today's games.
