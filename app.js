@@ -278,6 +278,36 @@
       save(key, map); return map;
     }).catch(function () { return {}; });
   }
+  // Every team's record for a league, from ESPN's standings (one call per league, cached 30 minutes)
+  function recordBook(sport, league) {
+    var key = 'recs:' + league, cached = load(key, 30 * 60000);
+    if (cached) return Promise.resolve(cached);
+    return getJSON('https://site.api.espn.com/apis/v2/sports/' + sport + '/' + league + '/standings').then(function (j) {
+      var map = {};
+      (function walk(o) {
+        if (!o || typeof o !== 'object') return;
+        (o.standings && o.standings.entries || []).forEach(function (en) {
+          if (!en.team) return;
+          var st = en.stats || [], pick = st.filter(function (x) { return (x.name === 'overall' || x.type === 'total') && /\d+-\d+/.test(x.summary || x.displayValue || ''); })[0];
+          var val = function (n) { var x = st.filter(function (y) { return y.name === n; })[0]; return x ? Math.round(x.value) : null; };
+          var rec = pick ? (pick.summary || pick.displayValue) : (val('wins') != null ? val('wins') + '-' + val('losses') + (val('otLosses') ? '-' + val('otLosses') : val('ties') ? '-' + val('ties') : '') : '');
+          if (rec) map[en.team.id] = rec;
+        });
+        (o.children || []).forEach(walk);
+      })(j);
+      save(key, map); return map;
+    }).catch(function () { return {}; });
+  }
+  function fillRecords(games) { // any team still missing a record gets it from the standings
+    var need = {};
+    games.forEach(function (g) { if (g.sport && !g.morris && g.teams.some(function (t) { return !t.rec && t.id; })) need[g.sport + '|' + g.league] = 1; });
+    return Promise.all(Object.keys(need).map(function (k) {
+      var sp = k.split('|');
+      return recordBook(sp[0], sp[1]).then(function (book) {
+        games.forEach(function (g) { if (g.league === sp[1]) g.teams.forEach(function (t) { if (!t.rec && book[t.id]) t.rec = book[t.id]; }); });
+      });
+    }));
+  }
   // Finds a team in ESPN's list from whatever you typed in config.js: ID, abbreviation (chi), name (Bears), school (Illinois)…
   function resolveTeam(dir, tm) {
     var ids = Object.keys(dir); if (!ids.length) return String(tm.id || tm.team);
@@ -349,6 +379,7 @@
         .sort(function (a, b) { return rank(a) - rank(b) || (rank(a) === 1 ? a.date - b.date : b.date - a.date); }).forEach(add);
       var size = Math.min(12, Math.max(6, Math.ceil(mine / 6) * 6)); // full pages of 6 tiles
       S.games = out.slice(0, Math.max(size, mine)); S.mine = all; S.teamMiss = miss; S.scoresErr = null; featureGames().forEach(ensureSummary); render();
+      fillRecords(S.games.concat(all)).then(function () { if (S.screen === 'scores' || S.screen === 'home') render(); });
     }).catch(function () { S.scoresErr = 'Scores unavailable — retrying'; render(); });
   }
   function morrisGames() {
@@ -438,7 +469,7 @@
       if (!j.data) return;
       var uri = 'data:' + (j.mime || 'image/jpeg') + ';base64,' + j.data;
       PHOTO_CACHE[item.id] = uri; PHOTO_ORDER.push(item.id);
-      while (PHOTO_ORDER.length > 6) delete PHOTO_CACHE[PHOTO_ORDER.shift()];
+      while (PHOTO_ORDER.length > 10) delete PHOTO_CACHE[PHOTO_ORDER.shift()];
       cb(uri);
     }).catch(function () { /* try the next photo next time */ });
   }
@@ -542,35 +573,100 @@
     if (S.screen === 'scores' && String(p).indexOf('grid') !== 0) { var g = findGame(p.slice(2)); if (g) t = [g.teams[0].name + (g.teams[0].home ? ' vs ' : ' at ') + g.teams[1].name, g.lg + (g.state === 'pre' ? ' · Up next' : g.state === 'in' ? ' · Live' : ' · Final')]; }
     var body = S.screen === 'scores' ? scoresBody(p) : S.screen === 'news' ? (p === 'empty' ? note(S.backErr === 'setup' ? SETUP : esc(S.backErr || 'Loading…')) : newsPage(+p.slice(2))) :
       S.screen === 'weather' ? weatherPage(p) : { family: familyHTML, photos: photosHTML, plays: playsHTML }[S.screen]();
-    if (S.screen === 'photos') { var ph = photos(), cur = ph && ph.length ? ph[S.photoIdx % ph.length] : null; t[1] = cur ? [cur.album, cur.taken ? 'Taken ' + MON[new Date(cur.taken).getMonth()] + ' ' + new Date(cur.taken).getDate() + ', ' + new Date(cur.taken).getFullYear() : ''].filter(Boolean).join(' · ') : ''; }
-    return '<section class="full frost"><header><h1 class="ellip">' + esc(t[0]) + '</h1><div style="display:flex;align-items:center;gap:18px;flex-shrink:0"><div class="muted ellip">' + esc(t[1]) + '</div>' + dotsHTML(pg) + '</div></header>' + body + '</section>';
+    if (S.screen === 'photos') { var cg = curGroup(); t[1] = cg && cg[0] ? cg[0].album : ''; }
+    return '<section class="full frost"><header><h1 class="ellip">' + esc(t[0]) + '</h1><div style="display:flex;align-items:center;gap:18px;flex-shrink:0"><div class="muted ellip">' + (S.screen === 'family' ? familyLegend() : esc(t[1])) + '</div>' + dotsHTML(pg) + '</div></header>' + body + '</section>';
   }
   function familyHTML() {
     var ev = events(); if (!ev) return note(S.backErr === 'setup' ? SETUP : esc(S.calErr || S.backErr || 'Loading…'));
-    var n = now(), today = ev.filter(function (e) { return sameDay(e.start, n) && (e.allDay || e.end > n); }).slice(0, 5);
-    var week = ev.filter(function (e) { var dd = dayDiff(n, e.start); return dd >= 1 && dd <= 6; }).slice(0, 5);
-    var row = function (e, showDay, i) {
-      var when = showDay ? DOW[e.start.getDay()] + (e.allDay ? '' : ' ' + hm(e.start).replace(' ', ' ')) : (e.allDay ? 'All day' : hm(e.start));
-      return '<button type="button" class="tap" data-open="event:' + i + '" style="align-items:center;gap:14px;padding:6px 0">' +
-        '<div class="muted" style="width:' + (showDay ? 120 : 84) + 'px;font-size:15px;flex-shrink:0">' + esc(when) + '</div>' +
-        '<div style="width:11px;height:11px;border-radius:50%;background:' + esc(e.color) + ';flex-shrink:0"></div>' +
-        '<div class="ellip" style="font-size:20px;font-weight:700;flex:1">' + esc(e.title) + '</div><div class="muted ellip" style="font-size:15px;max-width:140px">' + esc(e.who) + '</div></button>';
-    };
-    var col = function (label, list, showDay) {
-      return '<div class="tile" style="display:flex;flex-direction:column;gap:6px;padding:18px 22px;min-height:0"><div class="lbl">' + label + '</div>' +
-        (list.length ? list.map(function (e) { return row(e, showDay, ev.indexOf(e)); }).join('') : note(showDay ? 'Nothing else this week' : 'Nothing else today')) + '</div>';
-    };
-    var warn = S.calMissing && S.calMissing.length ? '<div style="padding:10px 16px;border-radius:10px;background:rgba(255,120,80,0.18);border:1px solid rgba(255,140,100,0.5);font-size:15px">Can\u2019t open ' + esc(S.calMissing.join(' \u00b7 ')) + '</div>' : '';
-    return warn + '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr))">' + col('Today', today, false) + col('Rest of the week', week, true) + '</div>';
+    var n = now(), idx = function (e) { return ev.indexOf(e); };
+    var isDinner = function (e) { return /dinner/i.test(e.who || ''); };
+    var today = ev.filter(function (e) { return sameDay(e.start, n) && !isDinner(e); });
+    var dinner = ev.filter(function (e) { return sameDay(e.start, n) && isDinner(e); })[0];
+    var later = ev.filter(function (e) { var dd = dayDiff(n, e.start); return dd >= 1 && dd <= 6 && !isDinner(e); });
+    var chip = function (e, fs) { return '<span class="ellip" style="flex-shrink:0;max-width:150px;padding:3px 10px;border-radius:999px;font-size:' + (fs || 13) + 'px;font-weight:700;background:' + esc(e.color) + '33;color:#fff;border:1px solid ' + esc(e.color) + '88">' + esc(e.who) + '</span>'; };
+    // ---- today
+    var left = n.getHours() < 12 ? 'A free day ahead' : n.getHours() < 17 ? 'A free afternoon' : 'Free evening — enjoy it';
+    var rows = today.slice(0, 4).map(function (e) {
+      var past = !e.allDay && e.end < n, nowOn = !e.allDay && e.start <= n && e.end > n;
+      return '<button type="button" class="tap" data-open="event:' + idx(e) + '" style="align-items:center;gap:14px;padding:8px 12px;border-radius:12px;background:rgba(255,255,255,' + (nowOn ? .14 : .06) + ');' + (past ? 'opacity:.45;' : '') + '">' +
+        '<div style="width:5px;align-self:stretch;border-radius:3px;background:' + esc(e.color) + ';flex-shrink:0"></div>' +
+        '<div style="width:92px;flex-shrink:0;font-size:17px;font-weight:800">' + (e.allDay ? 'All day' : esc(hm(e.start))) + (nowOn ? '<div style="font-size:11px;font-weight:800;letter-spacing:.1em;color:var(--accent)">NOW</div>' : '') + '</div>' +
+        '<div class="ellip" style="flex:1;font-size:21px;font-weight:700">' + esc(e.title) + '</div>' + chip(e) + '</button>';
+    }).join('');
+    var next = later[0], nextCard = '';
+    if (!rows && next) {
+      var hrs = Math.round((next.start - n) / 3600000), inTxt = hrs < 24 ? 'in ' + hrs + ' hour' + (hrs === 1 ? '' : 's') : 'in ' + Math.round(hrs / 24) + ' day' + (Math.round(hrs / 24) === 1 ? '' : 's');
+      nextCard = '<button type="button" class="tap" data-open="event:' + idx(next) + '" style="flex-direction:column;align-items:flex-start;gap:4px;padding:14px 16px;border-radius:14px;background:rgba(255,255,255,.07);border-left:5px solid ' + esc(next.color) + '">' +
+        '<div class="lbl">Next up · ' + esc(inTxt) + '</div><div class="ellip" style="max-width:100%;font-size:22px;font-weight:800">' + esc(next.title) + '</div>' +
+        '<div class="muted" style="font-size:15px">' + esc(DOWL[next.start.getDay()] + (next.allDay ? '' : ' ' + hm(next.start)) + ' · ' + next.who) + '</div></button>';
+    }
+    var todayTile = '<div class="tile" style="display:flex;flex-direction:column;gap:12px;padding:18px 22px;min-height:0;overflow:hidden">' +
+      '<div style="display:flex;align-items:center;gap:16px;flex-shrink:0"><div class="head" style="font-size:78px;line-height:.85;color:var(--accent)">' + n.getDate() + '</div>' +
+      '<div style="display:flex;flex-direction:column;gap:2px"><div style="font-size:24px;font-weight:800">' + DOWL[n.getDay()] + '</div><div class="muted" style="font-size:16px">' + MONL[n.getMonth()] + ' · ' +
+      (today.length ? today.length + ' thing' + (today.length === 1 ? '' : 's') + ' today' : 'Nothing scheduled') + '</div></div></div>' +
+      (rows || '<div class="head" style="font-size:30px;line-height:1.15;flex-shrink:0">' + left + '</div>' + nextCard) +
+      (dinner ? '<div style="margin-top:auto;display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:12px;background:rgba(255,255,255,.08);flex-shrink:0"><span style="font-size:24px">🍽️</span><div style="min-width:0"><div class="lbl">Tonight’s dinner</div><div class="ellip" style="font-size:19px;font-weight:700">' + esc(dinner.title) + '</div></div></div>' : '') + '</div>';
+    // ---- coming up, grouped by day
+    var groups = [], seen = {};
+    later.forEach(function (e) { var k = e.start.toDateString(); if (!seen[k]) { seen[k] = { d: e.start, list: [] }; groups.push(seen[k]); } seen[k].list.push(e); });
+    var budget = 7, up = groups.map(function (g) {
+      if (budget <= 0) return '';
+      var dd = dayDiff(n, g.d), name = dd === 1 ? 'Tomorrow' : DOWL[g.d.getDay()];
+      var shown = g.list.slice(0, Math.max(1, budget - 1)); budget -= shown.length + 1;
+      return '<div style="display:flex;flex-direction:column;gap:6px"><div style="display:flex;align-items:baseline;gap:10px"><span style="font-size:15px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)">' + name + '</span><span class="muted" style="font-size:14px">' + MON[g.d.getMonth()] + ' ' + g.d.getDate() + '</span>' +
+        (g.list.length > shown.length ? '<span class="muted" style="font-size:13px">+' + (g.list.length - shown.length) + ' more</span>' : '') + '</div>' +
+        shown.map(function (e) {
+          return '<button type="button" class="tap" data-open="event:' + idx(e) + '" style="align-items:center;gap:14px;padding:4px 0">' +
+            '<div style="width:5px;height:30px;border-radius:3px;background:' + esc(e.color) + ';flex-shrink:0"></div><div class="muted" style="width:86px;flex-shrink:0;font-size:16px;font-weight:700">' + (e.allDay ? 'All day' : esc(hm(e.start))) + '</div>' +
+            '<div class="ellip" style="flex:1;font-size:21px;font-weight:700">' + esc(e.title) + '</div>' + chip(e) + '</button>';
+        }).join('') + '</div>';
+    }).join('');
+    var upTile = '<div class="tile" style="display:flex;flex-direction:column;gap:14px;padding:18px 24px;min-height:0;overflow:hidden"><div class="lbl">Coming up</div>' + (up || note('Nothing else on the calendar this week')) + '</div>';
+    // ---- 7-day strip: how busy each day is, colored by person
+    var strip = '';
+    for (var k = 0; k < 7; k++) {
+      var d = new Date(n.getFullYear(), n.getMonth(), n.getDate() + k), list = ev.filter(function (e) { return sameDay(e.start, d) && !isDinner(e); });
+      strip += '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px 4px;border-radius:12px;' + (k === 0 ? 'background:var(--accent);color:var(--ink)' : 'background:rgba(255,255,255,.06)') + '">' +
+        '<div style="font-size:13px;font-weight:800;letter-spacing:.08em;opacity:.8">' + DOW[d.getDay()].toUpperCase() + '</div><div style="font-size:24px;font-weight:800;line-height:1">' + d.getDate() + '</div>' +
+        '<div style="display:flex;gap:4px;height:9px">' + list.slice(0, 5).map(function (e) { return '<span style="width:9px;height:9px;border-radius:50%;background:' + esc(e.color) + ';box-shadow:0 0 0 1.5px rgba(0,0,0,.25)"></span>'; }).join('') + '</div></div>';
+    }
+    var warn = S.calMissing && S.calMissing.length ? '<div style="padding:10px 16px;border-radius:10px;background:rgba(255,120,80,0.18);border:1px solid rgba(255,140,100,0.5);font-size:15px">Can’t open ' + esc(S.calMissing.join(' · ')) + '</div>' : '';
+    return warn + '<div style="display:flex;flex-direction:column;gap:12px;flex:1;min-height:0">' +
+      '<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.35fr);gap:12px;flex:1;min-height:0">' + todayTile + upTile + '</div>' +
+      '<div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px;height:82px;flex-shrink:0">' + strip + '</div></div>';
+  }
+  function familyLegend() { // header: each person's color
+    var ev = events() || [], seen = {}, out = [];
+    ev.forEach(function (e) { if (e.who && !seen[e.who]) { seen[e.who] = 1; out.push(e); } });
+    return out.slice(0, 7).map(function (e) { return '<span style="display:inline-flex;align-items:center;gap:6px;margin-left:14px"><span style="width:10px;height:10px;border-radius:50%;background:' + esc(e.color) + '"></span>' + esc(e.who) + '</span>'; }).join('');
   }
 
+  // Photos fill the frame: three portrait photos side by side, or two landscape ones
+  function photoGroups() {
+    var ph = photos(); if (!ph || !ph.length) return [];
+    var P = ph.filter(function (o) { return o.o === 'p'; }), Lp = ph.filter(function (o) { return o.o !== 'p'; });
+    var chunk = function (arr, k) { var out = []; for (var i = 0; i < arr.length; i += k) { var g = []; for (var j = 0; j < Math.min(k, arr.length); j++) g.push(arr[(i + j) % arr.length]); out.push(g); } return out; };
+    var pg = chunk(P, 3), lg = chunk(Lp, 2), out = [];
+    for (var i = 0; i < Math.max(pg.length, lg.length); i++) { if (pg[i]) out.push(pg[i]); if (lg[i]) out.push(lg[i]); }
+    return out;
+  }
+  function curGroup() { var g = photoGroups(); return g.length ? g[(S.photoIdx + S.page) % g.length] : null; }
   function photosHTML() {
     var ph = photos(); if (!ph) return note(S.backErr === 'setup' ? SETUP : esc(S.backErr || 'Loading…'));
     if (!ph.length) return note('Add photos to your dashboard photo folder in Google Drive.');
-    var cur = ph[S.photoIdx % ph.length];
-    return '<div id="bigphoto" style="flex:1;border-radius:var(--r2);background:#000 center/contain no-repeat"></div>';
+    var g = curGroup() || [];
+    return '<div style="display:grid;grid-template-columns:repeat(' + g.length + ',minmax(0,1fr));gap:12px;flex:1;min-height:0">' + g.map(function (it, i) {
+      var d = it.taken ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(it.taken) ? it.taken + 'T12:00:00' : String(it.taken).replace(' ', 'T')) : null; if (d && isNaN(d)) d = null;
+      return '<div style="position:relative;border-radius:var(--r2);overflow:hidden;background:rgba(0,0,0,.35)"><div id="pc' + i + '" class="pcell" style="position:absolute;inset:0;background:center/cover no-repeat;opacity:0;transition:opacity .6s"></div>' +
+        (d ? '<div style="position:absolute;left:12px;bottom:12px;padding:5px 12px;border-radius:999px;background:rgba(0,0,0,.55);font-size:14px;font-weight:700">' + esc((it.person ? it.person + ' · ' : '') + MON[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear()) + '</div>' : '') + '</div>';
+    }).join('') + '</div>';
   }
-  function hookPhotos() { showPhoto(S.screen === 'home' ? 'homephoto' : 'bigphoto'); }
+  function loadCollage() {
+    var g = curGroup() || [];
+    g.forEach(function (it, i) { photoSrc(it, function (src) { var el = $('pc' + i); if (el && curGroup() && curGroup()[i] === it) { el.style.backgroundImage = 'url("' + src + '")'; el.style.opacity = 1; } }); });
+    var all = photoGroups(), nx = all.length ? all[(S.photoIdx + S.page + 1) % all.length] : []; (nx || []).forEach(function (it) { photoSrc(it, function () { }); });
+  }
+  function hookPhotos() { if (S.screen === 'home') showPhoto('homephoto'); else loadCollage(); }
 
   function scoresHTML(pg) {
     if (!S.games.length) return note(esc(S.scoresErr || 'Loading scores…'));
@@ -617,6 +713,7 @@
     if (screen === 'scores') { var gp = []; for (var i = 0; i < Math.max(1, Math.ceil(S.games.length / 6)); i++) gp.push('grid:' + i); return gp.concat(featureGames().map(function (g) { return 'g:' + g.id; })); }
     if (screen === 'news') { var nw = newsStories(); return nw && nw.length ? nw.map(function (s, i) { return 's:' + i; }) : ['empty']; }
     if (screen === 'weather') return S.wx ? ['now', 'hours', 'week', 'sky', 'radar'] : ['empty'];
+    if (screen === 'photos') { var pgN = Math.min(3, photoGroups().length); var out = []; for (var q = 0; q < Math.max(1, pgN); q++) out.push('c:' + q); return out; }
     return ['main'];
   }
   function pageDur() {
@@ -625,6 +722,7 @@
     if (S.screen === 'news') return t.story || 10;
     if (S.screen === 'scores') return String(curPage()).indexOf('grid') === 0 ? (t.scoresGrid || 15) : (t.game || t.page || 12);
     if (S.screen === 'weather') return t.weather || t.page || 12;
+    if (S.screen === 'photos') return t.photo || 10;
     return t.screen;
   }
   function curPage() { var pg = pageList(S.screen); return pg[S.page < pg.length ? S.page : 0]; }
@@ -1059,7 +1157,7 @@
   // ------------------------------------------------------------ rotation + input
   function setScreen(name) {
     if (S.detail) { S.detail = null; $('overlay').className = ''; stopRadar(); }
-    if (name === 'photos' && S.screen !== 'photos') S.photoIdx++;
+    if (name === 'photos' && S.screen !== 'photos') S.photoIdx += 3;
     S.screen = name; S.page = 0; render(); schedule();
   }
   function schedule() {
