@@ -1891,7 +1891,19 @@
     st.style.left = Math.max(0, (innerWidth - w * s) / 2) + 'px'; st.style.top = Math.max(0, (innerHeight - 800 * s) / 2) + 'px';
     if (S.stageW && S.stageW !== w) { S.stageW = w; render(); } S.stageW = w;
   }
+  // Keep the screen awake (Fire TV, Echo): ask for a screen wake lock, and keep the background video playing
+  var WAKE = null;
+  function keepAwake() {
+    try {
+      if ('wakeLock' in navigator && !WAKE && document.visibilityState === 'visible')
+        navigator.wakeLock.request('screen').then(function (l) { WAKE = l; l.addEventListener('release', function () { WAKE = null; }); }).catch(function () { /* not allowed here */ });
+    } catch (e) { /* no wake lock support */ }
+    var v = $('keepalive');
+    if (v && v.paused) { try { var p = v.play(); if (p && p.catch) p.catch(function () { }); } catch (e) { /* ignore */ } }
+  }
+  document.addEventListener('visibilitychange', keepAwake);
   function start() {
+    keepAwake();
     var v = $('keepalive'); try { var p = v.play(); if (p && p.catch) p.catch(function () { }); } catch (e) { /* ignore */ }
     var de = document.documentElement, rf = de.requestFullscreen || de.webkitRequestFullscreen;
     if (rf) { try { var r = rf.call(de); if (r && r.catch) r.catch(function () { }); } catch (e) { /* ignore */ } }
@@ -1957,6 +1969,8 @@
     $('lookpick').addEventListener('change', function (e) { FORCE_THEME = e.target.value || null; S.theme = null; applyTheme(); });
   }
   applyTheme(); tick(); setInterval(tick, 1000);
+  keepAwake(); setInterval(keepAwake, 30000);
+  document.addEventListener('keydown', function () { keepAwake(); if ($('start').style.display !== 'none') start(); }); // TV remote buttons count as a tap
   $('startbtn').addEventListener('click', start);
   if (Q.has('nostart') || DEMO) $('start').style.display = 'none'; else setTimeout(function () { $('start').style.display = 'none'; }, 15000);
   render();
