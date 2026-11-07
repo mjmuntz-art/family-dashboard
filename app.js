@@ -587,18 +587,18 @@
 
   function playsHTML() {
     var md = models(); if (!md) return note(S.backErr === 'setup' ? SETUP : esc(S.backErr || 'Loading…'));
-    var cards = md.slice(0, 4).map(function (m, mi) {
-      var rows = (m.plays || []).slice(0, 3).map(function (p, ri) {
-        return '<button type="button" class="tap" data-open="play:' + mi + ':' + ri + '" style="justify-content:space-between;align-items:center;gap:10px;padding:4px 10px;border-radius:8px;background:rgba(255,255,255,0.07)">' +
+    var cards = md.slice(0, 3).map(function (m, mi) {
+      var rows = (m.plays || []).slice(0, 6).map(function (p, ri) {
+        var res = /^HIT/i.test(p.status) ? '#5fd38a' : /^MISS/i.test(p.status) ? '#ff7a7a' : '';
+        return '<button type="button" class="tap" data-open="play:' + mi + ':' + ri + '" style="justify-content:space-between;align-items:center;gap:10px;padding:6px 12px;border-radius:9px;background:rgba(255,255,255,0.07);flex-shrink:0' + (res ? ';box-shadow:inset 4px 0 0 ' + res : '') + '">' +
           '<div style="min-width:0"><div class="ellip" style="font-size:16px;font-weight:700">' + esc(p.play) + '</div><div class="ellip" style="font-size:12px;color:#dfe5ee">' + esc(p.line || '') + '</div></div>' +
-          '<div style="font-family:' + m.font + ';font-size:17px;font-weight:700;color:' + m.acc + '">' + esc(p.odds || '') + '</div></button>';
+          '<div style="font-family:' + m.font + ';font-size:17px;font-weight:700;color:' + m.acc + ';flex-shrink:0">' + esc(p.odds || '') + '</div></button>';
       }).join('');
       return '<div style="display:flex;flex-direction:column;gap:6px;padding:12px 18px;border-radius:14px;background:' + m.bg + ';border:1px solid ' + m.edge + ';min-height:0">' +
-        '<div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-family:' + m.font + ';font-size:20px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:' + m.acc + '">' + esc(m.name) + '</span><span style="font-size:13px;color:#dfe5ee">' + esc(m.record || '') + '</span></div>' +
+        '<div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0"><span style="font-family:' + m.font + ';font-size:22px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:' + m.acc + '">' + esc(m.name) + '</span><span style="font-size:14px;font-weight:700;color:#fff">' + esc(m.record || '') + '</span></div>' +
         (rows || '<div class="note" style="color:#dfe5ee">' + esc(m.note || 'No plays yet today') + '</div>') + '<div style="font-size:11px;color:#dfe5ee;margin-top:auto">' + esc(m.source || '') + '</div></div>';
     });
-    while (cards.length < 4) cards.push('<div class="tile">' + note('Add another model in Code.gs') + '</div>');
-    return '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr))">' + cards.join('') + '</div>';
+    return '<div class="grid" style="grid-template-columns:repeat(' + Math.max(1, cards.length) + ',minmax(0,1fr))">' + cards.join('') + '</div>';
   }
 
   // ------------------------------------------------------------ pages: Scores, News and Weather cycle through full-screen pages
@@ -606,8 +606,8 @@
   function featureGames() { // full pages: anything live, your teams' finals from the last 2 days, and their games in the next 4 days
     var n = now(), seen = {}, list = S.games.concat(S.mine || []).filter(function (g) {
       if (seen[g.id]) return false; seen[g.id] = 1;
-      if (g.state === 'in') return true;
       if (!g.followed && !g.morris) return false;
+      if (g.state === 'in') return true;
       return g.state === 'post' ? n - g.date < 2 * 86400000 : g.date - n < 4 * 86400000;
     });
     var rank = function (g) { return g.state === 'in' ? 0 : g.state === 'post' ? 1 : 2; };
@@ -780,11 +780,11 @@
       '<div style="position:relative;border-radius:var(--r2);overflow:hidden;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center">' + icon('photo', 56, 1.2) +
       (s.image ? '<img src="' + esc(s.image) + '" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" onerror="this.remove()">' : '') +
       '<div style="position:absolute;left:16px;top:16px;padding:7px 14px;border-radius:999px;background:var(--accent);color:var(--ink);font-weight:800;font-size:15px;letter-spacing:.06em;text-transform:uppercase">' + esc(s.src) + '</div></div>' +
-      '<div style="display:flex;flex-direction:column;gap:14px;min-height:0;padding:4px 0">' +
-      '<div class="muted" style="font-size:17px;font-weight:600">' + (s.date ? esc(whenLabel(new Date(s.date))) : '') + '</div>' +
-      '<div class="head clamp4" style="font-size:40px;line-height:1.1">' + esc(s.title) + '</div>' +
-      '<div class="muted clamp4" style="font-size:20px;line-height:1.45">' + esc(s.summary || '') + '</div>' +
-      '<div style="display:flex;align-items:center;gap:16px;margin-top:auto"><div id="qr" style="width:104px;height:104px;border-radius:10px;background:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0"></div><div class="muted" style="font-size:16px">Scan to read the whole story on your phone</div></div></div></div>';
+      '<div style="display:flex;flex-direction:column;gap:14px;min-height:0;overflow:hidden;padding:4px 0">' +
+      '<div class="muted" style="font-size:17px;font-weight:600;flex-shrink:0">' + (s.date ? esc(whenLabel(new Date(s.date))) : '') + '</div>' +
+      '<div class="head clamp3" style="flex-shrink:0;font-size:' + (s.title.length > 95 ? 30 : s.title.length > 65 ? 34 : 40) + 'px;line-height:1.12">' + esc(s.title) + '</div>' +
+      '<div class="muted clamp3" style="flex-shrink:0;font-size:19px;line-height:1.45">' + esc(s.summary || '') + '</div>' +
+      '<div style="display:flex;align-items:center;gap:16px;margin-top:auto;flex-shrink:0"><div id="qr" style="width:104px;height:104px;padding:6px;box-sizing:border-box;border-radius:10px;background:#fff;overflow:hidden;flex-shrink:0"></div><div class="muted" style="font-size:16px">Scan to read the whole story on your phone</div></div></div></div>';
   }
 
   // ---- weather
@@ -991,7 +991,7 @@
   }
   function drawQR(s) {
     if (!s || !s.link) return;
-    var go = function () { var q = window.qrcode(0, 'M'); q.addData(s.link); q.make(); var el = $('qr'); if (el) el.innerHTML = q.createSvgTag({ cellSize: 3, margin: 2 }); };
+    var go = function () { var q = window.qrcode(0, 'M'); q.addData(s.link); q.make(); var el = $('qr'); if (el) { el.innerHTML = q.createSvgTag({ cellSize: 3, margin: 2 }); var sv = el.querySelector('svg'); if (sv) { sv.removeAttribute('width'); sv.removeAttribute('height'); sv.style.width = '100%'; sv.style.height = '100%'; } } };
     if (window.qrcode) go(); else loadScript('https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js').then(go).catch(function () { var el = $('qr'); if (el) el.style.display = 'none'; });
   }
   function playDetailHTML(m, p) {
@@ -1016,33 +1016,43 @@
 
   // ------------------------------------------------------------ radar (RainViewer + CARTO basemap)
   var RADAR = { timer: null };
+  // Radar: tiles are laid out around the center of the box, so it fills the box whatever its size.
+  // RainViewer's free tiles stop at zoom 7 and allow ~100 requests a minute, so the loop is built once and reused for 5 minutes.
   function startRadar() {
     var box = $('radar'), noteEl = $('radarnote'); if (!box) return;
     if (DEMO) { noteEl.textContent = 'Live radar loop from RainViewer appears here'; return; }
-    getJSON('https://api.rainviewer.com/public/weather-maps.json').then(function (j) {
-      var frames = (j.radar && j.radar.past || []).slice(-8); if (!frames.length) throw new Error('no frames');
-      var z = 7, scale = 1.6, w = box.clientWidth, h = box.clientHeight;
-      var n = Math.pow(2, z), px = (L.lon + 180) / 360 * n * 256, latR = L.lat * Math.PI / 180, py = (1 - Math.log(Math.tan(latR) + 1 / Math.cos(latR)) / Math.PI) / 2 * n * 256;
-      var vw = w / scale, vh = h / scale, x0 = px - vw / 2, y0 = py - vh / 2;
-      var tx0 = Math.floor(x0 / 256), ty0 = Math.floor(y0 / 256), tx1 = Math.floor((x0 + vw) / 256), ty1 = Math.floor((y0 + vh) / 256);
-      var layer = function (urlFn, cls, extra) {
-        var s = '<div class="' + cls + '" style="position:absolute;left:0;top:0;transform:scale(' + scale + ');transform-origin:0 0;' + (extra || '') + '">';
-        for (var ty = ty0; ty <= ty1; ty++) for (var tx = tx0; tx <= tx1; tx++) s += '<img alt="" src="' + urlFn(tx, ty) + '" style="position:absolute;width:256px;height:256px;left:' + (tx * 256 - x0) + 'px;top:' + (ty * 256 - y0) + 'px">';
-        return s + '</div>';
-      };
-      var html = layer(function (x, y) { return 'https://basemaps.cartocdn.com/dark_all/' + z + '/' + x + '/' + y + '.png'; }, 'base');
-      frames.forEach(function (f, i) { html += layer(function (x, y) { return j.host + f.path + '/256/' + z + '/' + x + '/' + y + '/2/1_1.png'; }, 'rf', 'opacity:' + (i === frames.length - 1 ? 0.85 : 0) + ';transition:opacity .3s'); });
-      html += '<div style="position:absolute;left:50%;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px rgba(0,0,0,.4)"></div>' +
-        '<div style="position:absolute;left:50%;top:50%;margin:12px 0 0 -40px;width:80px;text-align:center;font-size:13px;font-weight:700;text-shadow:0 1px 3px #000">' + esc(L.name.split(',')[0]) + '</div>';
-      box.innerHTML = html;
+    stopRadar();
+    var run = function (frames) {
+      box = $('radar'); noteEl = $('radarnote'); if (!box) return;
+      box.innerHTML = RADAR.html;
       var layers = box.querySelectorAll('.rf'), k = layers.length - 1;
       var step = function () {
-        layers[k].style.opacity = 0; k = (k + 1) % layers.length; layers[k].style.opacity = 0.85;
-        var t = new Date(frames[k].time * 1000); noteEl.textContent = 'Radar ' + hm(t) + ' · RainViewer · map © OpenStreetMap contributors © CARTO';
-        RADAR.timer = setTimeout(step, k === layers.length - 1 ? 1800 : 550);
+        if (!layers.length) return;
+        layers[k].style.opacity = 0; k = (k + 1) % layers.length; layers[k].style.opacity = 0.9;
+        noteEl.textContent = 'Radar ' + hm(new Date(frames[k].time * 1000)) + ' · RainViewer · map © OpenStreetMap contributors © CARTO';
+        RADAR.timer = setTimeout(step, k === layers.length - 1 ? 2000 : 600);
       };
       step();
-    }).catch(function () { noteEl.textContent = 'Radar unavailable right now'; });
+    };
+    if (RADAR.html && Date.now() - RADAR.t < 5 * 60000) return run(RADAR.frames);
+    getJSON('https://api.rainviewer.com/public/weather-maps.json').then(function (j) {
+      var frames = (j.radar && j.radar.past || []).slice(-6); if (!frames.length) throw new Error('no frames');
+      var z = 7, scale = 1.7, n = Math.pow(2, z), latR = L.lat * Math.PI / 180;
+      var px = (L.lon + 180) / 360 * n * 256, py = (1 - Math.log(Math.tan(latR) + 1 / Math.cos(latR)) / Math.PI) / 2 * n * 256;
+      var tx0 = Math.floor((px - 380) / 256), tx1 = Math.floor((px + 380) / 256), ty0 = Math.floor((py - 170) / 256), ty1 = Math.floor((py + 170) / 256);
+      var layer = function (urlFn, cls, extra) {
+        var h = '<div class="' + cls + '" style="position:absolute;left:50%;top:50%;width:0;height:0;transform:scale(' + scale + ');transform-origin:0 0;' + (extra || '') + '">';
+        for (var ty = ty0; ty <= ty1; ty++) for (var tx = tx0; tx <= tx1; tx++)
+          h += '<img alt="" src="' + urlFn(tx, ty) + '" style="position:absolute;width:256px;height:256px;max-width:none;left:' + (tx * 256 - px).toFixed(1) + 'px;top:' + (ty * 256 - py).toFixed(1) + 'px" onerror="this.style.visibility=\'hidden\'">';
+        return h + '</div>';
+      };
+      var html = layer(function (x, y) { return 'https://a.basemaps.cartocdn.com/dark_all/' + z + '/' + x + '/' + y + '.png'; }, 'base');
+      frames.forEach(function (f) { html += layer(function (x, y) { return j.host + f.path + '/256/' + z + '/' + x + '/' + y + '/2/1_1.png'; }, 'rf', 'opacity:0;transition:opacity .3s'); });
+      html += '<div style="position:absolute;left:50%;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px rgba(0,0,0,.4)"></div>' +
+        '<div style="position:absolute;left:50%;top:50%;margin:12px 0 0 -50px;width:100px;text-align:center;font-size:14px;font-weight:700;text-shadow:0 1px 3px #000">' + esc(L.name.split(',')[0]) + '</div>';
+      RADAR.html = html; RADAR.frames = frames; RADAR.t = Date.now();
+      run(frames);
+    }).catch(function () { if (noteEl) noteEl.textContent = 'Radar unavailable right now'; });
   }
   function stopRadar() { clearTimeout(RADAR.timer); }
 
@@ -1115,10 +1125,9 @@
       calendar: { events: evs }, photos: { items: [] }, morris: { games: [] },
       news: { sources: { 'AP': [story(), story()], 'Chicago Tribune': [story()], 'Sun-Times': [story()], 'WGN': [story()], 'NBC 5': [story()], 'ABC 7': [story()], 'Shaw Local': [story(), story()] } },
       plays: { models: [
-        { name: 'NBAPropSignal', record: 'Record [W–L]', source: 'xEP edges · Pikkit best price', plays: three('[Player] O [Line] PTS', 'Edge [x]% · xEP [Grade] · L5 / L10', [['L5 avg', 'Game logs'], ['L10 avg', 'Game logs'], ['vs opponent', 'Game logs'], ['Model edge', 'NBAPropSignal V2'], ['xEP grade', 'xEP'], ['Best price', 'Pikkit']]) },
-        { name: 'Moonshot', record: 'Trial day [x] of 30', source: 'Pikkit best price · parlay target +10000 to +18000', plays: three('[Player] 5+ threes', 'Model [x]% vs book [x]%', [['Model prob', 'Moonshot'], ['Book implied', 'Sportsbook'], ['Edge', 'Moonshot'], ['3PA per game', 'Game logs'], ['Best price', 'Pikkit'], ['Card parlay', 'Top 3 legs']]) },
-        { name: 'NFL Props', record: 'Record [W–L]', source: 'Model projection · Pikkit best price', plays: three('[Player] O [Line] rec yds', 'Proj [x] · Edge [x]%', [['Projection', 'NFL Props'], ['Line', 'Sportsbook'], ['Edge', 'NFL Props'], ['L5 avg', 'Game logs'], ['Opp vs position', 'Defense ranks'], ['Best price', 'Pikkit']]) },
-        { name: 'CFB Model', record: 'Record [W–L]', source: 'xEP xVAL · CFBD stats · Pikkit best price', plays: three('[Team] [Spread]', 'xVAL [x] · Grade [0–10]', [['xVAL', 'xEP'], ['Grade (0–10)', 'CFB Model'], ['Tier', 'CFB Model'], ['SP+ gap', 'CFBD'], ['Weather', 'NOAA'], ['Best price', 'Pikkit']]) }
+        { name: 'NBAPropSignal', record: 'Form 6 [W–L] · [units]', source: 'Morning Form 6 · trimmed L10 vs line · xEP · 1 unit flat', plays: [1, 2, 3, 4, 5, 6].map(function (k) { return three('[Player] O [Line] [stat]', '#' + k + ' · xEP [proj] · L10 [avg] · [Grade] · [Game]', [['xEP projection', 'xEP'], ['Trimmed L10', 'Game logs'], ['Form gap', 'Form 6'], ['Projected minutes', 'NBAPropSignal'], ['Grade', 'xEP'], ['Price', 'Best line']])[0]; }) },
+        { name: 'Moonshot', record: '[W] up / [L] down · [$]', source: 'Paper trial · $5 straights · $1 round robin · $1 top-3 parlay', plays: three('[Player] 5+ threes', 'Model [x]% vs book [x]%', [['Model prob', 'Moonshot'], ['Book implied', 'Sportsbook'], ['Edge', 'Moonshot'], ['Est. EV', 'Moonshot'], ['Best price', 'Pikkit / books'], ['Matchup', 'Schedule']]) },
+        { name: 'NFL Props', record: 'Week [x]', source: 'V3 top signal scores this week · BET and LEAN straights', plays: three('[Player] O [Line] rec yds', 'LEAN · hit [x]% · [Team] vs [Opp]', [['Est. hit %', 'NFLPropSignal V3'], ['Est. EV', 'NFLPropSignal V3'], ['Signal score', 'NFLPropSignal V3'], ['Slate rank', 'Slate'], ['Bet-to price', 'Price needed to BET'], ['Price', 'Best line']]) }
       ] }
     };
   }
