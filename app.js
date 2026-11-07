@@ -6,6 +6,7 @@
   var C = window.DASH_CONFIG, L = C.location;
   var Q = new URLSearchParams(location.search);
   var DEMO = Q.has('demo') || !!C.demo;
+  var SHELL = Q.has('shell') && window.parent !== window;
   var FORCE_DATE = Q.get('date'), FORCE_THEME = Q.get('theme'), STATIC = Q.has('static');
   var ORDER = ['home', 'family', 'photos', 'scores', 'plays', 'news', 'weather'];
   var LABELS = { home: 'Home', family: 'Family', photos: 'Photos', scores: 'Scores', plays: 'Plays', news: 'News', weather: 'Weather' };
@@ -1868,6 +1869,7 @@
   }
   var peekT = null;
   document.addEventListener('click', function (e) {
+    if (window.dashStart) window.dashStart();
     var el = e.target.closest('[data-go],[data-open],[data-close],[data-page]');
     var st = $('stage');
     if (st.classList.contains('immersive') && !e.target.closest('#overlay')) { // full screens: a tap shows the menu for a few seconds
@@ -1905,7 +1907,10 @@
   function start() {
     keepAwake();
     var v = $('keepalive'); try { var p = v.play(); if (p && p.catch) p.catch(function () { }); } catch (e) { /* ignore */ }
-    var de = document.documentElement, rf = de.requestFullscreen || de.webkitRequestFullscreen;
+    // inside the outer page (index.html), full screen goes on the outer page so it survives updates
+    var de = document.documentElement;
+    if (SHELL) { try { de = window.parent.document.documentElement; } catch (e) { /* ignore */ } }
+    var rf = de.requestFullscreen || de.webkitRequestFullscreen;
     if (rf) { try { var r = rf.call(de); if (r && r.catch) r.catch(function () { }); } catch (e) { /* ignore */ } }
     $('start').style.display = 'none';
   }
@@ -1950,7 +1955,7 @@
 
   // ------------------------------------------------------------ auto-update
   // Every 5 minutes, check whether any dashboard file changed on GitHub; if so, reload.
-  var WATCH = ['index.html', 'style.css', 'config.js', 'themes.js', 'scenes.js', 'app.js'], PRINT = null;
+  var WATCH = ['dash.html', 'style.css', 'config.js', 'themes.js', 'scenes.js', 'app.js'], PRINT = null;
   function fingerprint() {
     return Promise.all(WATCH.map(function (f) { return fetch(f + '?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); }); }))
       .then(function (ts) { return ts.map(function (x) { var h = 0; for (var i = 0; i < x.length; i++) h = (h * 31 + x.charCodeAt(i)) | 0; return x.length + ':' + h; }).join('|'); });
@@ -1970,9 +1975,11 @@
   }
   applyTheme(); tick(); setInterval(tick, 1000);
   keepAwake(); setInterval(keepAwake, 30000);
-  document.addEventListener('keydown', function () { keepAwake(); if ($('start').style.display !== 'none') start(); }); // TV remote buttons count as a tap
+  document.addEventListener('keydown', function () { window.dashStart(); }); // TV remote buttons count as a tap
   $('startbtn').addEventListener('click', start);
-  if (Q.has('nostart') || DEMO) $('start').style.display = 'none'; else setTimeout(function () { $('start').style.display = 'none'; }, 15000);
+  function isFull() { try { var d = SHELL ? window.parent.document : document; return !!(d.fullscreenElement || d.webkitFullscreenElement); } catch (e) { return false; } }
+  window.dashStart = function () { keepAwake(); if (!isFull() && !DEMO) start(); }; // any tap or remote press goes full screen if it isn't already
+  if (Q.has('nostart') || DEMO || isFull()) $('start').style.display = 'none'; else setTimeout(function () { $('start').style.display = 'none'; }, 15000);
   render();
   if (!DEMO && location.protocol.indexOf('http') === 0) every(checkUpdate, 5 * 60000);
   every(loadWeather, 10 * 60000);

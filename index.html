@@ -4,54 +4,30 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=1280, initial-scale=1, user-scalable=no">
 <title>Muntz Family Dashboard</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link id="fonts" rel="stylesheet" href="">
-<script>(function () { var l = document.createElement("link"); l.rel = "stylesheet"; l.href = "style.css?t=" + Date.now(); document.head.appendChild(l); })();</script>
+<!-- This outer page holds full screen. The dashboard runs inside it (dash.html) and reloads on its own
+     when GitHub changes, so updates never knock the screen out of full screen. -->
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  #dash { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; display: block; }
+</style>
 </head>
 <body>
-<div id="stage">
-  <div id="scene"></div>
-
-  <div id="topbar">
-    <div class="clock frost">
-      <div class="t"><span id="time">--:--</span><span class="ap" id="ampm"></span></div>
-      <div id="cdate" style="display:none;flex-direction:column;padding-bottom:6px">
-        <div id="dow" style="font-size:22px;font-weight:700"></div>
-        <div id="date" class="muted" style="font-size:18px"></div>
-      </div>
-    </div>
-    <div class="banner frost">
-      <div id="btitle" class="title head"></div>
-      <div id="bsub" class="sub"></div>
-    </div>
-    <button type="button" class="tap wxpill frost" data-go="weather" aria-label="Open weather">
-      <span id="wxicon"></span>
-      <span style="display:flex;flex-direction:column;align-items:flex-end">
-        <span id="wxtemp" class="temp">--°</span>
-        <span id="wxsub" class="hilo">&nbsp;</span>
-      </span>
-    </button>
-  </div>
-
-  <div id="alert" role="alert"></div>
-  <div id="screen"></div>
-  <div id="corner"></div>
-  <div id="nav"><div class="bar frost" id="navbar"></div></div>
-  <div id="overlay"><div class="card" id="card"></div></div>
-  <div id="demo"></div>
-
-  <div id="start">
-    <button type="button" id="startbtn">Tap to start full screen</button>
-  </div>
-  <video id="keepalive" src="keepalive.mp4" muted loop playsinline autoplay></video>
-</div>
-
+<iframe id="dash" title="Muntz Family Dashboard" allow="fullscreen; autoplay; screen-wake-lock"></iframe>
 <script>
-// Load the dashboard files fresh every time so the Echo never runs an old copy
 (function () {
-  var t = Date.now(), files = ['config.js', 'themes.js', 'scenes.js', 'app.js'];
-  (function next(i) { if (i >= files.length) return; var s = document.createElement('script'); s.src = files[i] + '?t=' + t; s.onload = function () { next(i + 1); }; document.body.appendChild(s); })(0);
+  var f = document.getElementById('dash'), q = location.search;
+  f.src = 'dash.html' + q + (q ? '&' : '?') + 'shell=1';
+  f.addEventListener('load', function () { try { f.contentWindow.focus(); } catch (e) { /* ignore */ } });
+  // TV remote presses land here sometimes: pass them on so they count as "start"
+  document.addEventListener('keydown', function () { try { if (f.contentWindow.dashStart) f.contentWindow.dashStart(); } catch (e) { /* ignore */ } });
+  document.addEventListener('click', function () { try { if (f.contentWindow.dashStart) f.contentWindow.dashStart(); } catch (e) { /* ignore */ } });
+  // if this outer page itself ever changes on GitHub, reload everything (rare)
+  var print = null;
+  setInterval(function () {
+    fetch('index.html?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : null; }).then(function (t) {
+      if (!t) return; if (print && t !== print) location.reload(); print = print || t;
+    }).catch(function () { /* offline */ });
+  }, 5 * 60000);
 })();
 </script>
 </body>
