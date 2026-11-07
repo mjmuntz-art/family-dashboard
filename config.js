@@ -17,6 +17,7 @@ window.DASH_CONFIG = {
     screen: 30,        // Family, Photos and Plays
     scoresGrid: 30,    // Scores overview (all games)
     game: 30,          // each of your teams' game pages (box score / up next)
+    photo: 30,
     story: 30,         // each news story (6 stories)
     weather: 30,       // each weather page (5 pages: now, hours, week, sun & moon, radar)
     detail: 60         // pop-ups after you tap something
