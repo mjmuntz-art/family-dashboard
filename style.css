@@ -239,3 +239,5 @@ body.low .urgent-frame, body.low [style*="blink"] { animation: none; }
 .a-mote { animation: aMote 12s linear infinite; }
 @keyframes aMeteor { 0% { transform: translate(0, 0); opacity: 0; } 1.5% { opacity: 1; } 6% { transform: translate(-300px, 150px); opacity: 0; } 100% { transform: translate(-300px, 150px); opacity: 0; } }
 .a-meteor { animation: aMeteor 14s linear infinite; }
+@keyframes aApple { 0% { transform: translateY(0); opacity: 0; } 2% { opacity: 1; } 14% { transform: translateY(var(--d)); animation-timing-function: ease-out; } 17% { transform: translateY(calc(var(--d) - 14px)); animation-timing-function: ease-in; } 20% { transform: translateY(var(--d)); opacity: 1; } 30% { transform: translateY(var(--d)); opacity: 0; } 100% { transform: translateY(var(--d)); opacity: 0; } }
+.a-apple { animation: aApple 16s ease-in infinite; }

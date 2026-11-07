@@ -373,6 +373,15 @@
   // ------------------------------------------------------------------ particles
   var P = {};
   P.leaves = function (c, n, colors, min, max) { var r = c.r, s = ''; for (var i = 0; i < c.count(n); i++) s += '<g class="a-leaf" style="' + dl(r, (min || 14) + r() * ((max || 26) - (min || 14))) + '"><path transform="translate(' + f(r() * W) + ' -14) rotate(' + f(r() * 360) + ')" d="M0,-6 C4,-3 4,3 0,6 C-4,3 -4,-3 0,-6Z" fill="' + pick(r, colors) + '" opacity="0.9"/></g>'; return c.add(s); };
+  P.apples = function (c, n, box) { // an apple drops from the branches now and then: x0, x1, top y0, y1, how far it falls
+    var r = c.r, s = '';
+    for (var i = 0; i < c.count(n); i++) {
+      var x = box[0] + r() * (box[1] - box[0]), y = box[2] + r() * (box[3] - box[2]), d = box[4] + r() * 120, red = r() > 0.25, sz = 0.9 + r() * 0.5;
+      s += '<g class="a-apple" style="--d:' + f(d) + 'px;animation-duration:' + f(10 + r() * 14) + 's;animation-delay:-' + f(r() * 24) + 's"><g transform="translate(' + f(x) + ' ' + f(y) + ') scale(' + f(sz) + ')">' +
+        '<circle r="9" fill="' + (red ? '#c4202a' : '#8cc63f') + '"/><circle cx="-3" cy="-3" r="3" fill="#ffffff" opacity="0.35"/><path d="M0,-8 L1,-13" stroke="#5a3a1a" stroke-width="2"/><path d="M1,-11 q5,-4 8,-1 q-4,3 -8,1" fill="#4c8a2a"/></g></g>';
+    }
+    return c.add(s);
+  };
   P.clovers = function (c, n, colors) { // four-leaf clovers tumbling down
     var r = c.r, s = '';
     for (var i = 0; i < c.count(n); i++) {
@@ -712,6 +721,13 @@
       mist: { morning: [430, '#fff0ea'] },
       glints: { morning: [880, 1180, 420, 560], midday: [600, 1270, 420, 560], afternoon: [600, 1270, 420, 560], evening: [960, 1120, 410, 560], dusk: [700, 1270, 420, 560], night: [1000, 1110, 420, 560] },
       butterflies: { morning: [440, 700], midday: [440, 700], afternoon: [440, 700] }, fireflies: { night: [520, 760] } },
+    // September: apple orchard. Apples drop now and then, a few leaves drift, geese fly over by day; lanterns and string lights at dusk
+    september: { dusk: true, skyMask: 'scenes/september-sky.png', fall: function () { return ['leaves', 9, ['#c9502f', '#e07a3c', '#f0b04a', '#9a2a1a']]; },
+      apples: [150, 880, 80, 210, 470],
+      lights: { dusk: [[115, 268, 56, 'lamp'], [744, 450, 22, 'lamp'], [1170, 468, 24, 'lamp'], [1262, 492, 26, 'lamp']] },
+      suns: { morning: [1056, 215, 170], evening: [1056, 223, 180] }, moon: { night: [1097, 97, 60] }, mist: { morning: [300, '#fff3e4'] }, stars: [640, 1270, 20, 240],
+      geese: { morning: [820, 110], midday: [760, 90], afternoon: [800, 100], evening: [780, 120] }, fireflies: { night: [430, 760] },
+      bulbs: { dusk: [[170, 171], [228, 150], [258, 154], [325, 190], [374, 215], [414, 232], [457, 239], [487, 225], [520, 187], [341, 263], [470, 335], [535, 330], [593, 336], [604, 370], [720, 372], [736, 372], [820, 430], [842, 420], [1018, 397], [1060, 435], [1122, 232], [1135, 220], [1203, 218], [1220, 353], [1252, 357]] } },
     august: { dusk: true, skyMask: 'scenes/august-sky.png',
       suns: { morning: [315, 321, 170], afternoon: [370, 225, 150], evening: [335, 302, 180], dusk: [329, 315, 190] }, moon: { night: [325, 223, 70] },
       mist: { morning: [372, '#fff3df'] }, stars: [600, 1270, 20, 290], meteors: { night: 6 },
@@ -757,6 +773,10 @@
     c.add(out);
     var bf = cfg.butterflies && cfg.butterflies[tod]; if (bf) K.butterflies(c, 6, bf[0], bf[1], ['#ffd84d', '#ffffff', '#f7a8c8', '#9ad0ff', '#ff9f43']);
     var ff = cfg.fireflies && cfg.fireflies[tod]; if (ff) P.fireflies(c, tod === 'night' ? 26 : 16, ff[0], ff[1]);
+    if (cfg.apples && tod !== 'night') P.apples(c, 6, cfg.apples);
+    var gz = cfg.geese && cfg.geese[tod];
+    if (gz) { var gk = cfg.skyMask ? c.uid('k') : ''; if (gk) { c.defs += '<mask id="' + gk + '" maskUnits="userSpaceOnUse" x="-71.1" y="0" width="1422.2" height="800"><image href="' + cfg.skyMask + '" x="-71.1" y="0" width="1422.2" height="800" preserveAspectRatio="none"/></mask>'; c.add('<g mask="url(#' + gk + ')">'); }
+      K.geese(c, gz[0], gz[1], tod === 'evening' ? '#3b2140' : '#2c2a33'); if (gk) c.add('</g>'); }
     var bz = cfg.bees && cfg.bees[tod];
     if (bz) { var bs = ''; bz.forEach(function (bx) { for (var bi = 0; bi < 5; bi++) { var x = bx[0] + r() * (bx[1] - bx[0]), y = bx[2] + r() * (bx[3] - bx[2]), sz = 0.8 + r() * 0.5;
       bs += '<g class="a-bee" style="animation-duration:' + f(1.8 + r() * 1.6) + 's;animation-delay:-' + f(r() * 3) + 's"><g transform="translate(' + f(x) + ' ' + f(y) + ') scale(' + f(sz) + ')">' +
