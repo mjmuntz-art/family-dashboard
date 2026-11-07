@@ -1368,6 +1368,26 @@
     if (num(nw.gust) && nw.gust >= 30) extra.push(['💨', 'Windy — gusts to ' + nw.gust + ' mph']);
     return { emoji: base[0], head: base[1], extra: extra.slice(0, 3) };
   }
+  function briefHead(greet, n, h, m, wn) { // the top of the morning briefing: greeting, time, date, weather
+    var style = +(Q.get('bh') || (C.briefing && C.briefing.header) || 2), time = (h % 12 || 12) + ':' + (m < 10 ? '0' : '') + m;
+    var date = DOWL[n.getDay()] + ', ' + MONL[n.getMonth()] + ' ' + n.getDate(), has = wn && num(wn.temp);
+    var wx = function (extra) { return has ? '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;padding-top:8px"><div style="display:flex;align-items:center;gap:14px">' + wxIcon(wn.icon || 'cloud', 96) + '<div style="text-align:right"><div style="font-size:96px;font-weight:800;line-height:.9">' + wn.temp + '°</div><div style="font-size:20px;opacity:.85">Feels ' + (num(wn.feels) ? wn.feels + '°' : '—') + '</div></div></div>' + (extra || '') + '</div>' : (extra ? '<div style="padding-top:8px">' + extra + '</div>' : ''); };
+    var big = function (px) { return '<span style="font-size:' + px + 'px;font-weight:800;line-height:.9;letter-spacing:-.03em">' + time + '<span style="font-size:' + Math.round(px * .26) + 'px;font-weight:700;letter-spacing:0;margin-left:10px;opacity:.85">' + (h < 12 ? 'AM' : 'PM') + '</span></span>'; };
+    var left;
+    if (style === 1) // date is the headline, time underneath
+      left = '<div><div style="font-size:18px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)">' + esc(greet) + '</div><div class="head" style="font-size:58px;line-height:1.05;margin:6px 0 4px">' + date + '</div>' + big(112) + '</div>';
+    else if (style === 3) // greeting and time on the left, date moves under the weather
+      left = '<div><div class="head" style="font-size:44px;line-height:1">' + esc(greet) + '</div><div style="margin-top:10px">' + big(126) + '</div></div>';
+    else if (style === 4) // calendar page next to the time
+      left = '<div style="display:flex;align-items:center;gap:30px"><div style="width:156px;height:176px;border-radius:20px;overflow:hidden;background:rgba(255,255,255,.94);color:#1b1622;display:flex;flex-direction:column;box-shadow:0 10px 30px rgba(0,0,0,.35);text-shadow:none">' +
+        '<div style="background:var(--accent);color:var(--ink);font-size:22px;font-weight:900;letter-spacing:.14em;text-align:center;padding:8px 0">' + MON[n.getMonth()].toUpperCase() + '</div><div style="flex:1;display:flex;align-items:center;justify-content:center;font-size:92px;font-weight:900;line-height:1">' + n.getDate() + '</div>' +
+        '<div style="font-size:18px;font-weight:800;letter-spacing:.1em;text-align:center;padding-bottom:10px;opacity:.7">' + DOWL[n.getDay()].toUpperCase() + '</div></div>' +
+        '<div><div class="head" style="font-size:42px;line-height:1">' + esc(greet) + '</div><div style="margin-top:8px">' + big(118) + '</div></div></div>';
+    else // 2: time | divider | greeting and date
+      left = '<div style="display:flex;align-items:center;gap:32px;padding-top:14px">' + big(132) + '<div style="width:4px;height:128px;border-radius:2px;background:var(--accent)"></div>' +
+        '<div><div class="head" style="font-size:44px;line-height:1.05">' + esc(greet) + '</div><div style="font-size:30px;font-weight:700;margin-top:10px">' + DOWL[n.getDay()] + '</div><div style="font-size:30px;font-weight:600;opacity:.8">' + MONL[n.getMonth()] + ' ' + n.getDate() + '</div></div></div>';
+    return left + wx(style === 3 ? '<div class="head" style="font-size:36px;text-align:right;margin-top:10px">' + date + '</div>' : '');
+  }
   function briefingBleed() {
     var n = now(), h = n.getHours(), m = n.getMinutes(), w = S.wx, ev = events(), wn = w && w.now || {};
     var greet = (h < 12 ? 'Good morning' : 'Good afternoon') + (C.familyName ? ', ' + C.familyName : '');
@@ -1398,9 +1418,7 @@
     var tags = weeklyTags().concat(leaveTags(ev));
     return '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,6,18,.15) 0%,rgba(10,6,18,.45) 38%,rgba(10,6,18,.8) 100%)"></div>' +
       '<div style="position:absolute;left:44px;right:44px;top:30px;display:flex;justify-content:space-between;align-items:flex-start;text-shadow:0 2px 16px rgba(0,0,0,.4)">' +
-      '<div><div class="head" style="font-size:44px;line-height:1">' + esc(greet) + '</div><div style="display:flex;align-items:baseline;gap:18px;margin-top:6px"><span style="font-size:118px;font-weight:800;line-height:.95;letter-spacing:-.03em">' + (h % 12 || 12) + ':' + (m < 10 ? '0' : '') + m + '</span>' +
-      '<span style="font-size:30px;font-weight:700">' + DOWL[n.getDay()] + '<br><span style="opacity:.8">' + MONL[n.getMonth()] + ' ' + n.getDate() + '</span></span></div></div>' +
-      (wn && num(wn.temp) ? '<div style="display:flex;align-items:center;gap:14px;padding-top:12px">' + wxIcon(wn.icon || 'cloud', 96) + '<div style="text-align:right"><div style="font-size:96px;font-weight:800;line-height:.9">' + wn.temp + '°</div><div style="font-size:20px;opacity:.85">Feels ' + (num(wn.feels) ? wn.feels + '°' : '—') + '</div></div></div>' : '') + '</div>' +
+      briefHead(greet, n, h, m, wn) + '</div>' +
       (tags.length ? '<div style="position:absolute;left:44px;right:44px;top:252px;display:flex;gap:10px;flex-wrap:wrap">' + tags.slice(0, 3).map(function (t) { return tagChip(t, true); }).join('') + '</div>' : '') +
       '<div style="position:absolute;left:36px;right:36px;bottom:30px;top:' + (tags.length ? 306 : 266) + 'px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px">' +
       col('Today', sched) + col('What to wear', wear) + col('Tonight & ahead', ahead) + '</div>';
