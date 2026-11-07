@@ -306,25 +306,32 @@
       save(key, map); return map;
     }).catch(function () { return {}; });
   }
-  function teamInfo(sport, league, id) { // one team's colors (and record) from ESPN, cached for a week
-    var key = 'team:' + league + ':' + id, cached = load(key, 7 * 86400000);
-    if (cached) return Promise.resolve(cached);
-    return getJSON(ESPN + sport + '/' + league + '/teams/' + id).then(function (j) {
-      var t = j.team || {}, rec = t.record && t.record.items && t.record.items[0] ? t.record.items[0].summary : '';
-      var out = { c1: t.color ? '#' + t.color : '', c2: t.alternateColor ? '#' + t.alternateColor : '', rec: rec, logo: t.logos && t.logos[0] ? t.logos[0].href : '' };
-      save(key, out); return out;
+  // Team colors: ESPN's team-list endpoints don't always answer browsers, but every game's summary
+  // carries both teams' colors, so read them from there and remember them for a week.
+  function colorsFromSummary(g) {
+    return getJSON(ESPN + g.sport + '/' + g.league + '/summary?event=' + g.id).then(function (j) {
+      var comp = j.header && j.header.competitions && j.header.competitions[0], got = {};
+      (comp ? comp.competitors : []).forEach(function (c) {
+        var t = c.team || {}; if (!t.id || !t.color) return;
+        var info = { c1: '#' + t.color, c2: t.alternateColor ? '#' + t.alternateColor : '', logo: t.logos && t.logos[0] ? t.logos[0].href : (t.logo || '') };
+        save('tc:' + g.league + ':' + t.id, info); got[t.id] = info;
+      });
+      return got;
     }).catch(function () { return {}; });
   }
   function fillColors(games) {
-    var jobs = [], seen = {};
+    var jobs = [];
     games.forEach(function (g) {
       if (!g.sport || g.morris) return;
-      g.teams.forEach(function (t) {
-        if (!t.id || (t.c1 && t.c1 !== NEUTRAL.c1)) return;
-        var k = g.league + ':' + t.id;
-        if (!seen[k]) seen[k] = teamInfo(g.sport, g.league, t.id);
-        jobs.push(seen[k].then(function (info) { if (info.c1) { t.c1 = info.c1; t.c2 = info.c2 || t.c2; } if (!t.logo && info.logo) t.logo = info.logo; if (!t.rec && info.rec) t.rec = info.rec; }));
+      var need = g.teams.filter(function (t) {
+        if (!t.id || (t.c1 && t.c1 !== NEUTRAL.c1)) return false;
+        var c = load('tc:' + g.league + ':' + t.id, 7 * 86400000);
+        if (c && c.c1) { t.c1 = c.c1; t.c2 = c.c2 || t.c2; if (!t.logo && c.logo) t.logo = c.logo; return false; }
+        return true;
       });
+      if (need.length) jobs.push(colorsFromSummary(g).then(function (got) {
+        need.forEach(function (t) { var c = got[t.id]; if (c) { t.c1 = c.c1; t.c2 = c.c2 || t.c2; if (!t.logo && c.logo) t.logo = c.logo; } });
+      }));
     });
     return Promise.all(jobs);
   }
@@ -867,6 +874,8 @@
     S.sum[g.id] = { t: Date.now(), j: c && c.j, loading: true };
     getJSON(ESPN + g.sport + '/' + g.league + '/summary?event=' + g.id).then(function (j) {
       var comp = j.header && j.header.competitions && j.header.competitions[0], cs = comp ? comp.competitors.slice() : [];
+      cs.forEach(function (c) { var tt = c.team || {}, mine = g.teams.filter(function (x) { return String(x.id) === String(tt.id); })[0];
+        if (tt.color) { save('tc:' + g.league + ':' + tt.id, { c1: '#' + tt.color, c2: tt.alternateColor ? '#' + tt.alternateColor : '' }); if (mine && (!mine.c1 || mine.c1 === NEUTRAL.c1)) { mine.c1 = '#' + tt.color; if (tt.alternateColor) mine.c2 = '#' + tt.alternateColor; } } });
       cs.sort(function (a, b) { return a.homeAway === 'away' ? -1 : b.homeAway === 'away' ? 1 : 0; });
       var recs = {}; cs.forEach(function (c) { var r = recOf(c); if (r && c.team) recs[c.team.abbreviation] = r; });
       var lines = cs.map(function (c) { return { abbr: c.team ? c.team.abbreviation : '', logo: c.team && c.team.logos && c.team.logos[0] ? c.team.logos[0].href : '', ls: (c.linescores || []).map(function (x) { return x.displayValue != null ? x.displayValue : x.value; }), total: scoreVal(c.score) }; });
