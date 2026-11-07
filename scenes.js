@@ -755,6 +755,12 @@
       suns: { morning: [340, 350, 170], evening: [470, 300, 190] }, moon: { night: [928, 165, 80] }, mist: { morning: [520, '#ffe6cc'], night: [520, '#9aa6c8'] }, stars: [560, 1270, 20, 300],
       bats: { evening: 3, dusk: 6, night: 9 }, ghosts: { dusk: 1, night: 3, box: [600, 1000, 470, 560] }, witch: { dusk: [120, 70], night: [158, 45] },
       bulbs: { dusk: [[180, 115], [125, 190], [195, 220], [292, 255], [340, 272], [388, 277], [440, 278], [493, 275], [548, 265], [608, 253], [668, 233], [731, 205], [798, 170], [870, 130], [948, 72], [237, 400]] } },
+    // November: harvest farm. Oak leaves drift down, geese fly south by day, morning mist and frost, barn lights at dusk, first flurries on cold nights
+    november: { dusk: true, skyMask: 'scenes/november-sky.png', fall: function () { return ['leaves', 11, ['#8a4a22', '#a8602c', '#c27a3a', '#6e3a1c']]; },
+      lights: { evening: [[1080, 400, 22, 'window']], dusk: [[1035, 395, 30, 'window'], [1140, 396, 16, 'window'], [915, 402, 14, 'window'], [860, 418, 18, 'lamp'], [1108, 420, 20, 'lamp'], [1205, 425, 22, 'lamp'], [1270, 435, 24, 'lamp']],
+        night: [[918, 405, 16, 'window'], [1015, 405, 18, 'window'], [1140, 400, 18, 'window'], [1040, 428, 34, 'lamp']] },
+      suns: { morning: [345, 290, 170], evening: [752, 280, 180] }, moon: { night: [1140, 75, 60] }, mist: { morning: [445, '#f4e8e2', 700, 1280], night: [440, '#8fa0c4', 700, 1280] }, stars: [560, 1270, 20, 250],
+      glints: { morning: [600, 1280, 560, 780], night: [560, 1280, 430, 780] }, geese: { morning: [760, 100], midday: [720, 90], afternoon: [760, 110], evening: [700, 120] }, flurries: { night: [16, 7, 0] } },
     august: { dusk: true, skyMask: 'scenes/august-sky.png',
       suns: { morning: [315, 321, 170], afternoon: [370, 225, 150], evening: [335, 302, 180], dusk: [329, 315, 190] }, moon: { night: [325, 223, 70] },
       mist: { morning: [372, '#fff3df'] }, stars: [600, 1270, 20, 290], meteors: { night: 6 },
@@ -768,7 +774,7 @@
     var moon = cfg.moon && cfg.moon[tod];
     if (moon) out += '<circle class="a-pulse" cx="' + moon[0] + '" cy="' + moon[1] + '" r="' + moon[2] + '" fill="' + c.rad([[0, '#eef3ff', 0.6], [0.4, '#cfdcff', 0.25], [1, '#cfdcff', 0]]) + '"/>';
     var mist = cfg.mist && cfg.mist[tod];
-    if (mist && !low) { out += '<g filter="' + c.blur(16) + '">'; for (var mi = 0; mi < 6; mi++) out += '<ellipse class="a-fog" style="animation-delay:-' + f(r() * 40) + 's" cx="' + f(r() * W) + '" cy="' + f(mist[0] + (r() - 0.5) * 30) + '" rx="' + f(200 + r() * 220) + '" ry="' + f(14 + r() * 12) + '" fill="' + mist[1] + '" opacity="0.4"/>'; out += '</g>'; }
+    if (mist && !low) { out += '<g filter="' + c.blur(16) + '">'; for (var mi = 0; mi < 6; mi++) out += '<ellipse class="a-fog" style="animation-delay:-' + f(r() * 40) + 's" cx="' + f(mist[2] != null ? mist[2] + r() * (mist[3] - mist[2]) : r() * W) + '" cy="' + f(mist[0] + (r() - 0.5) * 30) + '" rx="' + f(mist[2] != null ? 90 + r() * 120 : 200 + r() * 220) + '" ry="' + f(14 + r() * 12) + '" fill="' + mist[1] + '" opacity="0.4"/>'; out += '</g>'; }
     lights.forEach(function (L) { // warm glow: lamps flicker, windows breathe
       var g = L[3] === 'pumpkin' ? c.rad([[0, '#ffb347', 0.95 * Math.max(k, 0.55)], [0.45, '#ff7a1a', 0.4 * Math.max(k, 0.55)], [1, '#ff6a00', 0]]) : c.rad([[0, '#ffd590', 0.9 * k], [0.4, '#ffc06a', 0.35 * k], [1, '#ffb050', 0]]);
       out += '<circle class="' + (L[3] === 'window' ? 'a-pulse' : 'a-flicker') + '" style="animation-delay:-' + f(r() * 5) + 's" cx="' + L[0] + '" cy="' + L[1] + '" r="' + L[2] + '" fill="' + g + '"/>';
@@ -834,6 +840,7 @@
       if (tod === 'dusk' && !PHOTO[id].dusk) tod = 'evening';
       photoFx(sc, PHOTO[id], tod, lowPower);
       if (sn) P.snow(sc, sn[0] * (tod === 'night' ? 1.3 : 1), sn[1], sn[2]);
+      var fz = PHOTO[id].flurries && PHOTO[id].flurries[tod]; if (fz) P.snow(sc, fz[0], fz[1], fz[2]);
       var fl = PHOTO[id].fall && PHOTO[id].fall(date || new Date());
       if (fl) P[fl[0]](sc, fl[1], fl[2]);
       return '<div class="scimg" style="background-image:url(\'' + window.sceneImage(id, tod) + '\')"></div><div class="scshade"></div>' +
