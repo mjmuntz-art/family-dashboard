@@ -22,6 +22,7 @@
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function sameDay(a, b) { return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate(); }
   function dayStart(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+  function onDay(e, d) { var s0 = dayStart(d), s1 = new Date(s0.getFullYear(), s0.getMonth(), s0.getDate() + 1); return e.start < s1 && e.end > s0; } // events that span several days count on each of them
   function dayDiff(a, b) { return Math.round((dayStart(b) - dayStart(a)) / 86400000); }
   var DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], DOWL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], MONL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -305,6 +306,28 @@
       save(key, map); return map;
     }).catch(function () { return {}; });
   }
+  function teamInfo(sport, league, id) { // one team's colors (and record) from ESPN, cached for a week
+    var key = 'team:' + league + ':' + id, cached = load(key, 7 * 86400000);
+    if (cached) return Promise.resolve(cached);
+    return getJSON(ESPN + sport + '/' + league + '/teams/' + id).then(function (j) {
+      var t = j.team || {}, rec = t.record && t.record.items && t.record.items[0] ? t.record.items[0].summary : '';
+      var out = { c1: t.color ? '#' + t.color : '', c2: t.alternateColor ? '#' + t.alternateColor : '', rec: rec, logo: t.logos && t.logos[0] ? t.logos[0].href : '' };
+      save(key, out); return out;
+    }).catch(function () { return {}; });
+  }
+  function fillColors(games) {
+    var jobs = [], seen = {};
+    games.forEach(function (g) {
+      if (!g.sport || g.morris) return;
+      g.teams.forEach(function (t) {
+        if (!t.id || (t.c1 && t.c1 !== NEUTRAL.c1)) return;
+        var k = g.league + ':' + t.id;
+        if (!seen[k]) seen[k] = teamInfo(g.sport, g.league, t.id);
+        jobs.push(seen[k].then(function (info) { if (info.c1) { t.c1 = info.c1; t.c2 = info.c2 || t.c2; } if (!t.logo && info.logo) t.logo = info.logo; if (!t.rec && info.rec) t.rec = info.rec; }));
+      });
+    });
+    return Promise.all(jobs);
+  }
   function fillRecords(games) { // any team still missing a record gets it from the standings
     var need = {};
     games.forEach(function (g) { if (g.sport && !g.morris && g.teams.some(function (t) { return !t.rec && t.id; })) need[g.sport + '|' + g.league] = 1; });
@@ -386,7 +409,7 @@
         .sort(function (a, b) { return rank(a) - rank(b) || (rank(a) === 1 ? a.date - b.date : b.date - a.date); }).forEach(add);
       var size = Math.min(12, Math.max(6, Math.ceil(mine / 6) * 6)); // full pages of 6 tiles
       S.games = out.slice(0, Math.max(size, mine)); S.mine = all; S.teamMiss = miss; S.scoresErr = null; featureGames().forEach(ensureSummary); render();
-      fillRecords(S.games.concat(all)).then(function () { if (S.screen === 'scores' || S.screen === 'home') render(); });
+      Promise.all([fillRecords(S.games.concat(all)), fillColors(S.games.concat(all))]).then(function () { if (S.screen === 'scores' || S.screen === 'home') render(); });
     }).catch(function () { S.scoresErr = 'Scores unavailable — retrying'; render(); });
   }
   function morrisGames() {
@@ -518,7 +541,12 @@
     var el = $('screen'), fresh = S.lastScreen !== S.screen || S.lastPage !== S.page;
     S.lastScreen = S.screen; S.lastPage = S.page;
     var html = S.screen === 'home' ? homeHTML() : fullHTML();
-    el.innerHTML = '<div class="' + (fresh ? 'screen-in' : '') + '">' + html + '</div>';
+    var cur = el.lastElementChild;
+    if (fresh || !cur) { // new screen or page: fade it in over the old one, then remove the old one
+      var olds = [].slice.call(el.children);
+      olds.forEach(function (o) { o.classList.add('leaving'); [].forEach.call(o.querySelectorAll('[id]'), function (x) { x.removeAttribute('id'); }); setTimeout(function () { if (o.parentNode) o.parentNode.removeChild(o); }, 950); });
+      var layer = document.createElement('div'); layer.className = 'layer' + (STATIC ? '' : ' entering'); layer.innerHTML = html; el.appendChild(layer);
+    } else cur.innerHTML = html;
     var st = $('stage'); st.classList.toggle('immersive', S.screen !== 'home'); if (S.screen === 'home') st.classList.remove('peek');
     $('nav').style.display = S.screen === 'home' ? 'none' : 'flex'; corner();
     $('navbar').innerHTML = ORDER.map(function (k) { return '<button type="button" data-go="' + k + '" class="' + (k === S.screen ? 'on' : '') + '">' + LABELS[k] + '</button>'; }).join('');
@@ -589,8 +617,11 @@
     var ev = events(); if (!ev) return note(S.backErr === 'setup' ? SETUP : esc(S.calErr || S.backErr || 'Loading…'));
     var n = now(), idx = function (e) { return ev.indexOf(e); };
     var isDinner = function (e) { return /dinner/i.test(e.who || ''); };
-    var today = ev.filter(function (e) { return sameDay(e.start, n) && !isDinner(e); });
-    var dinner = ev.filter(function (e) { return sameDay(e.start, n) && isDinner(e); })[0];
+    var today = ev.filter(function (e) { return onDay(e, n) && !isDinner(e); });
+    var dinner = ev.filter(function (e) { return onDay(e, n) && isDinner(e); })[0];
+    var multi = function (e) { return e.end - e.start > 26 * 3600000; };
+    var thru = function (e) { var last = new Date(e.end.getTime() - (e.allDay ? 1 : 0)); return 'Thru ' + DOW[last.getDay()]; };
+    var when = function (e) { return multi(e) ? thru(e) : e.allDay ? 'All day' : hm(e.start); };
     var later = ev.filter(function (e) { var dd = dayDiff(n, e.start); return dd >= 1 && dd <= 6 && !isDinner(e); });
     var chip = function (e, fs) { return '<span class="ellip" style="flex-shrink:0;max-width:150px;padding:3px 10px;border-radius:999px;font-size:' + (fs || 13) + 'px;font-weight:700;background:' + esc(e.color) + '33;color:#fff;border:1px solid ' + esc(e.color) + '88">' + esc(e.who) + '</span>'; };
     // ---- today
@@ -599,7 +630,7 @@
       var past = !e.allDay && e.end < n, nowOn = !e.allDay && e.start <= n && e.end > n;
       return '<button type="button" class="tap" data-open="event:' + idx(e) + '" style="align-items:center;gap:14px;padding:8px 12px;border-radius:12px;background:rgba(255,255,255,' + (nowOn ? .14 : .06) + ');' + (past ? 'opacity:.45;' : '') + '">' +
         '<div style="width:5px;align-self:stretch;border-radius:3px;background:' + esc(e.color) + ';flex-shrink:0"></div>' +
-        '<div style="width:92px;flex-shrink:0;font-size:17px;font-weight:800">' + (e.allDay ? 'All day' : esc(hm(e.start))) + (nowOn ? '<div style="font-size:11px;font-weight:800;letter-spacing:.1em;color:var(--accent)">NOW</div>' : '') + '</div>' +
+        '<div style="width:92px;flex-shrink:0;font-size:17px;font-weight:800">' + esc(when(e)) + (nowOn ? '<div style="font-size:11px;font-weight:800;letter-spacing:.1em;color:var(--accent)">NOW</div>' : '') + '</div>' +
         '<div class="ellip" style="flex:1;font-size:21px;font-weight:700">' + esc(e.title) + '</div>' + chip(e) + '</button>';
     }).join('');
     var next = later[0], nextCard = '';
@@ -616,25 +647,30 @@
       (rows || '<div class="head" style="font-size:30px;line-height:1.15;flex-shrink:0">' + left + '</div>' + nextCard) +
       (dinner ? '<div style="margin-top:auto;display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:12px;background:rgba(255,255,255,.08);flex-shrink:0"><span style="font-size:24px">🍽️</span><div style="min-width:0"><div class="lbl">Tonight’s dinner</div><div class="ellip" style="font-size:19px;font-weight:700">' + esc(dinner.title) + '</div></div></div>' : '') + '</div>';
     // ---- coming up, grouped by day
-    var groups = [], seen = {};
-    later.forEach(function (e) { var k = e.start.toDateString(); if (!seen[k]) { seen[k] = { d: e.start, list: [] }; groups.push(seen[k]); } seen[k].list.push(e); });
-    var budget = 7, up = groups.map(function (g) {
-      if (budget <= 0) return '';
+    var groups = [];
+    for (var gd = 1; gd <= 6; gd++) {
+      var day = new Date(n.getFullYear(), n.getMonth(), n.getDate() + gd);
+      var gl = later.filter(function (e) { return sameDay(e.start, day); }), gdin = ev.filter(function (e) { return isDinner(e) && onDay(e, day); })[0];
+      if (gl.length || gdin) groups.push({ d: day, list: gl, dinner: gdin });
+    }
+    var budget = 430, up = groups.map(function (g) { // fill the panel by height: day header 34px, event 40px, dinner 32px
+      if (budget < 70) return '';
       var dd = dayDiff(n, g.d), name = dd === 1 ? 'Tomorrow' : DOWL[g.d.getDay()];
-      var shown = g.list.slice(0, Math.max(1, budget - 1)); budget -= shown.length + 1;
+      budget -= 34 + (g.dinner ? 32 : 0); var shown = g.list.slice(0, Math.max(g.list.length ? 1 : 0, Math.floor(budget / 40))); budget -= shown.length * 40;
       return '<div style="display:flex;flex-direction:column;gap:6px"><div style="display:flex;align-items:baseline;gap:10px"><span style="font-size:15px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)">' + name + '</span><span class="muted" style="font-size:14px">' + MON[g.d.getMonth()] + ' ' + g.d.getDate() + '</span>' +
         (g.list.length > shown.length ? '<span class="muted" style="font-size:13px">+' + (g.list.length - shown.length) + ' more</span>' : '') + '</div>' +
         shown.map(function (e) {
           return '<button type="button" class="tap" data-open="event:' + idx(e) + '" style="align-items:center;gap:14px;padding:4px 0">' +
-            '<div style="width:5px;height:30px;border-radius:3px;background:' + esc(e.color) + ';flex-shrink:0"></div><div class="muted" style="width:86px;flex-shrink:0;font-size:16px;font-weight:700">' + (e.allDay ? 'All day' : esc(hm(e.start))) + '</div>' +
+            '<div style="width:5px;height:30px;border-radius:3px;background:' + esc(e.color) + ';flex-shrink:0"></div><div class="muted" style="width:86px;flex-shrink:0;font-size:16px;font-weight:700">' + esc(when(e)) + '</div>' +
             '<div class="ellip" style="flex:1;font-size:21px;font-weight:700">' + esc(e.title) + '</div>' + chip(e) + '</button>';
-        }).join('') + '</div>';
+        }).join('') + (g.dinner ? '<button type="button" class="tap" data-open="event:' + idx(g.dinner) + '" style="align-items:center;gap:14px;padding:2px 0"><div style="width:5px;height:24px;border-radius:3px;background:' + esc(g.dinner.color) + ';flex-shrink:0"></div>' +
+          '<div class="muted" style="width:86px;flex-shrink:0;font-size:15px;font-weight:700">Dinner</div><div class="ellip" style="flex:1;font-size:18px;font-weight:600">🍽️ ' + esc(g.dinner.title) + '</div></button>' : '') + '</div>';
     }).join('');
     var upTile = '<div class="tile" style="display:flex;flex-direction:column;gap:14px;padding:18px 24px;min-height:0;overflow:hidden"><div class="lbl">Coming up</div>' + (up || note('Nothing else on the calendar this week')) + '</div>';
     // ---- 7-day strip: how busy each day is, colored by person
     var strip = '';
     for (var k = 0; k < 7; k++) {
-      var d = new Date(n.getFullYear(), n.getMonth(), n.getDate() + k), list = ev.filter(function (e) { return sameDay(e.start, d) && !isDinner(e); });
+      var d = new Date(n.getFullYear(), n.getMonth(), n.getDate() + k), list = ev.filter(function (e) { return onDay(e, d); });
       strip += '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px 4px;border-radius:12px;' + (k === 0 ? 'background:var(--accent);color:var(--ink)' : 'background:rgba(255,255,255,.06)') + '">' +
         '<div style="font-size:13px;font-weight:800;letter-spacing:.08em;opacity:.8">' + DOW[d.getDay()].toUpperCase() + '</div><div style="font-size:24px;font-weight:800;line-height:1">' + d.getDate() + '</div>' +
         '<div style="display:flex;gap:4px;height:9px">' + list.slice(0, 5).map(function (e) { return '<span style="width:9px;height:9px;border-radius:50%;background:' + esc(e.color) + ';box-shadow:0 0 0 1.5px rgba(0,0,0,.25)"></span>'; }).join('') + '</div></div>';
@@ -1031,13 +1067,13 @@
   }
 
   // ------------------------------------------------------------ full-screen ("bleed") pages: photos, news, your team's games, weather
-  function isBleed(p) { return S.screen === 'photos' || S.screen === 'news' || S.screen === 'weather' || (S.screen === 'scores' && String(p).indexOf('g:') === 0); }
+  function isBleed(p) { return S.screen === 'photos' || S.screen === 'news' || S.screen === 'weather' || S.screen === 'scores'; }
   function btag(txt) { return '<div class="btag">' + txt + '</div>'; }
   function bleedHTML(p) {
     var pg = pageList(S.screen), top = dotsHTML(pg);
     if (S.screen === 'photos') return photosBleed(top);
     if (S.screen === 'news') return newsBleed(p, top);
-    if (S.screen === 'scores') return gameBleed(findGame(p.slice(2)), top);
+    if (S.screen === 'scores') return String(p).indexOf('grid') === 0 ? scoreboardBleed(+p.split(':')[1] || 0, top) : gameBleed(findGame(p.slice(2)), top);
     return weatherBleed(p, top);
   }
   function photosBleed(top) {
@@ -1064,60 +1100,105 @@
       (s.summary ? '<div class="clamp2" style="font-size:21px;line-height:1.45;color:rgba(255,255,255,.82)">' + esc(s.summary) + '</div>' : '') + '</div>' +
       '<div style="position:absolute;right:56px;bottom:52px;display:flex;flex-direction:column;align-items:center;gap:10px"><div id="qr" style="width:150px;height:150px;padding:8px;box-sizing:border-box;border-radius:14px;background:#fff;overflow:hidden"></div><div style="font-size:14px;color:rgba(255,255,255,.75)">Scan to read</div></div>';
   }
+  // ---- your team's game page: TV scorebug (two big team-color bars)
+  function logoDisc(t, px) { // just the team logo, with a soft white glow so it stands out on its team color
+    var glow = 'filter:drop-shadow(0 0 1.5px rgba(255,255,255,.95)) drop-shadow(0 0 ' + Math.round(px * .09) + 'px rgba(255,255,255,.55)) drop-shadow(0 6px 14px rgba(0,0,0,.35))';
+    var txt = '<span style="font-weight:900;font-size:' + Math.round(px * .34) + 'px;color:#fff;text-shadow:0 0 2px #fff,0 0 ' + Math.round(px * .12) + 'px rgba(255,255,255,.7),0 4px 12px rgba(0,0,0,.4)">' + esc(t.abbr) + '</span>';
+    var inner = t.logo ? '<img src="' + esc(t.logo) + '" alt="" style="width:' + px + 'px;height:' + px + 'px;object-fit:contain;' + glow + '" onerror="this.outerHTML=\'' + txt.replace(/'/g, "\\'").replace(/"/g, '&quot;') + '\'">' : txt;
+    return '<div style="width:' + px + 'px;height:' + px + 'px;display:flex;align-items:center;justify-content:center;flex-shrink:0">' + inner + '</div>';
+  }
+  function bigStat(s) { // "22/31, 254 YDS, 2 TD" → 254 + "YDS · 22/31, 2 TD"
+    s = String(s || ''); var m = /(\d+)\s*(YDS|PTS|REB|AST)/i.exec(s);
+    if (m) return [m[1], (m[2].toUpperCase() + ' · ' + s.replace(m[0], '').replace(/^[\s,]+|[\s,]+$/g, '').replace(/\s*,\s*,/g, ',')).replace(/ · $/, '')];
+    m = /^\s*(\d+(\.\d+)?)/.exec(s); return m ? [m[1], s.slice(m[0].length).replace(/^[\s,]+/, '')] : [s, ''];
+  }
   function gameBleed(g, top) {
     if (!g) return '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">' + note('Game not found') + '</div>';
     var sum = S.sum[g.id] && S.sum[g.id].j; if (!sum && !g.morris) ensureSummary(g);
     var teams = g.teams.map(function (t) { var r = sum && sum.recs && sum.recs[t.abbr]; return r && !t.rec ? Object.assign({}, t, { rec: r }) : t; }), a = teams[0], b = teams[1];
-    var colA = teamBg(a), colB = teamBg(b);
-    var side = function (t) {
-      return '<div style="display:flex;flex-direction:column;align-items:center;gap:12px;' + (g.state === 'post' && !t.winner ? 'opacity:.7' : '') + '">' + logoHTML(t, 190) +
-        '<div class="ellip" style="max-width:360px;font-size:34px;font-weight:800;text-shadow:0 2px 10px rgba(0,0,0,.4)">' + esc(t.name) + '</div>' + (t.rec ? '<div style="font-size:22px;font-weight:700;color:rgba(255,255,255,.8)">' + esc(t.rec) + '</div>' : '') + '</div>';
+    var star = g.state === 'post' ? (b.winner ? b : a) : (b.home ? b : a); // the winner (or home team) sets the backdrop
+    var bar = function (t) {
+      var lose = g.state === 'post' && !t.winner, col = teamBg(t);
+      var right = g.state === 'pre' ? '<div style="font-size:16px;font-weight:800;letter-spacing:.12em;opacity:.7">RECORD</div><div style="font-size:72px;font-weight:900;line-height:1">' + esc(t.rec || '—') + '</div>'
+        : '<div style="font-size:138px;font-weight:900;line-height:1;font-variant-numeric:tabular-nums">' + esc(t.score) + '</div>';
+      var nick = t.full && t.loc ? t.full.replace(t.loc, '').trim() : '', sub = [nick && nick !== t.name ? nick : '', g.state !== 'pre' ? t.rec : ''].filter(Boolean).join(' · ');
+      return '<div style="display:flex;align-items:center;height:196px;border-radius:22px;overflow:hidden;background:linear-gradient(90deg,' + col + ',' + col + 'd9);box-shadow:0 12px 30px rgba(0,0,0,.4);' + (lose ? 'opacity:.7;' : '') + '">' +
+        '<div style="width:16px;align-self:stretch;background:' + (t.c2 || '#fff') + '"></div><div style="margin:0 32px">' + logoDisc(t, 152) + '</div>' +
+        '<div style="flex:1;min-width:0"><div class="ellip" style="font-size:74px;font-weight:900;line-height:1.05;color:' + teamInk(col) + '">' + esc(t.name) +
+        (g.state === 'post' && t.winner ? ' <span style="font-size:24px;padding:4px 12px;border-radius:9px;background:var(--accent);color:var(--ink);vertical-align:middle">W</span>' : '') + '</div>' +
+        (sub ? '<div style="font-size:26px;font-weight:700;opacity:.85;color:' + teamInk(col) + '">' + esc(sub) + '</div>' : '') + '</div>' +
+        '<div style="width:290px;align-self:stretch;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,.28);color:#fff">' + right + '</div></div>';
     };
-    var pill = function (txt, live) { return '<div style="padding:6px 18px;border-radius:999px;font-size:16px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;' + (live ? 'background:#c62828' : 'background:rgba(255,255,255,.18)') + '">' + esc(txt) + '</div>'; };
-    var mid = g.state === 'pre'
-      ? '<div style="display:flex;flex-direction:column;align-items:center;gap:10px">' + pill(sameDay(g.date, now()) ? 'Today' : DOWL[g.date.getDay()]) + '<div style="font-size:84px;font-weight:900;line-height:.95">' + esc(hm(g.date).replace(' ', ' ')) + '</div><div style="font-size:20px;color:rgba(255,255,255,.8)">' + esc(MONL[g.date.getMonth()] + ' ' + g.date.getDate()) + '</div></div>'
-      : '<div style="display:flex;flex-direction:column;align-items:center;gap:10px">' + pill(g.state === 'in' ? 'Live · ' + g.status : g.status, g.state === 'in') +
-        '<div style="font-size:150px;font-weight:900;line-height:.9;font-variant-numeric:tabular-nums;white-space:nowrap"><span style="' + (g.state === 'post' && !a.winner ? 'opacity:.55' : '') + '">' + esc(a.score) + '</span><span style="opacity:.4;font-weight:300"> – </span><span style="' + (g.state === 'post' && !b.winner ? 'opacity:.55' : '') + '">' + esc(b.score) + '</span></div></div>';
-    var bottom = g.state === 'pre' ? previewStrip(g, sum) : boxStrip(g, sum, teams);
-    return '<div style="position:absolute;inset:0;background:linear-gradient(105deg,' + colA + ' 0%,' + colA + ' 49.8%,' + colB + ' 50.2%,' + colB + ' 100%)"></div>' +
-      '<div style="position:absolute;inset:0;background:radial-gradient(circle at 24% 36%,' + (a.c2 || '#fff') + '55,transparent 42%),radial-gradient(circle at 76% 36%,' + (b.c2 || '#fff') + '55,transparent 42%),linear-gradient(180deg,rgba(0,0,0,.1) 0%,rgba(0,0,0,0) 35%,rgba(0,0,0,.6) 100%)"></div>' +
+    var status = g.state === 'pre' ? (sameDay(g.date, now()) ? 'Today' : DOWL[g.date.getDay()]) + ' · ' + hm(g.date) + (sum && sum.tv ? ' · ' + sum.tv : '') : g.state === 'in' ? 'Live · ' + g.status : g.status + (sum && sum.venue ? ' · ' + sum.venue : '');
+    var bottom = g.state === 'pre' ? previewCards(g, sum) : statCards(g, sum, teams);
+    return '<div style="position:absolute;inset:0;background:radial-gradient(ellipse at 70% 18%,' + teamBg(star) + ' 0%,#0d1116 62%,#07090c 100%)"></div>' +
+      (star.logo ? '<img src="' + esc(star.logo) + '" alt="" style="position:absolute;right:-90px;top:-40px;width:640px;height:640px;object-fit:contain;opacity:.07;filter:brightness(0) invert(1)" onerror="this.remove()">' : '') +
       btag(esc(g.lg) + (g.state === 'pre' ? ' · Up next' : g.state === 'in' ? ' · Live' : ' · Final')) + top +
-      '<div style="position:absolute;left:0;right:0;top:92px;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center">' + side(a) + mid + side(b) + '</div>' + bottom;
+      '<div style="position:absolute;left:56px;right:56px;top:88px;display:flex;flex-direction:column;gap:12px">' + bar(a) + bar(b) +
+      '<div style="align-self:center;margin-top:2px;padding:7px 22px;border-radius:999px;font-size:17px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;' + (g.state === 'in' ? 'background:#c62828' : 'background:rgba(255,255,255,.14)') + '">' + esc(status) + '</div></div>' + bottom;
   }
-  function boxStrip(g, sum, teams) {
-    var inner;
-    if (g.morris) inner = '<div style="display:flex;flex-direction:column;gap:8px"><div class="lbl">Notes</div><div style="font-size:20px">' + esc(g.morris.notes || g.morris.location || '') + '</div></div>';
-    else if (!sum) inner = note(DEMO ? 'Box score and game leaders from ESPN' : 'Loading box score…');
-    else {
-      var n = Math.max.apply(null, sum.lines.map(function (r) { return r.ls.length; }).concat([g.sport === 'hockey' ? 3 : /college-basketball/.test(g.league) ? 2 : g.sport === 'baseball' ? 9 : 4]));
-      var reg = g.sport === 'baseball' ? 99 : g.sport === 'hockey' ? 3 : /college-basketball/.test(g.league) ? 2 : 4;
-      var per = function (i) { return i > reg ? (n - reg > 1 ? 'OT' + (i - reg) : 'OT') : g.sport === 'hockey' ? 'P' + i : reg === 2 ? 'H' + i : g.sport === 'baseball' ? String(i) : 'Q' + i; };
-      var cols = 'display:grid;grid-template-columns:minmax(0,1.8fr) repeat(' + (n + 1) + ',minmax(0,1fr));text-align:center';
-      var head = '<div style="' + cols + ';font-size:14px;font-weight:800;color:rgba(255,255,255,.7)"><span></span>'; for (var i = 1; i <= n; i++) head += '<span>' + per(i) + '</span>'; head += '<span>T</span></div>';
-      var body = sum.lines.map(function (r, k) {
-        var t = teams.filter(function (x) { return x.abbr === r.abbr; })[0] || {}, ls = r.ls.map(function (v) { return '<span>' + esc(v) + '</span>'; }).join(''); for (var j = r.ls.length; j < n; j++) ls += '<span style="opacity:.4">–</span>';
-        return '<div style="' + cols + ';font-size:' + (n > 6 ? 22 : 28) + 'px;font-weight:800;font-variant-numeric:tabular-nums;' + (g.state === 'post' && !t.winner ? 'opacity:.7' : '') + '"><span style="text-align:left">' + esc(r.abbr) + '</span>' + ls + '<span>' + esc(r.total) + '</span></div>';
-      }).join('');
-      var leaders = sum.leaders.slice(0, 3).map(function (c) {
-        return '<div style="display:grid;grid-template-columns:96px minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:center;font-size:15px"><span style="font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.7)">' + esc(c.label) + '</span>' +
-          '<b class="ellip">' + esc(c.a ? c.a.name + ' · ' + c.a.stat : '') + '</b><span class="ellip" style="color:rgba(255,255,255,.75)">' + esc(c.b ? c.b.name + ' · ' + c.b.stat : '') + '</span></div>';
-      }).join('') || '<div style="color:rgba(255,255,255,.7)">Not available yet</div>';
-      inner = '<div style="display:flex;flex-direction:column;gap:10px;min-width:0"><div class="lbl">Box score</div>' + head + body + '</div><div style="background:rgba(255,255,255,.15)"></div>' +
-        '<div style="display:flex;flex-direction:column;gap:10px;min-width:0"><div class="lbl">Game leaders</div>' + leaders + '</div>';
-    }
-    return '<div class="glass" style="position:absolute;left:40px;right:40px;bottom:36px;height:196px;display:grid;grid-template-columns:minmax(0,1fr) 1px minmax(0,1.2fr);gap:26px;padding:22px 30px">' + inner + '</div>';
+  function statCards(g, sum, teams) {
+    var wrap = function (inner) { return '<div style="position:absolute;left:40px;right:40px;bottom:30px;height:182px;display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;gap:14px">' + inner + '</div>'; };
+    var card = function (inner, extra) { return '<div class="glass" style="padding:16px 20px;display:flex;flex-direction:column;gap:4px;min-width:0;' + (extra || '') + '">' + inner + '</div>'; };
+    if (g.morris) return wrap(card('<div class="lbl">Notes</div><div style="font-size:20px">' + esc(g.morris.notes || g.morris.location || '') + '</div>', 'grid-column:1/-1'));
+    if (!sum) return wrap(card(note(DEMO ? 'Box score and top performers from ESPN' : 'Loading box score…'), 'grid-column:1/-1'));
+    var reg = g.sport === 'baseball' ? 99 : g.sport === 'hockey' ? 3 : /college-basketball/.test(g.league) ? 2 : 4;
+    var n = Math.max.apply(null, sum.lines.map(function (r) { return r.ls.length; }).concat([reg === 99 ? 9 : reg]));
+    var per = function (i) { return i > reg ? (n - reg > 1 ? 'OT' + (i - reg) : 'OT') : g.sport === 'hockey' ? 'P' + i : reg === 2 ? 'H' + i : g.sport === 'baseball' ? String(i) : 'Q' + i; };
+    var cols = 'display:grid;grid-template-columns:minmax(0,1.6fr) repeat(' + (n + 1) + ',minmax(0,1fr));text-align:center';
+    var head = '<div style="' + cols + ';font-size:13px;font-weight:800;color:rgba(255,255,255,.65)"><span></span>'; for (var i = 1; i <= n; i++) head += '<span>' + per(i) + '</span>'; head += '<span>T</span></div>';
+    var rows = sum.lines.map(function (r) {
+      var t = teams.filter(function (x) { return x.abbr === r.abbr; })[0] || {}, ls = r.ls.map(function (v) { return '<span>' + esc(v) + '</span>'; }).join(''); for (var j = r.ls.length; j < n; j++) ls += '<span style="opacity:.4">–</span>';
+      return '<div style="' + cols + ';font-size:' + (n > 6 ? 18 : 26) + 'px;font-weight:800;font-variant-numeric:tabular-nums;' + (g.state === 'post' && !t.winner ? 'opacity:.65' : '') + '"><span style="text-align:left">' + esc(r.abbr) + '</span>' + ls + '<span>' + esc(r.total) + '</span></div>';
+    }).join('');
+    var leaders = (sum.leaders || []).slice(0, 3).map(function (c) {
+      var A = c.a ? bigStat(c.a.stat) : null, B = c.b ? bigStat(c.b.stat) : null, aFirst = !B || (A && (+A[0] || 0) >= (+B[0] || 0));
+      var top = aFirst ? c.a : c.b, topS = aFirst ? A : B, oth = aFirst ? c.b : c.a, othS = aFirst ? B : A, topTeam = aFirst ? teams[0] : teams[1], othTeam = aFirst ? teams[1] : teams[0];
+      if (!top) return '';
+      return card('<div class="lbl">' + esc(c.label) + '</div><div class="ellip" style="font-size:24px;font-weight:900">' + esc(top.name) + ' <span style="font-size:15px;opacity:.6">' + esc(topTeam.abbr) + '</span></div>' +
+        '<div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:44px;font-weight:900;line-height:1;color:var(--accent)">' + esc(topS[0]) + '</span><span class="ellip" style="font-size:14px;opacity:.75">' + esc(topS[1]) + '</span></div>' +
+        (oth ? '<div class="ellip" style="font-size:14px;opacity:.65;margin-top:auto">' + esc(othTeam.abbr + ' · ' + oth.name + ' ' + othS[0]) + '</div>' : ''));
+    }).join('');
+    while ((leaders.match(/class="glass"/g) || []).length < 3) leaders += card('<div class="lbl">Top performers</div><div style="opacity:.6">Not available yet</div>');
+    return wrap(card('<div class="lbl">Box score</div>' + head + rows, 'gap:6px') + leaders);
   }
-  function previewStrip(g, sum) {
+  function previewCards(g, sum) {
     var info = [];
     if (g.morris) { info.push(['Where', g.morris.location || (g.morris.home ? 'Morris' : '')]); if (g.morris.notes) info.push(['Notes', g.morris.notes]); }
     else if (DEMO) info = [['Where', '[Stadium]'], ['TV', '[Network]'], ['Line', '[Spread] · O/U [Total]']];
     else if (sum) { if (sum.venue) info.push(['Where', sum.venue]); if (sum.tv) info.push(['TV', sum.tv]); if (sum.line) info.push(['Line', sum.line]); }
     var st = sum && sum.story; if (DEMO && !st) st = { headline: '[Game preview headline from ESPN]', description: '[A couple of lines from the preview story]', image: '' };
-    var left = '<div style="display:flex;flex-direction:column;gap:10px;min-width:0"><div class="lbl">Game info</div>' + (info.length ? info.map(function (r) { return '<div style="display:flex;gap:12px;align-items:baseline"><span style="width:58px;flex-shrink:0;font-size:13px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.7)">' + esc(r[0]) + '</span><span class="ellip" style="font-size:20px;font-weight:700">' + esc(r[1]) + '</span></div>'; }).join('') : '<div style="color:rgba(255,255,255,.7)">' + (sum ? 'Details closer to game day' : 'Loading…') + '</div>') + '</div>';
-    var right = st ? '<div style="display:flex;gap:18px;min-width:0">' + (st.image ? '<img src="' + esc(st.image) + '" alt="" style="width:200px;height:150px;object-fit:cover;border-radius:12px;flex-shrink:0" onerror="this.remove()">' : '') +
-      '<div style="display:flex;flex-direction:column;gap:8px;min-width:0"><div class="lbl">Preview · ESPN</div><div class="head clamp2" style="font-size:26px;line-height:1.15">' + esc(st.headline) + '</div><div class="clamp2" style="font-size:16px;line-height:1.4;color:rgba(255,255,255,.8)">' + esc(st.description || '') + '</div></div></div>'
-      : '<div style="display:flex;flex-direction:column;gap:8px"><div class="lbl">Preview</div><div style="color:rgba(255,255,255,.7)">' + (g.morris ? 'Game notes come from your dashboard sheet' : sum ? 'No preview story yet — check back closer to game day' : 'Loading…') + '</div></div>';
-    return '<div class="glass" style="position:absolute;left:40px;right:40px;bottom:36px;height:196px;display:grid;grid-template-columns:minmax(0,1fr) 1px minmax(0,1.7fr);gap:26px;padding:22px 30px">' + left + '<div style="background:rgba(255,255,255,.15)"></div>' + right + '</div>';
+    var left = '<div class="glass" style="padding:18px 22px;display:flex;flex-direction:column;gap:10px;min-width:0"><div class="lbl">Game info</div>' + (info.length ? info.map(function (r) { return '<div style="display:flex;gap:12px;align-items:baseline"><span style="width:56px;flex-shrink:0;font-size:13px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;opacity:.7">' + esc(r[0]) + '</span><span class="ellip" style="font-size:20px;font-weight:700">' + esc(r[1]) + '</span></div>'; }).join('') : '<div style="opacity:.7">' + (sum ? 'Details closer to game day' : 'Loading…') + '</div>') + '</div>';
+    var right = '<div class="glass" style="padding:16px 20px;display:flex;gap:18px;min-width:0">' + (st ? (st.image ? '<img src="' + esc(st.image) + '" alt="" style="width:220px;height:100%;object-fit:cover;border-radius:12px;flex-shrink:0" onerror="this.remove()">' : '') +
+      '<div style="display:flex;flex-direction:column;gap:8px;min-width:0"><div class="lbl">Preview · ESPN</div><div class="head clamp2" style="font-size:26px;line-height:1.15">' + esc(st.headline) + '</div><div class="clamp2" style="font-size:16px;line-height:1.4;opacity:.8">' + esc(st.description || '') + '</div></div>'
+      : '<div style="display:flex;flex-direction:column;gap:8px"><div class="lbl">Preview</div><div style="opacity:.7">' + (g.morris ? 'Game notes come from your dashboard sheet' : sum ? 'No preview story yet — check back closer to game day' : 'Loading…') + '</div></div>') + '</div>';
+    return '<div style="position:absolute;left:40px;right:40px;bottom:30px;height:182px;display:grid;grid-template-columns:1fr 1.9fr;gap:14px">' + left + right + '</div>';
+  }
+  // ---- scoreboard: six split team-color cards, two across
+  function scoreboardBleed(pgIdx, top) {
+    if (!S.games.length) return '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">' + note(esc(S.scoresErr || 'Loading scores…')) + '</div>';
+    var list = S.games.slice(pgIdx * 6, pgIdx * 6 + 6), n = now();
+    var cards = list.map(function (g, k) {
+      var a = g.teams[0], b = g.teams[1], ca = teamBg(a), cb = teamBg(b), live = g.state === 'in';
+      var side = function (t, right) {
+        var lose = g.state === 'post' && !t.winner;
+        return '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;min-width:0;text-align:center;' + (lose ? 'opacity:.62' : '') + '">' + logoDisc(t, 80) +
+          '<div class="ellip" style="max-width:100%;font-size:' + (t.name.length > 11 ? 20 : 24) + 'px;font-weight:900;line-height:1.1;text-shadow:0 2px 8px rgba(0,0,0,.35)">' + esc(t.name) + '</div><div style="font-size:16px;font-weight:700;opacity:.85;line-height:1">' + esc(t.rec || '') + '</div></div>';
+      };
+      var mid = g.state === 'pre' ? '<div style="font-size:24px;font-weight:900;opacity:.9">VS</div>'
+        : '<div style="font-size:66px;font-weight:900;line-height:1;white-space:nowrap;font-variant-numeric:tabular-nums;text-shadow:0 2px 12px rgba(0,0,0,.45)"><span style="' + (g.state === 'post' && !a.winner ? 'opacity:.55' : '') + '">' + esc(a.score) + '</span><span style="opacity:.45;font-weight:300"> – </span><span style="' + (g.state === 'post' && !b.winner ? 'opacity:.55' : '') + '">' + esc(b.score) + '</span></div>';
+      return '<button type="button" class="tap" data-open="game:' + (pgIdx * 6 + k) + '" style="position:relative;display:block;border-radius:20px;overflow:hidden;box-shadow:0 10px 24px rgba(0,0,0,.4);color:#fff">' +
+        '<div style="position:absolute;inset:0;background:linear-gradient(112deg,' + ca + ' 0%,' + ca + ' 49.6%,' + cb + ' 50.4%,' + cb + ' 100%)"></div>' +
+        '<div style="position:absolute;left:0;top:0;bottom:0;width:8px;background:' + (a.c2 || '#fff') + '"></div><div style="position:absolute;right:0;top:0;bottom:0;width:8px;background:' + (b.c2 || '#fff') + '"></div>' +
+        '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.05),rgba(0,0,0,.4))"></div>' +
+        '<div style="position:relative;height:100%;display:flex;flex-direction:column;padding:12px 24px 12px">' +
+        '<div style="display:flex;justify-content:center;gap:8px;font-size:13px;font-weight:800;letter-spacing:.1em"><span style="padding:4px 10px;border-radius:999px;background:rgba(0,0,0,.4)">' + esc(g.lg) + '</span><span style="padding:4px 12px;border-radius:999px;background:' + (live ? '#c62828' : 'rgba(0,0,0,.4)') + ';text-transform:uppercase">' + esc(g.status) + '</span></div>' +
+        '<div style="flex:1;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:16px">' + side(a, false) + mid + side(b, true) + '</div></div></button>';
+    });
+    while (cards.length < 6) cards.push('<div class="glass" style="display:flex;align-items:center;justify-content:center;opacity:.6">' + note('No other games right now') + '</div>');
+    return '<div style="position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,#2a2036 0%,#0e0b14 70%)"></div>' +
+      btag('Scoreboard · ' + DOWL[n.getDay()]) + top + (S.teamMiss && S.teamMiss.length ? '<div class="btag" style="left:auto;right:260px;background:rgba(160,40,30,.7)">Couldn’t find ' + esc(S.teamMiss.join(', ')) + '</div>' : '') +
+      '<div style="position:absolute;left:36px;right:36px;top:92px;bottom:30px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(3,minmax(0,1fr));gap:14px">' + cards.join('') + '</div>';
   }
   function weatherBleed(p, top) {
     var w = S.wx, names = { now: 'Right now', hours: 'Next 12 hours', week: 'The week ahead', sky: 'Sun & moon', radar: 'Live radar' };

@@ -169,10 +169,13 @@ button { font: inherit; color: inherit; }
 @media (prefers-reduced-motion: reduce) { #scene * , .screen-in, #overlay .card, .wxbig, .wxbig svg, .dots button.on::after { animation: none !important; } #scene .a-lightning { opacity: 0; } }
 
 /* ---------- Full screens: everything except Home uses the whole display ---------- */
-#corner { position: absolute; top: 22px; right: 24px; z-index: 7; display: none; align-items: baseline; gap: 10px; padding: 9px 18px; border-radius: 999px; background: rgba(0,0,0,.45); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); font-size: 26px; font-weight: 800; color: #fff; pointer-events: none; }
+#corner { position: absolute; top: 22px; right: 24px; z-index: 7; align-items: baseline; gap: 10px; padding: 9px 18px; border-radius: 999px; background: rgba(0,0,0,.45); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); font-size: 26px; font-weight: 800; color: #fff; pointer-events: none; }
 #corner span { font-size: 19px; font-weight: 700; color: rgba(255,255,255,.82); }
-#stage.immersive #corner { display: flex; }
-#stage.immersive #topbar, #stage.immersive #alert { display: none !important; }
+#corner { display: flex; opacity: 0; }
+#stage.immersive #corner { opacity: 1; }
+#topbar, #corner { transition: opacity .7s ease; }
+#stage.immersive #topbar { opacity: 0; pointer-events: none; }
+#stage.immersive #alert { display: none !important; }
 #stage.immersive #nav { opacity: 0; pointer-events: none; transform: translateY(16px); transition: opacity .3s, transform .3s; z-index: 8; }
 #stage.immersive.peek #nav { opacity: 1; pointer-events: auto; transform: none; }
 #stage.immersive .full { top: 88px; bottom: 28px; }
@@ -180,3 +183,11 @@ button { font: inherit; color: inherit; }
 .bleed .btag { position: absolute; top: 24px; left: 26px; z-index: 4; padding: 9px 16px; border-radius: 999px; background: rgba(0,0,0,.45); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); font-size: 15px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
 .bleed .dots { position: absolute; top: 36px; left: 50%; transform: translateX(-50%); z-index: 4; }
 .glass { background: rgba(16,12,24,.55); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,.14); border-radius: 18px; color: #fff; }
+
+/* Smooth changes: each screen or page fades in over the previous one */
+.layer { position: absolute; inset: 0; }
+.layer.entering { animation: layerIn .9s ease both; }
+.layer.leaving { animation: layerOut .9s ease .15s both; pointer-events: none; }
+@keyframes layerIn { from { opacity: 0; transform: scale(1.012); } to { opacity: 1; transform: none; } }
+@keyframes layerOut { from { opacity: 1; } to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .layer.entering, .layer.leaving { animation-duration: .01s; } }
