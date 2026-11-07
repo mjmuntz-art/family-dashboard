@@ -662,7 +662,7 @@
   };
 
   window.SCENE_IDS = Object.keys(S);
-  // Painted photo backgrounds: one image per time of day (scenes/<month>/<time>.jpg), with animated snow on top
+  // Painted photo backgrounds: one image per time of day (scenes/<month>-<time>.jpg), with animated effects on top
   // lights: x, y, size, kind (lamp flickers, window glows softly); smoke: chimney top; stars: sky box for twinkles at night;
   // sparkle: snow box for glints in daylight. Coordinates are on the 1280×800 screen.
   var PHOTO = { january: { snow: [46, 24, 7],
@@ -697,7 +697,7 @@
     c.add(out);
   }
   window.sceneHasTimes = function (id) { return !!PHOTO[id]; };
-  window.sceneImage = function (id, tod) { if (!PHOTO[id]) return null; if (tod === 'dusk' && !PHOTO[id].dusk) tod = 'evening'; return 'scenes/' + id + '/' + (tod || 'evening') + '.jpg'; };
+  window.sceneImage = function (id, tod) { if (!PHOTO[id]) return null; if (tod === 'dusk' && !PHOTO[id].dusk) tod = 'evening'; return 'scenes/' + id + '-' + (tod || 'evening') + '.jpg'; };
   window.buildScene = function (id, lowPower, tod, date) {
     if (PHOTO[id]) {
       var sc = new Canvas(id + 'x', lowPower), sn = PHOTO[id].snow;
