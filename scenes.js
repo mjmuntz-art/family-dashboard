@@ -662,7 +662,53 @@
   };
 
   window.SCENE_IDS = Object.keys(S);
-  window.buildScene = function (id, lowPower) {
+  // Painted photo backgrounds: one image per time of day (scenes/<month>/<time>.jpg), with animated snow on top
+  // lights: x, y, size, kind (lamp flickers, window glows softly); smoke: chimney top; stars: sky box for twinkles at night;
+  // sparkle: snow box for glints in daylight. Coordinates are on the 1280×800 screen.
+  var PHOTO = { january: { snow: [46, 24, 7],
+    lights: [[148, 515, 74, 'lamp'], [410, 522, 24, 'lamp'], [612, 516, 20, 'lamp'], [966, 440, 52, 'window'], [966, 398, 14, 'window'], [1042, 438, 18, 'window']],
+    smoke: [1021, 336], stars: [560, 1230, 20, 290], sparkle: [220, 1180, 560, 770] },
+    // February: hearts fall until Valentine's Day, blossom petals after. dusk = the string-lights image, just after sunset.
+    february: { dusk: true, fall: function (d) { return d.getDate() < 14 ? ['hearts', 20, ['#ff5d8f', '#ff8fb1', '#e8325a', '#ffc2d4']] : ['petals', 32, ['#ffc4dc', '#ffd9e8', '#f7a8c8', '#ffffff']]; },
+      suns: { morning: [1072, 645, 150], evening: [1069, 638, 170] }, stars: [700, 1260, 20, 520], sparkle: [300, 1250, 705, 790],
+      bulbs: { dusk: [[200, 48], [292, 104], [232, 116], [120, 108], [66, 152], [440, 54], [512, 48], [598, 20], [770, 164], [845, 44], [700, 114], [808, 140]] } } };
+  var LIGHT = { morning: 0.5, midday: 0.25, afternoon: 0.45, evening: 0.85, dusk: 0.95, night: 1 };
+  function photoFx(c, cfg, tod, low) {
+    var r = c.r, k = LIGHT[tod] != null ? LIGHT[tod] : 0.8, out = '', blur = c.blur(5);
+    (cfg.lights || []).forEach(function (L) { // warm glow: lamps flicker, windows breathe
+      var g = c.rad([[0, '#ffd590', 0.9 * k], [0.4, '#ffc06a', 0.35 * k], [1, '#ffb050', 0]]);
+      out += '<circle class="' + (L[3] === 'lamp' ? 'a-flicker' : 'a-pulse') + '" style="animation-delay:-' + f(r() * 5) + 's" cx="' + L[0] + '" cy="' + L[1] + '" r="' + L[2] + '" fill="' + g + '"/>';
+      if (L[3] === 'lamp' && k > 0.6) out += '<ellipse class="a-pulse" cx="' + L[0] + '" cy="' + (L[1] + L[2] * 1.5) + '" rx="' + f(L[2] * 1.8) + '" ry="' + f(L[2] * 0.35) + '" fill="' + c.rad([[0, '#ffcf8a', 0.35 * k], [1, '#ffcf8a', 0]]) + '"/>';
+    });
+    var sun = cfg.suns && cfg.suns[tod]; // the low sun breathes
+    if (sun) out += '<circle class="a-pulse" cx="' + sun[0] + '" cy="' + sun[1] + '" r="' + sun[2] + '" fill="' + c.rad([[0, '#fff1c8', 0.75], [0.35, '#ffc890', 0.3], [1, '#ffb070', 0]]) + '"/>';
+    ((cfg.bulbs && cfg.bulbs[tod]) || []).forEach(function (b) { // string lights twinkle
+      out += '<circle class="a-twinkle" style="animation-delay:-' + f(r() * 3) + 's;animation-duration:' + f(1.6 + r() * 2.4) + 's" cx="' + b[0] + '" cy="' + b[1] + '" r="22" fill="' + c.rad([[0, '#fff3c4', 0.95], [0.3, '#ffd27a', 0.5], [1, '#ffc060', 0]]) + '"/>';
+    });
+    if (cfg.smoke && !low) { // chimney smoke drifting up
+      var sc = tod === 'night' ? '#c3c8e4' : tod === 'evening' ? '#efe2f4' : '#ffffff';
+      out += '<g filter="' + blur + '">';
+      for (var i = 0; i < 6; i++) out += '<ellipse class="a-smoke" style="animation-delay:-' + f(i * 1.6) + 's" cx="' + cfg.smoke[0] + '" cy="' + cfg.smoke[1] + '" rx="12" ry="9" fill="' + sc + '" opacity="0.85"/>';
+      out += '</g>';
+    }
+    if (cfg.stars && (tod === 'night' || tod === 'evening')) { var sb = cfg.stars; for (var j = 0; j < (tod === 'night' ? 34 : 12); j++) out += '<circle class="a-twinkle" style="animation-delay:-' + f(r() * 4) + 's;animation-duration:' + f(2 + r() * 3) + 's" cx="' + f(sb[0] + r() * (sb[1] - sb[0])) + '" cy="' + f(sb[2] + r() * (sb[3] - sb[2])) + '" r="' + f(0.8 + r() * 1.4) + '" fill="#ffffff"/>'; }
+    if (cfg.sparkle && tod !== 'night' && !low) { var gb = cfg.sparkle; for (var q = 0; q < 26; q++) { var x = gb[0] + r() * (gb[1] - gb[0]), y = gb[2] + r() * (gb[3] - gb[2]), z = 1.5 + r() * 2.5;
+      out += '<path class="a-twinkle" style="animation-delay:-' + f(r() * 6) + 's;animation-duration:' + f(3 + r() * 4) + 's" d="M' + f(x) + ',' + f(y - z * 2) + ' L' + f(x + z * 0.4) + ',' + f(y) + ' L' + f(x) + ',' + f(y + z * 2) + ' L' + f(x - z * 0.4) + ',' + f(y) + 'Z M' + f(x - z * 2) + ',' + f(y) + ' L' + f(x) + ',' + f(y + z * 0.4) + ' L' + f(x + z * 2) + ',' + f(y) + ' L' + f(x) + ',' + f(y - z * 0.4) + 'Z" fill="#ffffff"/>'; } }
+    c.add(out);
+  }
+  window.sceneHasTimes = function (id) { return !!PHOTO[id]; };
+  window.sceneImage = function (id, tod) { if (!PHOTO[id]) return null; if (tod === 'dusk' && !PHOTO[id].dusk) tod = 'evening'; return 'scenes/' + id + '/' + (tod || 'evening') + '.jpg'; };
+  window.buildScene = function (id, lowPower, tod, date) {
+    if (PHOTO[id]) {
+      var sc = new Canvas(id + 'x', lowPower), sn = PHOTO[id].snow;
+      if (tod === 'dusk' && !PHOTO[id].dusk) tod = 'evening';
+      photoFx(sc, PHOTO[id], tod, lowPower);
+      if (sn) P.snow(sc, sn[0] * (tod === 'night' ? 1.3 : 1), sn[1], sn[2]);
+      var fl = PHOTO[id].fall && PHOTO[id].fall(date || new Date());
+      if (fl) P[fl[0]](sc, fl[1], fl[2]);
+      return '<div class="scimg" style="background-image:url(\'' + window.sceneImage(id, tod) + '\')"></div><div class="scshade"></div>' +
+        '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><defs>' + sc.defs + '</defs>' + sc.body + '</svg>';
+    }
     var c = new Canvas(id, lowPower);
     (S[id] || S.november)(c);
     return c.svg();

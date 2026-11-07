@@ -138,17 +138,41 @@
 
   // ------------------------------------------------------------ theme + clock
   function applyTheme() {
-    var t = resolveTheme(now(), FORCE_THEME, C.birthdays || []);
+    var t = resolveTheme(now(), FORCE_THEME, C.birthdays || []), tod = timeOfDay();
+    var timed = window.sceneHasTimes && sceneHasTimes(t.id), todChanged = timed && S.tod !== tod;
+    if (todChanged && S.theme && S.theme.id === t.id) { S.tod = tod; swapScene(t.id, tod); }
     if (S.theme && S.theme.id === t.id && S.theme.sub === t.sub && S.theme.title === t.title) return;
-    var changedLook = !S.theme || S.theme.id !== t.id;
+    var changedLook = !S.theme || S.theme.id !== t.id; S.tod = tod;
     S.theme = t;
     var st = document.documentElement.style;
     [['--panel', t.panel], ['--solid', t.solid], ['--edge', t.edge], ['--tile', t.tile], ['--accent', t.accent], ['--ink', t.ink], ['--muted', t.muted],
       ['--r', t.r + 'px'], ['--r2', t.r2 + 'px'], ['--head', t.head], ['--body', t.body], ['--headW', String(t.headW)], ['--headLs', t.headLs],
       ['--titleSize', t.titleSize + 'px'], ['--h2', t.h2 + 'px']].forEach(function (p) { st.setProperty(p[0], p[1]); });
-    if (changedLook) { $('fonts').href = themeFontsHref(t); $('scene').innerHTML = buildScene(t.id, C.lowPower); }
+    if (changedLook) { $('fonts').href = themeFontsHref(t); swapScene(t.id, tod, !S.sceneSet); S.sceneSet = true; }
     $('btitle').textContent = t.title; $('bsub').textContent = t.sub;
     fitTitle(); if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitTitle);
+  }
+  // Time of day for the backgrounds, from today's real sunrise and sunset
+  function timeOfDay() {
+    if (Q.get('tod')) return Q.get('tod');
+    var n = now(), w = S.wx, at = function (h, m) { return new Date(n.getFullYear(), n.getMonth(), n.getDate(), h, m || 0); };
+    var rise = w && w.riseD ? at(w.riseD.getHours(), w.riseD.getMinutes()) : at(7), set = w && w.setD ? at(w.setD.getHours(), w.setD.getMinutes()) : at(17), M = 60000;
+    if (n < rise - 30 * M || n >= set + 45 * M) return 'night';
+    if (n < Math.min(rise.getTime() + 210 * M, at(10, 30).getTime())) return 'morning';
+    if (n < Math.min(at(14).getTime(), set - 90 * M)) return 'midday';
+    if (n < set - 40 * M) return 'afternoon';
+    return n < set.getTime() + 5 * M ? 'evening' : 'dusk'; // dusk: just after sunset (uses the evening image if a month has no dusk one)
+  }
+  function swapScene(id, tod, instant) { // the new background fades in over the old one (after its image has loaded)
+    var html = buildScene(id, C.lowPower, tod, now()), url = window.sceneImage && sceneImage(id, tod), el = $('scene');
+    var put = function () {
+      var olds = [].slice.call(el.children), d = document.createElement('div'); d.className = 'scwrap'; d.innerHTML = html;
+      if (instant || STATIC || !olds.length) { el.innerHTML = ''; el.appendChild(d); return; }
+      d.style.opacity = '0'; el.appendChild(d);
+      requestAnimationFrame(function () { requestAnimationFrame(function () { d.style.transition = 'opacity 4s ease'; d.style.opacity = '1'; }); });
+      setTimeout(function () { olds.forEach(function (o) { if (o.parentNode) o.parentNode.removeChild(o); }); }, 4300);
+    };
+    if (url && !instant) { var im = new Image(); im.onload = im.onerror = put; im.src = url; } else put();
   }
   function fitTitle() { // as big as the space between the clock and the weather allows
     var el = $('btitle'), bar = $('topbar'), room = bar.clientWidth - bar.children[0].offsetWidth - bar.children[2].offsetWidth - 2 * 16 - 72, size = Math.round((S.theme.titleSize || 34) * 1.5);
@@ -1860,9 +1884,12 @@
   $('overlay').addEventListener('click', function (e) { if (e.target.id === 'overlay') closeDetail(); });
 
   function fit() {
-    var s = Math.min(innerWidth / 1280, innerHeight / 800), st = $('stage');
-    st.style.transform = 'scale(' + s + ')';
-    st.style.left = Math.max(0, (innerWidth - 1280 * s) / 2) + 'px'; st.style.top = Math.max(0, (innerHeight - 800 * s) / 2) + 'px';
+    // Wider screens (a 16:9 TV) get a wider layout instead of black bars; the Echo Show stays 1280×800
+    var ar = innerWidth / innerHeight, w = Math.round(Math.min(1600, Math.max(1280, 800 * ar))), st = $('stage');
+    var s = Math.min(innerWidth / w, innerHeight / 800);
+    st.style.width = w + 'px'; st.style.transform = 'scale(' + s + ')';
+    st.style.left = Math.max(0, (innerWidth - w * s) / 2) + 'px'; st.style.top = Math.max(0, (innerHeight - 800 * s) / 2) + 'px';
+    if (S.stageW && S.stageW !== w) { S.stageW = w; render(); } S.stageW = w;
   }
   function start() {
     var v = $('keepalive'); try { var p = v.play(); if (p && p.catch) p.catch(function () { }); } catch (e) { /* ignore */ }
