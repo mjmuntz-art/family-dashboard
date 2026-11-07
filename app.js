@@ -1119,6 +1119,12 @@
     var inner = t.logo ? '<img src="' + esc(dark) + '" alt="" style="width:' + px + 'px;height:' + px + 'px;object-fit:contain;' + shadow + '" onerror="' + (dark !== t.logo ? fallback : "this.outerHTML=\'" + txt.replace(/'/g, "\\'").replace(/"/g, '&quot;') + "\'") + '">' : txt;
     return '<div style="width:' + px + 'px;height:' + px + 'px;display:flex;align-items:center;justify-content:center;flex-shrink:0">' + inner + '</div>';
   }
+  function glowColor(t) { // the team's most colorful color (Vegas glows gold, not steel gray)
+    var sat = function (h) { var m = /^#?([0-9a-f]{6})$/i.exec(h || ''); if (!m) return 0; var n = parseInt(m[1], 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255, mx = Math.max(r, g, b), mn = Math.min(r, g, b); return mx ? (mx - mn) / mx : 0; };
+    var ok = function (h) { var l = lum(h); return h && l > 0.02 && l < 0.85; };
+    var c = [t.c1, t.c2].filter(ok).sort(function (x, y) { return sat(y) - sat(x); });
+    return c[0] || t.c1 || NEUTRAL.c2;
+  }
   function bigStat(s) { // "22/31, 254 YDS, 2 TD" → 254 + "YDS · 22/31, 2 TD"
     s = String(s || ''); var m = /(\d+)\s*(YDS|PTS|REB|AST)/i.exec(s);
     if (m) return [m[1], (m[2].toUpperCase() + ' · ' + s.replace(m[0], '').replace(/^[\s,]+|[\s,]+$/g, '').replace(/\s*,\s*,/g, ',')).replace(/ · $/, '')];
@@ -1143,8 +1149,9 @@
     };
     var status = g.state === 'pre' ? (sameDay(g.date, now()) ? 'Today' : DOWL[g.date.getDay()]) + ' · ' + hm(g.date) + (sum && sum.tv ? ' · ' + sum.tv : '') : g.state === 'in' ? 'Live · ' + g.status : g.status + (sum && sum.venue ? ' · ' + sum.venue : '');
     var bottom = g.state === 'pre' ? previewCards(g, sum) : statCards(g, sum, teams);
-    return '<div style="position:absolute;inset:0;background:radial-gradient(ellipse at 70% 18%,' + teamBg(star) + ' 0%,#0d1116 62%,#07090c 100%)"></div>' +
-      (star.logo ? '<img src="' + esc(star.logo) + '" alt="" style="position:absolute;right:-90px;top:-40px;width:640px;height:640px;object-fit:contain;opacity:.07;filter:brightness(0) invert(1)" onerror="this.remove()">' : '') +
+    // arena lights: each team's color glows in from its own side
+    return '<div style="position:absolute;inset:0;background:radial-gradient(ellipse 75% 90% at 0% 10%,' + glowColor(a) + '99,transparent 70%),radial-gradient(ellipse 75% 90% at 100% 90%,' + glowColor(b) + '99,transparent 70%),radial-gradient(ellipse at 50% 50%,#151a20,#07090c 80%)"></div>' +
+      '<div style="position:absolute;inset:0;background:repeating-linear-gradient(90deg,rgba(255,255,255,.025) 0 2px,transparent 2px 120px)"></div>' +
       btag(esc(g.lg) + (g.state === 'pre' ? ' · Up next' : g.state === 'in' ? ' · Live' : ' · Final')) + top +
       '<div style="position:absolute;left:56px;right:56px;top:88px;display:flex;flex-direction:column;gap:12px">' + bar(a) + bar(b) +
       '<div style="align-self:center;margin-top:2px;padding:7px 22px;border-radius:999px;font-size:17px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;' + (g.state === 'in' ? 'background:#c62828' : 'background:rgba(255,255,255,.14)') + '">' + esc(status) + '</div></div>' + bottom;
