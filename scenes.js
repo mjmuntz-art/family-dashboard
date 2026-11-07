@@ -703,7 +703,7 @@
       suns: { morning: [1255, 229, 160], evening: [1270, 200, 180] }, moon: { night: [1175, 70, 60] }, stars: [790, 1260, 20, 180],
       glints: { morning: [290, 1270, 250, 322], midday: [290, 1270, 250, 322], afternoon: [290, 1270, 250, 322], evening: [800, 1270, 250, 322], night: [1110, 1240, 255, 330] },
       gulls: { morning: [110, 210], midday: [100, 200], afternoon: [100, 200] },
-      fireworks: { dusk: 3, night: 7, box: [300, 1260, 50, 180], reflect: null },
+      fireworks: { dusk: 3, night: 7, box: [300, 1260, 40, 200], reflect: null, mask: 'scenes/july-sky.png' },
       bulbs: { evening: [[115, 55], [248, 82], [320, 82], [415, 100], [507, 100], [594, 86], [668, 50], [733, 18]], dusk: [[115, 55], [248, 82], [320, 82], [415, 100], [507, 100], [594, 86], [668, 50], [733, 18]], night: [[115, 55], [248, 82], [320, 82], [415, 100], [507, 100], [594, 86], [668, 50], [733, 18]] } } };
   var LIGHT = { morning: 0.5, midday: 0.25, afternoon: 0.45, evening: 0.85, dusk: 0.95, night: 1 };
   function photoFx(c, cfg, tod, low) {
@@ -737,7 +737,13 @@
     var bf = cfg.butterflies && cfg.butterflies[tod]; if (bf) K.butterflies(c, 6, bf[0], bf[1], ['#ffd84d', '#ffffff', '#f7a8c8', '#9ad0ff', '#ff9f43']);
     var ff = cfg.fireflies && cfg.fireflies[tod]; if (ff) P.fireflies(c, tod === 'night' ? 26 : 16, ff[0], ff[1]);
     var gl = cfg.gulls && cfg.gulls[tod]; if (gl) K.birds(c, 4, gl[0], gl[1], '#3a3f4a');
-    var fw = cfg.fireworks; if (fw && fw[tod]) P.fireworks(c, fw[tod], ['#ff4d5e', '#ffffff', '#5aa0ff', '#ffd166', '#ff7ab6'], fw.box[2], fw.box[3], fw.reflect, fw.box[0], fw.box[1]);
+    var fw = cfg.fireworks;
+    if (fw && fw[tod]) { // only in the open sky: a mask made from the photo keeps the porch, lights and trees in front
+      var mid = c.uid('m');
+      if (fw.mask) { c.defs += '<mask id="' + mid + '" maskUnits="userSpaceOnUse" x="-71.1" y="0" width="1422.2" height="800"><image href="' + fw.mask + '" x="-71.1" y="0" width="1422.2" height="800" preserveAspectRatio="none"/></mask>'; c.add('<g mask="url(#' + mid + ')">'); }
+      P.fireworks(c, fw[tod], ['#ff4d5e', '#ffffff', '#5aa0ff', '#ffd166', '#ff7ab6'], fw.box[2], fw.box[3], fw.reflect, fw.box[0], fw.box[1]);
+      if (fw.mask) c.add('</g>');
+    }
   }
   window.sceneHasTimes = function (id) { return !!PHOTO[id]; };
   window.sceneImage = function (id, tod) { if (!PHOTO[id]) return null; if (tod === 'dusk' && !PHOTO[id].dusk) tod = 'evening'; return 'scenes/' + id + '-' + (tod || 'evening') + '.jpg'; };
@@ -750,7 +756,7 @@
       var fl = PHOTO[id].fall && PHOTO[id].fall(date || new Date());
       if (fl) P[fl[0]](sc, fl[1], fl[2]);
       return '<div class="scimg" style="background-image:url(\'' + window.sceneImage(id, tod) + '\')"></div><div class="scshade"></div>' +
-        '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><defs>' + sc.defs + '</defs>' + sc.body + '</svg>';
+        '<svg width="' + W + '" height="' + H + '" viewBox="-71.1 0 1422.2 800" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><defs>' + sc.defs + '</defs>' + sc.body + '</svg>';
     }
     var c = new Canvas(id, lowPower);
     (S[id] || S.november)(c);
