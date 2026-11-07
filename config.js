@@ -8,18 +8,18 @@ window.DASH_CONFIG = {
 
   // Your Google Apps Script web app (see README, step 2).
   // Leave blank until it's deployed — those screens show a setup note until then.
-  appsScriptUrl: '',
-  appsScriptKey: '',          // the same secret you put in Code.gs (KEY)
+  appsScriptUrl: 'https://script.google.com/macros/s/AKfycbz7k4Tst0Tj0AtIYF45mipxAJTrFF8xZ7nlkT3vtfmepS6Gl518MwO8FvnOnlo46TWL/exec',
+  appsScriptKey: 'FranklinandWestonarebabies604!',          // the same secret you put in Code.gs (KEY)
 
   // How long each screen stays up (seconds).
   timing: {            // seconds
-    home: 60,          // home dashboard
+    home: 90,          // home dashboard
     screen: 30,        // Family, Photos and Plays
-    scoresGrid: 15,    // Scores overview (all games)
-    game: 12,          // each of your teams' game pages (box score / up next)
-    story: 10,         // each news story (6 stories)
-    weather: 12,       // each weather page (5 pages: now, hours, week, sun & moon, radar)
-    detail: 20         // pop-ups after you tap something
+    scoresGrid: 30,    // Scores overview (all games)
+    game: 30,          // each of your teams' game pages (box score / up next)
+    story: 30,         // each news story (6 stories)
+    weather: 30,       // each weather page (5 pages: now, hours, week, sun & moon, radar)
+    detail: 60         // pop-ups after you tap something
   },
 
   // Your teams: they always get a tile, plus full-screen pages for their last final and next game.
@@ -54,6 +54,9 @@ window.DASH_CONFIG = {
   // Birthdays get their own look for the whole day: date is 'MM-DD'; add year to show their age.
   // Photos in a Drive subfolder named exactly like the person show on their day.
   birthdays: [
+    { name: 'Cate', date: '02-15', year: 1994 },
+    { name: 'Mike', date: '04-06', year: 1990 },
+    { name: 'Weston', date: '12-23', year: 2025 },
     // { name: 'Mom', date: '03-14', year: 1985 },
     // { name: 'Jack', date: '08-02', year: 2016 },
   ],
