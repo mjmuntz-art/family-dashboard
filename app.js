@@ -9,14 +9,16 @@
   var FORCE_DATE = Q.get('date'), FORCE_THEME = Q.get('theme'), STATIC = Q.has('static');
   var ORDER = ['home', 'family', 'photos', 'scores', 'plays', 'news', 'weather'];
   var LABELS = { home: 'Home', family: 'Family', photos: 'Photos', scores: 'Scores', plays: 'Plays', news: 'News', weather: 'Weather' };
-  var S = { screen: ORDER.indexOf(Q.get('screen')) >= 0 ? Q.get('screen') : 'home', detail: null, theme: null, lastScreen: null,
-    wx: null, alerts: [], games: [], back: null, backErr: null, wxErr: null, scoresErr: null, photoIdx: 0, timer: null, page: +(Q.get('page') || 0), lastPage: null, sum: {} };
+  var S = { screen: ORDER.concat(['live', 'alert', 'night']).indexOf(Q.get('screen')) >= 0 ? Q.get('screen') : 'home', detail: null, theme: null, lastScreen: null,
+    wx: null, alerts: [], games: [], back: null, backErr: null, wxErr: null, scoresErr: null, photoIdx: 0, timer: null, page: +(Q.get('page') || 0), lastPage: null, sum: {},
+    alShown: {}, wasLive: {}, finalShown: load('finalShown', 3 * 86400000) || {}, resume: null, wakeUntil: 0, standings: {} };
   var $ = function (id) { return document.getElementById(id); };
 
   // ------------------------------------------------------------ helpers
   function now() {
     var n = new Date();
     if (FORCE_DATE) { var p = FORCE_DATE.split('-'); n = new Date(+p[0], +p[1] - 1, +p[2], n.getHours(), n.getMinutes(), n.getSeconds()); }
+    if (Q.get('hour')) { var hh = String(Q.get('hour')).split(':'); n = new Date(n.getFullYear(), n.getMonth(), n.getDate(), +hh[0], +(hh[1] || 0), 0); }
     return n;
   }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -167,6 +169,14 @@
     $('date').textContent = MONL[n.getMonth()] + ' ' + n.getDate();
     $('cdate').style.display = S.theme && S.theme.isHoliday ? 'flex' : 'none';
     if (n.getSeconds() === 0 || !$('corner').innerHTML) corner();
+    if (n.getSeconds() % 15 === 0 && !STATIC) {
+      checkTakeover();
+      if (isNight() && S.screen !== 'night' && S.screen !== 'alert' && !S.detail) setScreen('night');
+      else if (!isNight() && S.screen === 'night') setScreen('home');
+      else if (S.screen === 'night' && n.getSeconds() === 0) render();
+      else if (S.screen === 'home' && !S.detail && S.wasBrief !== isBriefing()) render();
+      S.wasBrief = isBriefing();
+    }
     if (n.getSeconds() === 0) {
       applyTheme();
       var hh = (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
@@ -253,8 +263,9 @@
   function loadAlerts() {
     if (DEMO) return Promise.resolve();
     return getJSON('https://api.weather.gov/alerts/active?point=' + L.lat.toFixed(4) + ',' + L.lon.toFixed(4)).then(function (j) {
-      S.alerts = (j.features || []).map(function (f) { var p = f.properties; return { event: p.event, until: p.ends || p.expires, headline: p.headline }; });
-      renderAlert();
+      S.alerts = (j.features || []).filter(function (f) { return f.properties && f.properties.status !== 'Test' && f.properties.messageType !== 'Cancel'; }).map(function (f) { var p = f.properties; return { id: f.id || p.id, event: p.event, until: p.ends || p.expires, onset: p.onset || p.effective, headline: p.headline, description: p.description || '', instruction: p.instruction || '', severity: p.severity, area: p.areaDesc || '' }; });
+      S.alerts.sort(function (a, b) { return (isUrgent(b) ? 1 : 0) - (isUrgent(a) ? 1 : 0); });
+      renderAlert(); checkTakeover(); if (S.screen === 'weather') render();
     }).catch(function () { /* keep last alerts */ });
   }
   function renderAlert() {
@@ -415,7 +426,7 @@
       fillAll.filter(function (g) { return dayDiff(n, g.date) >= -1 && dayDiff(n, g.date) <= 2; })
         .sort(function (a, b) { return rank(a) - rank(b) || (rank(a) === 1 ? a.date - b.date : b.date - a.date); }).forEach(add);
       var size = Math.min(12, Math.max(6, Math.ceil(mine / 6) * 6)); // full pages of 6 tiles
-      S.games = out.slice(0, Math.max(size, mine)); S.mine = all; S.teamMiss = miss; S.scoresErr = null; featureGames().forEach(ensureSummary); render();
+      S.games = out.slice(0, Math.max(size, mine)); S.mine = all; S.teamMiss = miss; S.scoresErr = null; featureGames().forEach(ensureSummary); liveList().forEach(ensureSummary); standingsLeagues(); render();
       Promise.all([fillRecords(S.games.concat(all)), fillColors(S.games.concat(all))]).then(function () { if (S.screen === 'scores' || S.screen === 'home') render(); });
     }).catch(function () { S.scoresErr = 'Scores unavailable — retrying'; render(); });
   }
@@ -488,7 +499,7 @@
     if (b.calendar.error) { S.calErr = 'Calendar error: ' + b.calendar.error; return null; }
     S.calErr = null;
     S.calMissing = (b.calendar.missing || []).map(function (m) { return m.name + ': ' + m.why; });
-    return (b.calendar.events || []).map(function (e) { return { title: e.title, start: new Date(e.start), end: new Date(e.end), allDay: e.allDay, who: e.calendar, color: e.color || '#ffb35c', location: e.location, description: e.description }; })
+    return (b.calendar.events || []).map(function (e) { return { title: e.title, start: new Date(e.start), end: new Date(e.end), allDay: e.allDay, who: e.calendar, color: e.color || '#ffb35c', location: e.location, description: e.description, leave: e.leave ? new Date(e.leave) : null, drive: e.drive || null }; })
       .sort(function (a, b) { return a.start - b.start; });
   }
   function photos() {
@@ -547,18 +558,21 @@
   function render() {
     var el = $('screen'), fresh = S.lastScreen !== S.screen || S.lastPage !== S.page;
     S.lastScreen = S.screen; S.lastPage = S.page;
-    var html = S.screen === 'home' ? homeHTML() : fullHTML();
+    var brief = S.screen === 'home' && isBriefing();
+    var html = brief ? '<section class="bleed">' + briefingBleed() + '</section>' : S.screen === 'home' ? homeHTML() : fullHTML();
     var cur = el.lastElementChild;
     if (fresh || !cur) { // new screen or page: fade it in over the old one, then remove the old one
       var olds = [].slice.call(el.children);
       olds.forEach(function (o) { o.classList.add('leaving'); [].forEach.call(o.querySelectorAll('[id]'), function (x) { x.removeAttribute('id'); }); setTimeout(function () { if (o.parentNode) o.parentNode.removeChild(o); }, 950); });
       var layer = document.createElement('div'); layer.className = 'layer' + (STATIC ? '' : ' entering'); layer.innerHTML = html; el.appendChild(layer);
     } else cur.innerHTML = html;
-    var st = $('stage'); st.classList.toggle('immersive', S.screen !== 'home'); if (S.screen === 'home') st.classList.remove('peek');
-    $('nav').style.display = S.screen === 'home' ? 'none' : 'flex'; corner();
+    var st = $('stage'), imm = S.screen !== 'home' || brief; st.classList.toggle('immersive', imm); if (!imm) st.classList.remove('peek');
+    st.classList.toggle('night', S.screen === 'night'); st.classList.toggle('nocorner', brief || S.screen === 'night' || S.screen === 'alert');
+    $('nav').style.display = imm && S.screen !== 'night' ? 'flex' : 'none'; corner();
     $('navbar').innerHTML = ORDER.map(function (k) { return '<button type="button" data-go="' + k + '" class="' + (k === S.screen ? 'on' : '') + '">' + LABELS[k] + '</button>'; }).join('');
     if (S.screen === 'photos' || S.screen === 'home') hookPhotos();
     var p = S.screen === 'home' ? '' : curPage();
+    if (S.screen === 'live' && p) { var lg = findGame(p.slice(2)); if (lg && liveState(lg) === 'post' && !S.finalShown[lg.id]) { S.finalShown[lg.id] = Date.now(); save('finalShown', S.finalShown); } }
     if (!(S.detail && S.detail.kind === 'radar')) stopRadar();
     if (S.screen === 'weather' && p === 'radar') startRadar();
     if (S.screen === 'news' && p && p.indexOf('s:') === 0) drawQR((newsStories() || [])[+p.slice(2)]);
@@ -570,10 +584,11 @@
       if (!list.length) { label = 'Family tomorrow'; list = ev.filter(function (e) { return dayDiff(n, e.start) === 1; }); }
       if (!list.length) { label = 'Coming up'; list = ev.filter(function (e) { return e.end > n; }).map(function (e) { return Object.assign({}, e, { soon: true }); }); }
     }
-    var fam = '<div class="lbl">' + label + '</div>' + (!ev ? note(S.backErr === 'setup' ? 'Calendar not connected yet' : esc(S.calErr || (S.backErr ? 'Can\u2019t reach your Google data — open Family for details' : 'Loading…'))) :
-      !list.length ? note(S.calMissing && S.calMissing.length ? 'Can\u2019t open ' + esc(S.calMissing.join(' \u00b7 ')) : 'Nothing on the calendar this week') : list.slice(0, 4).map(function (e) {
+    var tags = weeklyTags().concat(leaveTags(ev)), tagRow = tags.length ? '<div style="display:flex;flex-wrap:wrap;gap:6px">' + tags.slice(0, 2).map(function (t) { return tagChip(t, true); }).join('') + '</div>' : '';
+    var fam = '<div class="lbl">' + label + '</div>' + tagRow + (!ev ? note(S.backErr === 'setup' ? 'Calendar not connected yet' : esc(S.calErr || (S.backErr ? 'Can\u2019t reach your Google data — open Family for details' : 'Loading…'))) :
+      !list.length ? note(S.calMissing && S.calMissing.length ? 'Can\u2019t open ' + esc(S.calMissing.join(' \u00b7 ')) : 'Nothing on the calendar this week') : list.slice(0, tags.length ? 3 : 4).map(function (e) {
         return '<div style="display:flex;align-items:center;gap:10px"><div style="width:9px;height:9px;border-radius:50%;background:' + esc(e.color) + ';flex-shrink:0"></div>' +
-          '<div style="min-width:0"><div class="ellip" style="font-size:16px;font-weight:700">' + esc(e.title) + '</div><div class="muted ellip" style="font-size:13px">' + (e.soon ? DOW[e.start.getDay()] + ' ' : '') + (e.allDay ? 'All day' : hm(e.start)) + ' · ' + esc(e.who) + '</div></div></div>';
+          '<div style="min-width:0"><div class="ellip" style="font-size:16px;font-weight:700">' + esc(e.title) + '</div><div class="muted ellip" style="font-size:13px">' + (e.soon ? DOW[e.start.getDay()] + ' ' : '') + (e.allDay ? 'All day' : hm(e.start)) + (e.leave && !e.soon && e.start > n ? ' · Leave ' + hm(e.leave).replace(' ', '') : ' · ' + esc(e.who)) + '</div></div></div>';
       }).join(''));
     var ph = photos(), cur = ph && ph.length ? ph[S.photoIdx % ph.length] : null;
     var photo = cur ? '<div id="homephoto" style="flex:1;border-radius:var(--r2);background:rgba(0,0,0,0.3) center/cover no-repeat"></div>' :
@@ -638,7 +653,7 @@
       return '<button type="button" class="tap" data-open="event:' + idx(e) + '" style="align-items:center;gap:14px;padding:8px 12px;border-radius:12px;background:rgba(255,255,255,' + (nowOn ? .14 : .06) + ');' + (past ? 'opacity:.45;' : '') + '">' +
         '<div style="width:5px;align-self:stretch;border-radius:3px;background:' + esc(e.color) + ';flex-shrink:0"></div>' +
         '<div style="width:92px;flex-shrink:0;font-size:17px;font-weight:800">' + esc(when(e)) + (nowOn ? '<div style="font-size:11px;font-weight:800;letter-spacing:.1em;color:var(--accent)">NOW</div>' : '') + '</div>' +
-        '<div class="ellip" style="flex:1;font-size:21px;font-weight:700">' + esc(e.title) + '</div>' + chip(e) + '</button>';
+        '<div class="ellip" style="flex:1;font-size:21px;font-weight:700">' + esc(e.title) + '</div>' + (e.leave && e.start > n ? '<span style="flex-shrink:0;padding:3px 10px;border-radius:999px;font-size:13px;font-weight:800;background:' + (e.leave - n < 3600000 ? 'var(--accent);color:var(--ink)' : 'rgba(255,255,255,.14)') + '">🚗 ' + esc(hm(e.leave)) + '</span>' : chip(e)) + '</button>';
     }).join('');
     var next = later[0], nextCard = '';
     if (!rows && next) {
@@ -650,7 +665,8 @@
     var todayTile = '<div class="tile" style="display:flex;flex-direction:column;gap:12px;padding:18px 22px;min-height:0;overflow:hidden">' +
       '<div style="display:flex;align-items:center;gap:16px;flex-shrink:0"><div class="head" style="font-size:78px;line-height:.85;color:var(--accent)">' + n.getDate() + '</div>' +
       '<div style="display:flex;flex-direction:column;gap:2px"><div style="font-size:24px;font-weight:800">' + DOWL[n.getDay()] + '</div><div class="muted" style="font-size:16px">' + MONL[n.getMonth()] + ' · ' +
-      (today.length ? today.length + ' thing' + (today.length === 1 ? '' : 's') + ' today' : 'Nothing scheduled') + '</div></div></div>' +
+      (today.length ? today.length + ' thing' + (today.length === 1 ? '' : 's') + ' today' : 'Nothing scheduled') + '</div></div>' +
+      (weeklyTags().length ? '<div style="margin-left:auto">' + tagChip(weeklyTags()[0], true) + '</div>' : '') + '</div>' +
       (rows || '<div class="head" style="font-size:30px;line-height:1.15;flex-shrink:0">' + left + '</div>' + nextCard) +
       (dinner ? '<div style="margin-top:auto;display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:12px;background:rgba(255,255,255,.08);flex-shrink:0"><span style="font-size:24px">🍽️</span><div style="min-width:0"><div class="lbl">Tonight’s dinner</div><div class="ellip" style="font-size:19px;font-weight:700">' + esc(dinner.title) + '</div></div></div>' : '') + '</div>';
     // ---- coming up, grouped by day
@@ -702,7 +718,18 @@
     for (var i = 0; i < Math.max(pg.length, lg.length); i++) { if (pg[i]) out.push(pg[i]); if (lg[i]) out.push(lg[i]); }
     return out;
   }
-  function curGroup() { var g = photoGroups(); return g.length ? g[(S.photoIdx + S.page) % g.length] : null; }
+  function photoDate(it) { var d = it && it.taken ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(it.taken) ? it.taken + 'T12:00:00' : String(it.taken).replace(' ', 'T')) : null; return d && !isNaN(d) ? d : null; }
+  function yearsAgo(it) { var d = photoDate(it), n = now(); return d && d.getMonth() === n.getMonth() && d.getDate() === n.getDate() && d.getFullYear() < n.getFullYear() ? n.getFullYear() - d.getFullYear() : 0; }
+  function otdGroups() { // photos taken on today's date in past years: tall ones in pairs, wide ones alone
+    var ph = (photos() || []).filter(yearsAgo).sort(function (a, b) { return yearsAgo(a) - yearsAgo(b); }); if (!ph.length) return [];
+    var P = ph.filter(function (o) { return o.o === 'p'; }), out = ph.filter(function (o) { return o.o !== 'p'; }).map(function (x) { return [x]; });
+    for (var i = 0; i < P.length; i += 2) out.push(P[i + 1] ? [P[i], P[i + 1]] : [P[i]]);
+    return out.slice(0, 2);
+  }
+  function curGroup() {
+    var o = otdGroups(); if (S.screen === 'photos' && S.page < o.length) return o[S.page];
+    var g = photoGroups(); return g.length ? g[(S.photoIdx + S.page - (S.screen === 'photos' ? o.length : 0)) % g.length] : null;
+  }
   function photosHTML() {
     var ph = photos(); if (!ph) return note(S.backErr === 'setup' ? SETUP : esc(S.backErr || 'Loading…'));
     if (!ph.length) return note('Add photos to your dashboard photo folder in Google Drive.');
@@ -762,15 +789,26 @@
     return list.sort(function (a, b) { return rank(a) - rank(b) || (rank(a) === 1 ? b.date - a.date : a.date - b.date); }).slice(0, 8);
   }
   function pageList(screen) {
-    if (screen === 'scores') { var gp = []; for (var i = 0; i < Math.max(1, Math.ceil(S.games.length / 6)); i++) gp.push('grid:' + i); return gp.concat(featureGames().map(function (g) { return 'g:' + g.id; })); }
+    if (screen === 'scores') { var gp = []; for (var i = 0; i < Math.max(1, Math.ceil(S.games.length / 6)); i++) gp.push('grid:' + i); return gp.concat(featureGames().map(function (g) { return 'g:' + g.id; }), standingsLeagues().map(function (l) { return 'st:' + l; })); }
     if (screen === 'news') { var nw = newsStories(); return nw && nw.length ? nw.map(function (s, i) { return 's:' + i; }) : ['empty']; }
-    if (screen === 'weather') return S.wx ? ['now', 'hours', 'week', 'sky', 'radar'] : ['empty'];
-    if (screen === 'photos') { var pgN = Math.min(3, photoGroups().length); var out = []; for (var q = 0; q < Math.max(1, pgN); q++) out.push('c:' + q); return out; }
+    if (screen === 'weather') return S.alerts.map(function (a, i) { return 'al:' + i; }).concat(S.wx ? ['now', 'hours', 'week', 'sky', 'radar'] : S.alerts.length ? [] : ['empty']);
+    if (screen === 'photos') { var pgN = Math.min(3, photoGroups().length) + otdGroups().length; var out = []; for (var q = 0; q < Math.max(1, pgN); q++) out.push('c:' + q); return out; }
+    if (screen === 'family') { var fp = ['main']; if (boardLists().grocery || boardLists().notes.length) fp.push('board'); if (countdownItems().length) fp.push('cd'); return fp; }
+    if (screen === 'live') { var lv = liveList(); return lv.length ? lv.map(function (g) { return 'g:' + g.id; }) : ['none']; }
+    if (screen === 'alert') { var ua = S.alerts.filter(isUrgent); return ua.length ? ua.map(function (a, i) { return 'al:' + S.alerts.indexOf(a); }) : ['none']; }
+    if (screen === 'night') return ['main'];
     return ['main'];
   }
   function pageDur() {
     var t = C.timing;
     if (S.screen === 'home') return t.home;
+    var cp = String(curPage());
+    if (S.screen === 'night') return 60;
+    if (S.screen === 'alert') return Math.max(DEMO ? 2 : 30, Math.round(((C.alerts && C.alerts.takeoverSec) || 150) / Math.max(1, pageList('alert').length)));
+    if (S.screen === 'live') return t.live || 40;
+    if (cp.indexOf('st:') === 0) return t.standings || 15;
+    if (cp.indexOf('al:') === 0) return t.alert || 15;
+    if (S.screen === 'family' && cp !== 'main') return t.board || 20;
     if (S.screen === 'news') return t.story || 10;
     if (S.screen === 'scores') return String(curPage()).indexOf('grid') === 0 ? (t.scoresGrid || 15) : (t.game || t.page || 12);
     if (S.screen === 'weather') return t.weather || t.page || 12;
@@ -869,7 +907,7 @@
   }
   function ensureSummary(g) {
     if (DEMO || g.morris || !g.sport) return;
-    var c = S.sum[g.id], age = c ? Date.now() - c.t : 1e12, ttl = g.state === 'in' ? 45000 : 30 * 60000;
+    var c = S.sum[g.id], age = c ? Date.now() - c.t : 1e12, ttl = g.state === 'in' ? 25000 : 30 * 60000;
     if (c && (c.loading || age < ttl)) return;
     S.sum[g.id] = { t: Date.now(), j: c && c.j, loading: true };
     getJSON(ESPN + g.sport + '/' + g.league + '/summary?event=' + g.id).then(function (j) {
@@ -894,11 +932,18 @@
       var pick = function (tm, name) { var c = ((tm && tm.leaders) || []).filter(function (x) { return x.name === name; })[0], a = c && c.leaders && c.leaders[0]; return a ? { name: a.athlete ? a.athlete.shortName || a.athlete.displayName : '', stat: a.displayValue || '', head: a.athlete && a.athlete.headshot ? a.athlete.headshot.href : '' } : null; };
       ((lead[0] && lead[0].leaders) || []).slice(0, 3).forEach(function (c) { cats.push({ label: c.displayName || c.name, a: pick(lead[0], c.name), b: pick(lead[1], c.name) }); });
       var pc = (j.pickcenter || [])[0], bc = comp && comp.broadcasts && comp.broadcasts[0];
+      var live = liveFromSummary(j, comp, cs);
+      if (live && live.state) { // the summary is fresher than the schedule: update the game itself
+        g.teams.forEach(function (t) { if (live.scores[t.abbr] != null && live.state !== 'pre') t.score = live.scores[t.abbr]; });
+        if (live.state === 'post' && g.state === 'in') { g.state = 'post'; g.teams.forEach(function (t) { t.winner = live.win[t.abbr]; }); }
+        if (live.state === 'in') g.state = 'in';
+        if (live.detail && live.state !== 'pre') g.status = live.detail;
+      }
       var story = bestStory(g, (j.news && j.news.articles || []).concat(j.article && j.article.headline ? [j.article] : []));
       S.sum[g.id] = { t: Date.now(), j: { recs: recs, lines: lines, stats: stats, leaders: cats, venue: j.gameInfo && j.gameInfo.venue ? j.gameInfo.venue.fullName : '',
-        tv: bc ? (bc.media && bc.media.shortName) || (bc.names || []).join(', ') : '', line: pc ? [pc.details, pc.overUnder != null ? 'O/U ' + pc.overUnder : ''].filter(Boolean).join(' · ') : '', story: story } };
+        live: live, tv: bc ? (bc.media && bc.media.shortName) || (bc.names || []).join(', ') : '', line: pc ? [pc.details, pc.overUnder != null ? 'O/U ' + pc.overUnder : ''].filter(Boolean).join(' · ') : '', story: story } };
       if (g.state === 'pre' && !(story && story.both)) return teamStory(g).then(function (s) { if (s && (!story || s.score > story.score)) S.sum[g.id].j.story = s; });
-    }).catch(function () { S.sum[g.id] = { t: Date.now(), j: c && c.j }; }).then(function () { if (S.screen === 'scores' || S.detail) render(); });
+    }).catch(function () { S.sum[g.id] = { t: Date.now(), j: c && c.j }; }).then(function () { if (S.screen === 'scores' || S.screen === 'live' || S.detail) render(); });
   }
   // Picks the story most about THIS game: tagged with either team, or naming them in the headline. Generic league stories are skipped.
   function bestStory(g, arts) {
@@ -1076,11 +1121,17 @@
   }
 
   // ------------------------------------------------------------ full-screen ("bleed") pages: photos, news, your team's games, weather
-  function isBleed(p) { return S.screen === 'photos' || S.screen === 'news' || S.screen === 'weather' || S.screen === 'scores'; }
+  function isBleed(p) { return S.screen !== 'family' && S.screen !== 'plays' || (S.screen === 'family' && p !== 'main'); }
   function btag(txt) { return '<div class="btag">' + txt + '</div>'; }
   function bleedHTML(p) {
     var pg = pageList(S.screen), top = dotsHTML(pg);
     if (S.screen === 'photos') return photosBleed(top);
+    if (S.screen === 'night') return nightBleed();
+    if (S.screen === 'live') return p === 'none' ? emptyBleed('No live games right now') : gameBleed(findGame(p.slice(2)), top, true);
+    if (String(p).indexOf('al:') === 0) return alertBleed(S.alerts[+p.slice(3)], top, S.screen === 'alert');
+    if (S.screen === 'alert') return emptyBleed('Warning has ended');
+    if (S.screen === 'family') return p === 'board' ? boardBleed(top) : countdownBleed(top);
+    if (String(p).indexOf('st:') === 0) return standingsBleed(p.slice(3), top);
     if (S.screen === 'news') return newsBleed(p, top);
     if (S.screen === 'scores') return String(p).indexOf('grid') === 0 ? scoreboardBleed(+p.split(':')[1] || 0, top) : gameBleed(findGame(p.slice(2)), top);
     return weatherBleed(p, top);
@@ -1091,7 +1142,9 @@
     var g = curGroup() || [];
     return '<div style="position:absolute;inset:0;background:#000;display:grid;grid-template-columns:repeat(' + g.length + ',minmax(0,1fr));gap:6px">' + g.map(function (it, i) {
       var d = it.taken ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(it.taken) ? it.taken + 'T12:00:00' : String(it.taken).replace(' ', 'T')) : null; if (d && isNaN(d)) d = null;
+      var ya = yearsAgo(it);
       return '<div style="position:relative;overflow:hidden;background:#111"><div id="pc' + i + '" style="position:absolute;inset:0;background:center/cover no-repeat;opacity:0;transition:opacity .8s"></div>' +
+        (ya && i === 0 ? '<div style="position:absolute;left:22px;top:84px;padding:10px 20px;border-radius:999px;background:var(--accent);color:var(--ink);font-size:24px;font-weight:900;box-shadow:0 6px 18px rgba(0,0,0,.35)">📸 ' + ya + ' year' + (ya === 1 ? '' : 's') + ' ago today</div>' : '') +
         (d ? '<div style="position:absolute;left:22px;bottom:22px;padding:7px 14px;border-radius:999px;background:rgba(0,0,0,.5);font-size:16px;font-weight:700">' + esc((it.person ? it.person + ' · ' : '') + MON[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear()) + '</div>' : '') + '</div>';
     }).join('') + '</div>' + top;
   }
@@ -1130,10 +1183,11 @@
     if (m) return [m[1], (m[2].toUpperCase() + ' · ' + s.replace(m[0], '').replace(/^[\s,]+|[\s,]+$/g, '').replace(/\s*,\s*,/g, ',')).replace(/ · $/, '')];
     m = /^\s*(\d+(\.\d+)?)/.exec(s); return m ? [m[1], s.slice(m[0].length).replace(/^[\s,]+/, '')] : [s, ''];
   }
-  function gameBleed(g, top) {
+  function gameBleed(g, top, takeover) {
     if (!g) return '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">' + note('Game not found') + '</div>';
     var sum = S.sum[g.id] && S.sum[g.id].j; if (!sum && !g.morris) ensureSummary(g);
-    var teams = g.teams.map(function (t) { var r = sum && sum.recs && sum.recs[t.abbr]; return r && !t.rec ? Object.assign({}, t, { rec: r }) : t; }), a = teams[0], b = teams[1];
+    var lv = sum && sum.live, crunch = g.state === 'in' && inCrunch(g);
+    var teams = g.teams.map(function (t) { var r = sum && sum.recs && sum.recs[t.abbr]; return Object.assign({}, t, { rec: t.rec || r || '', poss: !!(lv && g.state === 'in' && lv.poss && String(lv.poss) === String(t.id)) }); }), a = teams[0], b = teams[1];
     var star = g.state === 'post' ? (b.winner ? b : a) : (b.home ? b : a); // the winner (or home team) sets the backdrop
     var bar = function (t) {
       var lose = g.state === 'post' && !t.winner, col = teamBg(t);
@@ -1142,17 +1196,18 @@
       var nick = t.full && t.loc ? t.full.replace(t.loc, '').trim() : '', sub = [nick && nick !== t.name ? nick : '', g.state !== 'pre' ? t.rec : ''].filter(Boolean).join(' · ');
       return '<div style="display:flex;align-items:center;height:196px;border-radius:22px;overflow:hidden;background:linear-gradient(90deg,' + col + ',' + col + 'd9);box-shadow:0 12px 30px rgba(0,0,0,.4);' + (lose ? 'opacity:.7;' : '') + '">' +
         '<div style="width:16px;align-self:stretch;background:' + (t.c2 || '#fff') + '"></div><div style="margin:0 32px">' + logoDisc(t, 152) + '</div>' +
-        '<div style="flex:1;min-width:0"><div class="ellip" style="font-size:74px;font-weight:900;line-height:1.05;color:' + teamInk(col) + '">' + esc(t.name) +
+        '<div style="flex:1;min-width:0"><div class="ellip" style="font-size:74px;font-weight:900;line-height:1.05;color:' + teamInk(col) + '">' + esc(t.name) + (t.poss ? ' <span style="font-size:40px;vertical-align:middle">' + (g.sport === 'football' ? '🏈' : '●') + '</span>' : '') +
         (g.state === 'post' && t.winner ? ' <span style="font-size:24px;padding:4px 12px;border-radius:9px;background:var(--accent);color:var(--ink);vertical-align:middle">W</span>' : '') + '</div>' +
         (sub ? '<div style="font-size:26px;font-weight:700;opacity:.85;color:' + teamInk(col) + '">' + esc(sub) + '</div>' : '') + '</div>' +
         '<div style="width:290px;align-self:stretch;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,.28);color:#fff">' + right + '</div></div>';
     };
     var status = g.state === 'pre' ? (sameDay(g.date, now()) ? 'Today' : DOWL[g.date.getDay()]) + ' · ' + hm(g.date) + (sum && sum.tv ? ' · ' + sum.tv : '') : g.state === 'in' ? 'Live · ' + g.status : g.status + (sum && sum.venue ? ' · ' + sum.venue : '');
-    var bottom = g.state === 'pre' ? previewCards(g, sum) : statCards(g, sum, teams);
+    var bottom = g.state === 'pre' ? previewCards(g, sum) : g.state === 'in' && lv ? liveCards(g, lv, teams) : statCards(g, sum, teams);
+    if (takeover) status = (g.state === 'in' ? 'Live · ' + g.status : 'Final · ' + g.status.replace(/^Final\s*[·/-]?\s*/i, '')).replace(/ · $/, '');
     // arena lights: each team's color glows in from its own side
     return '<div style="position:absolute;inset:0;background:radial-gradient(ellipse 75% 90% at 0% 10%,' + glowColor(a) + '99,transparent 70%),radial-gradient(ellipse 75% 90% at 100% 90%,' + glowColor(b) + '99,transparent 70%),radial-gradient(ellipse at 50% 50%,#151a20,#07090c 80%)"></div>' +
       '<div style="position:absolute;inset:0;background:repeating-linear-gradient(90deg,rgba(255,255,255,.025) 0 2px,transparent 2px 120px)"></div>' +
-      btag(esc(g.lg) + (g.state === 'pre' ? ' · Up next' : g.state === 'in' ? ' · Live' : ' · Final')) + top +
+      btag(esc(g.lg) + (g.state === 'pre' ? ' · Up next' : g.state === 'in' ? ' · Live' : ' · Final')) + top + (crunch ? '<div class="btag" style="left:auto;right:240px;background:#c62828;animation:blink 1.4s ease-in-out infinite">Close finish</div>' : '') +
       '<div style="position:absolute;left:56px;right:56px;top:88px;display:flex;flex-direction:column;gap:12px">' + bar(a) + bar(b) +
       '<div style="align-self:center;margin-top:2px;padding:7px 22px;border-radius:999px;font-size:17px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;' + (g.state === 'in' ? 'background:#c62828' : 'background:rgba(255,255,255,.14)') + '">' + esc(status) + '</div></div>' + bottom;
   }
@@ -1247,6 +1302,367 @@
     var body = weatherPage(p).replace(/class="tile"/g, 'class="glass"');
     return '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,6,18,.55) 0%,rgba(10,6,18,.3) 40%,rgba(10,6,18,.65) 100%)"></div>' + tag +
       '<div style="position:absolute;left:40px;right:40px;top:96px;bottom:36px;display:flex;flex-direction:column">' + body + '</div>';
+  }
+
+  // ------------------------------------------------------------ time of day: night mode and the morning briefing
+  function hmToH(s, dflt) { var m = /^(\d+):(\d+)$/.exec(String(s || '')); return m ? +m[1] + +m[2] / 60 : dflt; }
+  function isNight() {
+    if (Q.has('night')) return true;
+    if (Q.has('day') || S.wakeUntil > Date.now()) return false;
+    var c = C.night || {}, n = now(), h = n.getHours() + n.getMinutes() / 60;
+    if (c.enabled === false) return false;
+    var a = c.start != null ? c.start : 23, b = c.end != null ? c.end : 5;
+    return a > b ? (h >= a || h < b) : (h >= a && h < b);
+  }
+  function isBriefing() {
+    if (Q.has('briefing')) return true;
+    var c = C.briefing || {}, n = now(), h = n.getHours() + n.getMinutes() / 60, wkend = n.getDay() === 0 || n.getDay() === 6;
+    if (c.enabled === false || isNight()) return false;
+    return h >= hmToH(c.start, 5) && h < hmToH(wkend ? c.weekendEnd : c.weekdayEnd, wkend ? 10 : 8.5);
+  }
+  function emptyBleed(msg) { return '<div style="position:absolute;inset:0;background:rgba(8,6,14,.7);display:flex;align-items:center;justify-content:center">' + note(esc(msg)) + '</div>'; }
+  function tagChip(t, hot) { return '<span class="tagchip' + (hot && t.hot ? ' hot' : '') + '">' + (t.emoji ? '<span>' + t.emoji + '</span>' : '') + esc(t.text) + '</span>'; }
+  // weekly things (trash day): the night before after 3 PM, and the morning of
+  function weeklyTags() {
+    var n = now(), h = n.getHours(), dow = n.getDay(), out = [];
+    (C.weekly || []).forEach(function (w) {
+      if (w.nightBefore !== false && (dow + 1) % 7 === w.day && h >= (w.from != null ? w.from : 15)) out.push({ emoji: w.emoji || '', text: w.tonight || w.label + ' tomorrow', hot: true });
+      else if (dow === w.day && h < (w.until != null ? w.until : 12)) out.push({ emoji: w.emoji || '', text: w.today || w.label + ' today', hot: true });
+    });
+    return out;
+  }
+  // "leave by" for the next event that has an address (drive times come from Google Maps through your Apps Script)
+  function leaveTags(ev) {
+    var n = now(), e = (ev || events() || []).filter(function (x) { return x.leave && x.start > n && x.leave - n < 3 * 3600000 && sameDay(x.start, n); })[0];
+    if (!e) return [];
+    var late = e.leave <= n;
+    return [{ emoji: '🚗', text: (late ? 'Leave now' : 'Leave by ' + hm(e.leave)) + ' · ' + e.title + (e.drive ? ' (' + e.drive + ' min)' : ''), hot: e.leave - n < 45 * 60000, e: e }];
+  }
+
+  function nightBleed() {
+    var n = now(), h = n.getHours(), m = n.getMinutes(), ev = events() || [], w = S.wx;
+    var day = h < 12 ? n : new Date(n.getFullYear(), n.getMonth(), n.getDate() + 1);
+    var first = ev.filter(function (e) { return sameDay(e.start, day) && !e.allDay && !/dinner/i.test(e.who || ''); })[0] || ev.filter(function (e) { return sameDay(e.start, day); })[0];
+    var temps = w && w.hours ? w.hours.slice(0, 9).map(function (x) { return x.temp; }).filter(num) : [], low = temps.length ? Math.min.apply(null, temps) : w && num(w.lo) ? w.lo : null;
+    var live = liveList().filter(function (g) { return g.state === 'in'; })[0];
+    var bits = [];
+    if (first) bits.push('<div><div class="nl">' + (h < 12 ? 'Today' : 'Tomorrow') + '</div><div class="nv">' + esc((first.allDay ? '' : hm(first.start) + ' · ') + first.title) + '</div></div>');
+    if (low != null) bits.push('<div><div class="nl">Overnight low</div><div class="nv">' + low + '°</div></div>');
+    if (live) bits.push('<div><div class="nl">' + esc(live.lg) + ' · ' + esc(live.status) + '</div><div class="nv">' + esc(live.teams[0].abbr + ' ' + live.teams[0].score + ' – ' + live.teams[1].score + ' ' + live.teams[1].abbr) + '</div></div>');
+    weeklyTags().forEach(function (t) { bits.push('<div><div class="nl">Reminder</div><div class="nv">' + t.emoji + ' ' + esc(t.text) + '</div></div>'); });
+    return '<div class="nightbg"></div><div class="nightwrap">' +
+      '<div class="ntime">' + (h % 12 || 12) + ':' + (m < 10 ? '0' : '') + m + '<span>' + (h < 12 ? 'AM' : 'PM') + '</span></div>' +
+      '<div class="ndate">' + DOWL[n.getDay()] + ', ' + MONL[n.getMonth()] + ' ' + n.getDate() + '</div>' +
+      (bits.length ? '<div class="nbits">' + bits.slice(0, 3).join('') + '</div>' : '') + '</div><div class="nhint">Tap to wake</div>';
+  }
+
+  function wearAdvice(w) {
+    var nw = w.now || {}, feels = num(nw.feels) ? nw.feels : nw.temp, hi = num(w.hi) ? w.hi : feels, today = (w.days || [])[0] || {};
+    if (!num(feels)) return null;
+    var base = feels <= 20 ? ['🧤', 'Winter coat, hat & gloves'] : feels <= 35 ? ['🧥', 'Heavy coat'] : feels <= 50 ? ['🧥', 'Jacket or hoodie'] : feels <= 62 ? ['👕', 'Long sleeves'] : feels <= 80 ? ['👕', 'T-shirt weather'] : ['🩳', 'Shorts & sunscreen'];
+    var extra = [];
+    if (num(hi) && hi - feels >= 15) extra.push(['🌤️', 'Layers — warming to ' + hi + '°']);
+    var wet = (w.hours || []).filter(function (x) { return num(x.pop) && x.pop >= 40; })[0];
+    if (num(today.pop) && today.pop >= 40) extra.push([today.icon === 'snow' ? '🥾' : '☔', (today.icon === 'snow' ? 'Boots — snow ' : 'Umbrella — rain ') + today.pop + '%' + (wet && wet.t !== 'Now' ? ' around ' + wet.t : '')]);
+    if (num(w.uv) && w.uv >= 6) extra.push(['🕶️', 'Sunglasses & sunscreen · UV ' + w.uv]);
+    if (num(nw.gust) && nw.gust >= 30) extra.push(['💨', 'Windy — gusts to ' + nw.gust + ' mph']);
+    return { emoji: base[0], head: base[1], extra: extra.slice(0, 3) };
+  }
+  function briefingBleed() {
+    var n = now(), h = n.getHours(), m = n.getMinutes(), w = S.wx, ev = events(), wn = w && w.now || {};
+    var greet = (h < 12 ? 'Good morning' : 'Good afternoon') + (C.familyName ? ', ' + C.familyName : '');
+    var col = function (label, inner) { return '<div class="glass" style="display:flex;flex-direction:column;gap:14px;padding:22px 26px;min-width:0;min-height:0;overflow:hidden"><div class="lbl">' + label + '</div>' + inner + '</div>'; };
+    // today
+    var today = ev ? ev.filter(function (e) { return onDay(e, n) && !/dinner/i.test(e.who || '') && (e.allDay || e.end > n); }) : null;
+    var sched = !ev ? note(esc(S.calErr || 'Loading calendar…')) : !today.length ? '<div class="head" style="font-size:34px;line-height:1.15">Nothing on the calendar — a free day</div>' :
+      today.slice(0, 5).map(function (e) {
+        return '<div style="display:flex;gap:14px;align-items:center"><div style="width:6px;align-self:stretch;border-radius:3px;background:' + esc(e.color) + ';flex-shrink:0"></div>' +
+          '<div style="width:96px;flex-shrink:0;font-size:19px;font-weight:800">' + esc(e.allDay ? 'All day' : hm(e.start)) + '</div><div style="min-width:0;flex:1"><div class="ellip" style="font-size:22px;font-weight:700">' + esc(e.title) + '</div>' +
+          '<div class="ellip" style="font-size:15px;opacity:.75">' + esc(e.who) + (e.leave ? ' · 🚗 leave ' + hm(e.leave) : '') + '</div></div></div>';
+      }).join('') + (today.length > 5 ? '<div style="opacity:.7;font-size:16px">+' + (today.length - 5) + ' more</div>' : '');
+    // wear
+    var wa = w && wearAdvice(w);
+    var wear = !wa ? note(esc(S.wxErr || 'Loading weather…')) : '<div style="display:flex;align-items:center;gap:16px"><span style="font-size:64px;line-height:1">' + wa.emoji + '</span><div class="head" style="font-size:34px;line-height:1.1">' + esc(wa.head) + '</div></div>' +
+      '<div style="font-size:19px;opacity:.85">' + (num(w.hi) ? 'High ' + w.hi + '° · Low ' + w.lo + '°' : '') + (wn.text ? ' · ' + esc(wn.text) : '') + '</div>' +
+      wa.extra.map(function (x) { return '<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:12px;background:rgba(255,255,255,.08)"><span style="font-size:26px">' + x[0] + '</span><span style="font-size:19px;font-weight:700">' + esc(x[1]) + '</span></div>'; }).join('');
+    // tonight & ahead
+    var rows = [], dinner = ev && ev.filter(function (e) { return onDay(e, n) && /dinner/i.test(e.who || ''); })[0];
+    if (dinner) rows.push(['🍽️', 'Dinner tonight', dinner.title]);
+    var seen = {};
+    S.games.concat(S.mine || []).filter(function (g) { if (seen[g.id] || !(g.followed || g.morris) || g.state === 'post' || !sameDay(g.date, n)) return false; seen[g.id] = 1; return true; }).slice(0, 2).forEach(function (g) {
+      var sum = S.sum[g.id] && S.sum[g.id].j; rows.push(['🏟️', g.lg + (g.state === 'in' ? ' · Live' : ' · ' + hm(g.date)) + (sum && sum.tv ? ' · ' + sum.tv : ''), g.teams[0].name + (g.teams[1].home ? ' at ' : ' vs ') + g.teams[1].name]);
+    });
+    var cd = countdownItems()[0]; if (cd) rows.push([cd.emoji, cd.n === 0 ? 'Today!' : cd.n + ' day' + (cd.n === 1 ? '' : 's') + ' to go', cd.name]);
+    var ahead = rows.length ? rows.slice(0, 4).map(function (r) { return '<div style="display:flex;gap:14px;align-items:center"><span style="font-size:34px;width:44px;text-align:center;flex-shrink:0">' + r[0] + '</span><div style="min-width:0"><div style="font-size:14px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;opacity:.7">' + esc(r[1]) + '</div><div class="ellip" style="font-size:22px;font-weight:700">' + esc(r[2]) + '</div></div></div>'; }).join('')
+      : '<div style="opacity:.75;font-size:19px">No games or plans tonight</div>';
+    var tags = weeklyTags().concat(leaveTags(ev));
+    return '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,6,18,.15) 0%,rgba(10,6,18,.45) 38%,rgba(10,6,18,.8) 100%)"></div>' +
+      '<div style="position:absolute;left:44px;right:44px;top:30px;display:flex;justify-content:space-between;align-items:flex-start;text-shadow:0 2px 16px rgba(0,0,0,.4)">' +
+      '<div><div class="head" style="font-size:44px;line-height:1">' + esc(greet) + '</div><div style="display:flex;align-items:baseline;gap:18px;margin-top:6px"><span style="font-size:118px;font-weight:800;line-height:.95;letter-spacing:-.03em">' + (h % 12 || 12) + ':' + (m < 10 ? '0' : '') + m + '</span>' +
+      '<span style="font-size:30px;font-weight:700">' + DOWL[n.getDay()] + '<br><span style="opacity:.8">' + MONL[n.getMonth()] + ' ' + n.getDate() + '</span></span></div></div>' +
+      (wn && num(wn.temp) ? '<div style="display:flex;align-items:center;gap:14px;padding-top:12px">' + wxIcon(wn.icon || 'cloud', 96) + '<div style="text-align:right"><div style="font-size:96px;font-weight:800;line-height:.9">' + wn.temp + '°</div><div style="font-size:20px;opacity:.85">Feels ' + (num(wn.feels) ? wn.feels + '°' : '—') + '</div></div></div>' : '') + '</div>' +
+      (tags.length ? '<div style="position:absolute;left:44px;right:44px;top:252px;display:flex;gap:10px;flex-wrap:wrap">' + tags.slice(0, 3).map(function (t) { return tagChip(t, true); }).join('') + '</div>' : '') +
+      '<div style="position:absolute;left:36px;right:36px;bottom:30px;top:' + (tags.length ? 306 : 266) + 'px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px">' +
+      col('Today', sched) + col('What to wear', wear) + col('Tonight & ahead', ahead) + '</div>';
+  }
+
+  // ------------------------------------------------------------ live game takeover
+  function liveState(g) { var l = S.sum[g.id] && S.sum[g.id].j && S.sum[g.id].j.live; return (l && l.state) || g.state; }
+  function liveList() { // your teams' games in progress, plus a just-finished one (shown once)
+    var seen = {}, list = S.games.concat(S.mine || []).filter(function (g) { if (!g.followed || seen[g.id]) return false; seen[g.id] = 1; return true; });
+    list.forEach(function (g) { if (g.state === 'in') S.wasLive[g.id] = 1; });
+    return list.filter(function (g) { return g.state === 'in' || (g.state === 'post' && S.wasLive[g.id] && (!S.finalShown[g.id] || (S.screen === 'live' && Date.now() - S.finalShown[g.id] < 120000))); });
+  }
+  function inCrunch(g) {
+    if (!g || g.state !== 'in') return false;
+    var l = (S.sum[g.id] && S.sum[g.id].j && S.sum[g.id].j.live) || {}, per = +l.period || 0, sp = g.sport;
+    var reg = sp === 'hockey' ? 3 : sp === 'baseball' ? 9 : /college-basketball/.test(g.league) ? 2 : 4;
+    var mm = /(\d+):(\d+)/.exec(l.clock || ''), secs = mm ? +mm[1] * 60 + +mm[2] : /^\d+(\.\d+)?$/.test(l.clock || '') ? +l.clock : 9999;
+    var margin = Math.abs((parseFloat(g.teams[0].score) || 0) - (parseFloat(g.teams[1].score) || 0));
+    var lim = (C.closeFinish || {})[sp] != null ? C.closeFinish[sp] : sp === 'football' ? 8 : sp === 'basketball' ? 6 : 1;
+    if (sp === 'baseball') return per >= 9 && margin <= lim;
+    return (per > reg || (per === reg && secs <= 300)) && margin <= lim;
+  }
+  function liveFromSummary(j, comp, cs) {
+    if (!comp) return null;
+    var st = comp.status || {}, ty = st.type || {}, scores = {}, win = {}, home = '';
+    cs.forEach(function (c) { var ab = c.team ? c.team.abbreviation : ''; scores[ab] = scoreVal(c.score); win[ab] = !!c.winner; if (c.homeAway === 'home') home = ab; });
+    var sit = j.situation || comp.situation || null, drv = j.drives && j.drives.current, dp = drv && drv.plays && drv.plays.length ? drv.plays[drv.plays.length - 1] : null;
+    var plays = j.plays || [], lp = plays.length ? plays[plays.length - 1] : null;
+    var last = (sit && sit.lastPlay && sit.lastPlay.text) || (dp && dp.text) || (lp && lp.text) || '';
+    var down = (sit && (sit.downDistanceText || sit.shortDownDistanceText)) || (dp && dp.end && (dp.end.downDistanceText || dp.end.shortDownDistanceText)) || '';
+    var poss = (sit && sit.possession) || (drv && drv.team && drv.team.id) || '';
+    var wpa = j.winprobability || [], wp = wpa.length ? wpa[wpa.length - 1].homeWinPercentage : (sit && sit.lastPlay && sit.lastPlay.probability ? sit.lastPlay.probability.homeWinPercentage : null);
+    return { state: ty.state, detail: ty.shortDetail || ty.detail || '', period: st.period, clock: st.displayClock, scores: scores, win: win, home: home, last: last, down: down, poss: poss, wp: typeof wp === 'number' ? wp : null };
+  }
+  function liveCards(g, lv, teams) {
+    var card = function (inner, extra) { return '<div class="glass" style="padding:16px 22px;display:flex;flex-direction:column;gap:6px;min-width:0;overflow:hidden;' + (extra || '') + '">' + inner + '</div>'; };
+    var reg = g.sport === 'hockey' ? 'Period' : g.sport === 'baseball' ? 'Inning' : /college-basketball/.test(g.league) ? 'Half' : 'Quarter';
+    var left = lv.down ? card('<div class="lbl">On the field</div><div class="head" style="font-size:34px;line-height:1.1">' + esc(lv.down) + '</div>' + (teams.filter(function (t) { return t.poss; })[0] ? '<div style="font-size:18px;opacity:.8">🏈 ' + esc(teams.filter(function (t) { return t.poss; })[0].name) + ' ball</div>' : ''))
+      : card('<div class="lbl">' + reg + '</div><div style="font-size:64px;font-weight:900;line-height:1">' + esc(lv.clock && g.sport !== 'baseball' ? lv.clock : lv.detail || '') + '</div><div style="font-size:18px;opacity:.8">' + esc(lv.detail || '') + '</div>');
+    var mid = card('<div class="lbl">Last play</div><div class="clamp3" style="font-size:24px;font-weight:700;line-height:1.3">' + esc(lv.last || 'Waiting for the next play…') + '</div>');
+    var right;
+    if (lv.wp != null) {
+      var homeT = teams.filter(function (t) { return t.abbr === lv.home; })[0] || teams[1], awayT = teams.filter(function (t) { return t !== homeT; })[0] || teams[0];
+      var hp = Math.round(lv.wp * 100), ap = 100 - hp, fav = hp >= ap ? homeT : awayT, fp = Math.max(hp, ap);
+      right = card('<div class="lbl">Win chances · ESPN</div><div style="display:flex;align-items:baseline;gap:10px"><span style="font-size:52px;font-weight:900;line-height:1;color:var(--accent)">' + fp + '%</span><span class="ellip" style="font-size:20px;font-weight:800">' + esc(fav.name) + '</span></div>' +
+        '<div style="display:flex;height:16px;border-radius:8px;overflow:hidden;margin-top:auto"><div style="width:' + ap + '%;background:' + glowColor(awayT) + '"></div><div style="width:' + hp + '%;background:' + glowColor(homeT) + '"></div></div>' +
+        '<div style="display:flex;justify-content:space-between;font-size:14px;font-weight:800;opacity:.8"><span>' + esc(awayT.abbr) + ' ' + ap + '%</span><span>' + esc(homeT.abbr) + ' ' + hp + '%</span></div>');
+    } else right = card('<div class="lbl">Updates</div><div style="font-size:20px;line-height:1.4;opacity:.85">Score and last play refresh every 30 seconds' + (inCrunch(g) ? ' — staying on this game for the finish' : '') + '</div>');
+    return '<div style="position:absolute;left:40px;right:40px;bottom:30px;height:182px;display:grid;grid-template-columns:1fr 1.7fr 1fr;gap:14px">' + left + mid + right + '</div>';
+  }
+
+  // ------------------------------------------------------------ weather alerts
+  var URGENT = /tornado (warning|emergency)|severe thunderstorm warning|flash flood (warning|emergency)|extreme wind warning|snow squall warning|dust storm warning/i;
+  function isUrgent(a) { return !!(a && URGENT.test(a.event || '')); }
+  function checkTakeover() { // urgent warnings take over for ~2½ minutes, then come back every ~10 minutes while they last
+    if (STATIC || S.screen === 'alert') return;
+    var urg = S.alerts.filter(isUrgent); if (!urg.length) return;
+    var every = ((C.alerts && C.alerts.everyMin) || 10) * 60000;
+    if (!urg.some(function (a) { return !S.alShown[a.id] || Date.now() - S.alShown[a.id] >= every; })) return;
+    if (S.detail) { S.detail = null; $('overlay').className = ''; $('card').innerHTML = ''; stopRadar(); }
+    urg.forEach(function (a) { S.alShown[a.id] = Date.now(); });
+    S.resume = S.screen; S.screen = 'alert'; S.page = 0; render(); schedule();
+  }
+  function alertLook(a) {
+    var e = a.event || '';
+    if (URGENT.test(e)) return { c: '#e53935', emoji: /tornado/i.test(e) ? '🌪️' : /flood/i.test(e) ? '🌊' : /snow/i.test(e) ? '🌨️' : /wind|dust/i.test(e) ? '💨' : '⛈️' };
+    if (/winter|snow|ice|blizzard|freez|frost|chill|cold|sleet/i.test(e)) return { c: '#5b7cff', emoji: /ice|freez|sleet/i.test(e) ? '🧊' : /chill|cold|frost/i.test(e) ? '🥶' : '❄️' };
+    if (/watch/i.test(e)) return { c: '#fb8c00', emoji: /tornado/i.test(e) ? '🌪️' : /flood/i.test(e) ? '🌊' : '⛈️' };
+    if (/heat/i.test(e)) return { c: '#ff6f3c', emoji: '🥵' };
+    if (/fog/i.test(e)) return { c: '#90a4ae', emoji: '🌫️' };
+    if (/wind/i.test(e)) return { c: '#26a69a', emoji: '💨' };
+    if (/warning/i.test(e)) return { c: '#e53935', emoji: '⚠️' };
+    return { c: '#f2b400', emoji: '⚠️' };
+  }
+  function alertParts(txt) { // NWS text: "* WHAT...Heavy snow. * WHERE...Kendall County. * WHEN..."
+    var out = [], re = /\*\s*([A-Z][A-Z ]+?)\.\.\.([\s\S]*?)(?=\n\s*\*\s*[A-Z][A-Z ]+?\.\.\.|$)/g, m;
+    while ((m = re.exec(txt || ''))) out.push([m[1].trim(), m[2].replace(/\s+/g, ' ').trim()]);
+    return out;
+  }
+  function alertBleed(a, top, urgent) {
+    if (!a) return emptyBleed('That alert has ended');
+    var lk = alertLook(a), n = now(), on = a.onset ? new Date(a.onset) : null, end = a.until ? new Date(a.until) : null;
+    var started = !on || on <= n, span = on && end && end > on ? Math.min(1, Math.max(0, (n - on) / (end - on))) : null;
+    var parts = alertParts(a.description).filter(function (x) { return !/^WHERE$/.test(x[0]); });
+    var what = parts.filter(function (x) { return x[0] === 'WHAT' || x[0] === 'HAZARD'; })[0];
+    var rest = parts.filter(function (x) { return x !== what; }).slice(0, 3);
+    var body = parts.length ? rest.map(function (x) { return '<div style="display:flex;gap:14px"><span style="width:96px;flex-shrink:0;font-size:14px;font-weight:900;letter-spacing:.08em;color:' + lk.c + ';filter:brightness(1.4);padding-top:6px">' + esc(x[0].replace('ADDITIONAL DETAILS', 'DETAILS')) + '</span><span class="clamp4" style="font-size:23px;line-height:1.35">' + esc(x[1]) + '</span></div>'; }).join('')
+      : '<div class="clamp6" style="font-size:23px;line-height:1.4">' + esc((a.description || a.headline || '').replace(/\s+/g, ' ')) + '</div>';
+    var instr = (a.instruction || '').replace(/\s+/g, ' ').trim();
+    var when = function (d) { return sameDay(d, n) ? hm(d) : DOW[d.getDay()] + ' ' + hm(d); };
+    var timeline = '<div style="display:flex;align-items:center;gap:16px;font-size:20px;font-weight:800"><span>' + (started ? 'In effect now' : 'Starts ' + esc(when(on))) + '</span>' +
+      '<div style="flex:1;height:10px;border-radius:5px;background:rgba(255,255,255,.18);overflow:hidden"><div style="height:100%;width:' + (span != null ? Math.max(3, span * 100) : started ? 50 : 0) + '%;background:' + lk.c + '"></div></div>' +
+      '<span>' + (end ? 'Until ' + esc(when(end)) : '') + '</span></div>';
+    return '<div style="position:absolute;inset:0;background:radial-gradient(ellipse 80% 70% at 15% 0%,' + lk.c + 'aa,transparent 70%),radial-gradient(ellipse at 50% 60%,#141019,#07060a 85%)"></div>' +
+      (urgent ? '<div class="urgent-frame"></div><div style="position:absolute;inset:0;background:repeating-linear-gradient(135deg,' + lk.c + '18 0 26px,transparent 26px 52px)"></div>' : '') +
+      '<div class="btag" style="background:' + lk.c + '">' + (urgent ? '⚠ Active warning' : 'Weather alert') + '</div>' + top +
+      '<div style="position:absolute;left:56px;right:56px;top:96px;display:flex;flex-direction:column;gap:16px">' +
+      '<div style="display:flex;align-items:center;gap:24px"><span style="font-size:110px;line-height:1">' + lk.emoji + '</span><div style="min-width:0"><div class="head" style="font-size:' + (a.event.length > 26 ? 62 : 78) + 'px;line-height:1">' + esc(a.event) + '</div>' +
+      '<div class="clamp2" style="font-size:24px;font-weight:600;opacity:.85;margin-top:8px">' + esc(what ? what[1] : a.headline || '') + '</div></div></div>' + timeline + '</div>' +
+      '<div style="position:absolute;left:40px;right:40px;bottom:32px;top:330px;display:grid;grid-template-columns:' + (instr ? '1.25fr 1fr' : '1fr') + ';gap:16px">' +
+      '<div class="glass" style="padding:20px 24px;display:flex;flex-direction:column;gap:12px;overflow:hidden"><div class="lbl">Details · National Weather Service</div>' + body + '</div>' +
+      (instr ? '<div class="glass" style="padding:20px 24px;display:flex;flex-direction:column;gap:12px;overflow:hidden;border-color:' + lk.c + '"><div class="lbl">What to do</div><div class="clamp6" style="font-size:26px;line-height:1.4;font-weight:600">' + esc(instr) + '</div></div>' : '') + '</div>';
+  }
+  function demoAlerts(kind) {
+    var n = now(), t = function (hh) { return new Date(n.getTime() + hh * 3600000).toISOString(); };
+    var w = { id: 'demo-w', event: 'Winter Storm Warning', onset: t(-2), until: t(20), headline: '', severity: 'Severe',
+      description: '* WHAT...Heavy snow expected. Total snow accumulations of 6 to 10 inches.\n\n* WHERE...Kendall and Grundy counties.\n\n* WHEN...Until 6 PM CST Saturday.\n\n* IMPACTS...Travel could be very difficult. The hazardous conditions could impact the Saturday morning commute.',
+      instruction: 'If you must travel, keep an extra flashlight, food, and water in your vehicle in case of an emergency. The latest road conditions can be obtained by calling 511.' };
+    var u = { id: 'demo-u', event: 'Severe Thunderstorm Warning', onset: t(-0.2), until: t(0.6), severity: 'Severe',
+      description: '* WHAT...60 mph wind gusts and quarter size hail.\n\n* WHERE...Yorkville, Oswego and Plano.\n\n* WHEN...Until 9:45 PM CDT.\n\n* IMPACTS...Hail damage to vehicles is expected. Expect wind damage to roofs, siding, and trees.',
+      instruction: 'For your protection move to an interior room on the lowest floor of a building.' };
+    return kind === 'urgent' ? [u] : kind === 'both' ? [u, w] : [w];
+  }
+
+  // ------------------------------------------------------------ family: countdowns and the reminders board
+  var HOLI_EMOJI = { newyear: '🎆', mlk: '✊', valentines: '💘', presidents: '🇺🇸', stpatricks: '☘️', easter: '🐣', mothers: '💐', memorial: '🇺🇸', fathers: '👔', july4: '🎆', labor: '🛠️', halloween: '🎃', veterans: '🎖️', thanksgiving: '🦃', christmas: '🎄', nye: '🥂' };
+  function cdEmoji(t) {
+    var r = [[/disney|universal|vacation|trip|cruise|flight/i, '✈️'], [/beach|lake|pool/i, '🏖️'], [/birthday|bday/i, '🎂'], [/christmas/i, '🎄'], [/wedding|anniversary/i, '💍'], [/school|class/i, '🎒'], [/game|season|opener|tailgate/i, '🏈'], [/concert|show|tickets/i, '🎟️'], [/party/i, '🎉'], [/camp/i, '🏕️'], [/graduat/i, '🎓'], [/baby|due/i, '👶']];
+    for (var i = 0; i < r.length; i++) if (r[i][0].test(t)) return r[i][1];
+    return '⏳';
+  }
+  function countdownItems() { // your Countdowns calendar first, then birthdays and holidays
+    var n = now(), mine = [], other = [];
+    ((S.back && S.back.calendar && S.back.calendar.countdowns) || []).forEach(function (c) { var d = new Date(c.start), k = dayDiff(n, d); if (k >= 0) mine.push({ name: c.title, date: d, n: k, emoji: cdEmoji(c.title) }); });
+    (C.birthdays || []).forEach(function (b) {
+      var p = String(b.date || '').split('-'); if (p.length < 2) return;
+      var d = new Date(n.getFullYear(), +p[0] - 1, +p[1]); if (dayDiff(n, d) < 0) d = new Date(n.getFullYear() + 1, +p[0] - 1, +p[1]);
+      other.push({ name: b.name + '’s birthday', sub: b.year ? 'Turning ' + (d.getFullYear() - b.year) : '', date: d, n: dayDiff(n, d), emoji: '🎂' });
+    });
+    (window.upcomingHolidays ? window.upcomingHolidays(n, 4) : []).forEach(function (h) { other.push({ name: h.name, date: h.date, n: h.n, emoji: HOLI_EMOJI[h.id] || '🎉' }); });
+    mine = mine.slice(0, 6); other.sort(function (a, b) { return a.n - b.n; });
+    return mine.concat(other.slice(0, Math.max(0, 6 - mine.length))).sort(function (a, b) { return a.n - b.n; });
+  }
+  function countdownBleed(top) {
+    var all = countdownItems(), k = all.length >= 6 ? 6 : all.length >= 4 ? 4 : all.length, list = all.slice(0, k);
+    var cols = k === 4 ? 2 : Math.min(3, k), rows = Math.ceil(k / cols);
+    var cards = list.map(function (c, i) {
+      return '<div class="glass" style="position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;text-align:center;padding:18px;overflow:hidden;' + (i === 0 ? 'border:2px solid var(--accent);' : '') + '">' +
+        '<div style="font-size:' + (rows > 1 ? 52 : 72) + 'px;line-height:1">' + c.emoji + '</div>' +
+        (c.n === 0 ? '<div class="head" style="font-size:' + (rows > 1 ? 70 : 96) + 'px;line-height:1;color:var(--accent)">Today!</div>' :
+          '<div style="display:flex;align-items:baseline;gap:10px"><span style="font-size:' + (rows > 1 ? 96 : 130) + 'px;font-weight:900;line-height:.95;color:var(--accent);font-variant-numeric:tabular-nums">' + c.n + '</span><span style="font-size:24px;font-weight:800;opacity:.8">day' + (c.n === 1 ? '' : 's') + '</span></div>') +
+        '<div class="ellip" style="max-width:100%;font-size:' + (rows > 1 ? 28 : 34) + 'px;font-weight:800">' + esc(c.name) + '</div>' +
+        '<div style="font-size:17px;opacity:.75">' + esc(DOWL[c.date.getDay()] + ', ' + MONL[c.date.getMonth()] + ' ' + c.date.getDate() + (c.sub ? ' · ' + c.sub : '')) + '</div></div>';
+    });
+    return '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,6,18,.55),rgba(10,6,18,.75))"></div>' + btag('Countdowns') + top +
+      '<div style="position:absolute;left:40px;right:40px;top:92px;bottom:32px;display:grid;grid-template-columns:repeat(' + cols + ',minmax(0,1fr));grid-template-rows:repeat(' + rows + ',minmax(0,1fr));gap:16px">' + cards.join('') + '</div>';
+  }
+  function boardLists() { // lists your iPhone Shortcut sends: one with "grocer" in the name, and the family board
+    var L2 = (S.back && S.back.reminders && S.back.reminders.lists) || {}, out = { grocery: null, notes: [], at: null };
+    Object.keys(L2).forEach(function (name) {
+      var items = String(L2[name].items || '').split(/\n/).map(function (x) { return x.trim(); }).filter(Boolean);
+      if (/grocer|shopping/i.test(name)) { if (items.length) out.grocery = { name: name, items: items, at: L2[name].at }; }
+      else if (/board|family|message|note/i.test(name)) out.notes = out.notes.concat(items);
+    });
+    return out;
+  }
+  function ago(iso) { var m = Math.round((Date.now() - new Date(iso)) / 60000); return !iso || isNaN(m) ? '' : m < 2 ? 'just now' : m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + 'h ago' : Math.round(m / 1440) + 'd ago'; }
+  function boardBleed(top) {
+    var b = boardLists(), both = b.grocery && b.notes.length;
+    var groc = '';
+    if (b.grocery) {
+      var it = b.grocery.items.slice(0, both ? 20 : 30), gc = both ? (it.length > 10 ? 2 : 1) : (it.length > 20 ? 3 : it.length > 10 ? 2 : 1);
+      groc = '<div class="notepad"><div style="display:flex;justify-content:space-between;align-items:baseline"><div class="head" style="font-size:36px">🛒 ' + esc(b.grocery.name) + '</div><div style="font-size:16px;opacity:.6">' + b.grocery.items.length + ' item' + (b.grocery.items.length === 1 ? '' : 's') + (b.grocery.at ? ' · ' + ago(b.grocery.at) : '') + '</div></div>' +
+        '<div style="display:grid;grid-template-columns:repeat(' + gc + ',minmax(0,1fr));grid-auto-rows:min-content;column-gap:28px;row-gap:2px;margin-top:10px">' + it.map(function (x) { return '<div class="ellip" style="display:flex;align-items:center;gap:12px;font-size:23px;font-weight:600;padding:5px 0;border-bottom:1px solid rgba(60,40,20,.15)"><span style="width:18px;height:18px;border-radius:50%;border:2.5px solid rgba(60,40,20,.45);flex-shrink:0"></span>' + esc(x) + '</div>'; }).join('') + '</div>' +
+        (b.grocery.items.length > it.length ? '<div style="margin-top:auto;font-size:17px;opacity:.6">+' + (b.grocery.items.length - it.length) + ' more on your phone</div>' : '') + '</div>';
+    }
+    var notes = '';
+    if (b.notes.length) {
+      var cols2 = ['#fff59d', '#ffcc80', '#a5d6a7', '#90caf9', '#f48fb1', '#ce93d8'], nn = b.notes.slice(0, both ? 4 : 6), nc = both ? 2 : 3;
+      notes = '<div style="display:grid;grid-template-columns:repeat(' + nc + ',minmax(0,1fr));grid-template-rows:repeat(' + Math.ceil(nn.length / nc) + ',minmax(0,1fr));gap:22px;padding:8px;min-height:0">' + nn.map(function (x, i) {
+        return '<div class="sticky" style="background:' + cols2[i % cols2.length] + ';transform:rotate(' + [-2, 1.5, -1, 2, -1.5, 1][i % 6] + 'deg)"><div class="clamp5" style="font-size:' + (x.length > 60 ? 22 : 28) + 'px">' + esc(x) + '</div></div>';
+      }).join('') + '</div>';
+    }
+    return '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,6,18,.5),rgba(10,6,18,.75))"></div>' + btag('Family board') + top +
+      '<div style="position:absolute;left:40px;right:40px;top:92px;bottom:32px;display:grid;grid-template-columns:' + (both ? '1fr 1fr' : '1fr') + ';gap:26px">' + groc + notes + '</div>';
+  }
+
+  // ------------------------------------------------------------ standings (Scores pages)
+  var PRO = { nfl: 'NFL', nba: 'NBA', nhl: 'NHL', mlb: 'MLB', wnba: 'WNBA' };
+  function standingsLeagues() { // leagues of your pro teams that are in season (one of your teams played or plays within 10 days)
+    if (C.standings === false) return [];
+    var out = [];
+    C.teams.forEach(function (tm) {
+      if (!PRO[tm.league] || out.indexOf(tm.league) >= 0) return;
+      if (!DEMO && !(S.mine || []).some(function (g) { return g.league === tm.league; })) return;
+      out.push(tm.league);
+    });
+    out.forEach(function (lg) { if (!S.standings[lg]) loadStandings(lg); });
+    return out.filter(function (lg) { return S.standings[lg] && S.standings[lg].length; });
+  }
+  function loadStandings(league) {
+    var tm = C.teams.filter(function (t) { return t.league === league; })[0], key = 'stand:' + league, c = load(key, 60 * 60000);
+    if (window.__STAND && window.__STAND[league]) { S.standings[league] = window.__STAND[league]; return; }
+    if (c) { S.standings[league] = c; return; }
+    S.standings[league] = [];
+    var base = 'https://site.api.espn.com/apis/v2/sports/' + tm.sport + '/' + league + '/standings';
+    getJSON(base + (league === 'nba' || league === 'wnba' ? '' : '?level=3')).catch(function () { return getJSON(base); }).then(function (j) {
+      var groups = [];
+      (function walk(o, parent) {
+        if (!o || typeof o !== 'object') return;
+        var kids = o.children || [];
+        if (o.standings && (o.standings.entries || []).length && !kids.length) groups.push({ name: o.name || '', abbr: o.abbreviation || '', parent: parent, entries: o.standings.entries.map(standRow) });
+        kids.forEach(function (k) { walk(k, o.abbreviation || o.name || ''); });
+      })(j, '');
+      groups.forEach(function (g) { sortStand(g.entries, league); });
+      S.standings[league] = groups; if (groups.length) save(key, groups);
+      if (S.screen === 'scores') render();
+    }).catch(function () { setTimeout(function () { delete S.standings[league]; }, 10 * 60000); });
+  }
+  function standRow(en) {
+    var st = en.stats || [], t = en.team || {}, g = function (nm) { var x = st.filter(function (y) { return y.name === nm || y.type === nm; })[0]; return x ? (x.displayValue != null ? x.displayValue : x.value) : ''; },
+      v = function (nm) { var x = st.filter(function (y) { return y.name === nm; })[0]; return x && typeof x.value === 'number' ? x.value : null; };
+    return { id: t.id, name: t.shortDisplayName || t.name || t.displayName || '', full: t.displayName || '', abbr: t.abbreviation || '', logo: (t.logos && t.logos[0] && t.logos[0].href) || '',
+      w: g('wins'), l: g('losses'), t: v('ties') ? g('ties') : '', otl: g('otLosses'), pct: g('winPercent'), gb: g('gamesBehind'), pts: g('points'), gp: g('gamesPlayed'), strk: g('streak'),
+      seed: v('playoffSeed'), pv: v('points'), wp: v('winPercent'), wv: v('wins'), clinch: g('clincher') };
+  }
+  function sortStand(rows, league) {
+    rows.sort(function (a, b) {
+      if (league === 'nhl') return (b.pv || 0) - (a.pv || 0) || (b.wv || 0) - (a.wv || 0);
+      return (b.wp || 0) - (a.wp || 0) || (b.wv || 0) - (a.wv || 0);
+    });
+  }
+  function isMine(row, league) {
+    return C.teams.some(function (tm) {
+      if (tm.league !== league) return false;
+      var k = String(tm.team || '').toLowerCase();
+      return (tm.id && String(tm.id) === String(row.id)) || k === String(row.abbr).toLowerCase() || (tm.name && String(row.full).toLowerCase().indexOf(String(tm.name).toLowerCase()) >= 0);
+    });
+  }
+  function standingsBleed(league, top) {
+    var groups = S.standings[league] || []; if (!groups.length) return emptyBleed('Loading standings…');
+    var pick = groups.filter(function (g) { return g.entries.some(function (r) { return isMine(r, league); }); }).slice(0, 2);
+    if (pick.length < 2) { // keep it to two even panels: add the group next to yours
+      var first = pick[0] || groups[0], sib = groups.filter(function (g) { return g !== first && g.parent === first.parent; })[0] || groups.filter(function (g) { return g !== first; })[0];
+      pick = [first].concat(sib ? [sib] : []);
+    }
+    var tc = function (r) { var c = load('tc:' + league + ':' + r.id); return c && c.c1 ? c : null; };
+    var ties = pick.some(function (g) { return g.entries.some(function (r) { return +r.t > 0; }); });
+    var heads = league === 'nhl' ? ['GP', 'W', 'L', 'OTL', 'PTS'] : league === 'nfl' ? ['W', 'L'].concat(ties ? ['T'] : [], ['PCT', 'STRK']) : ['W', 'L', 'PCT', 'GB', 'STRK'];
+    var vals = function (r) { return league === 'nhl' ? [r.gp, r.w, r.l, r.otl, r.pts] : league === 'nfl' ? [r.w, r.l].concat(ties ? [r.t || '0'] : [], [r.pct, r.strk]) : [r.w, r.l, r.pct, r.gb, r.strk]; };
+    var glow = [];
+    var panel = function (g) {
+      var rows = g.entries, rh = Math.max(30, Math.min(118, Math.floor(600 / rows.length))), fs = rh >= 80 ? 28 : rh >= 56 ? 25 : rh >= 42 ? 21 : 17, lp = Math.min(64, Math.round(rh * .72));
+      var grid = 'display:grid;grid-template-columns:' + (rh >= 80 ? 36 : 30) + 'px ' + (lp + 6) + 'px minmax(0,1fr) repeat(' + heads.length + ',' + (rh >= 42 ? 58 : 50) + 'px);align-items:center;column-gap:6px';
+      return '<div class="glass" style="display:flex;flex-direction:column;padding:16px 18px;min-width:0;overflow:hidden">' +
+        '<div style="display:flex;align-items:center;gap:14px;margin-bottom:8px"><img src="https://a.espncdn.com/i/teamlogos/leagues/500/' + league + '.png" alt="" style="width:46px;height:46px;object-fit:contain" onerror="this.remove()"><div class="head ellip" style="font-size:30px">' + esc(g.name.replace(/ Conference$/, '')) + '</div></div>' +
+        '<div style="' + grid + ';font-size:13px;font-weight:800;letter-spacing:.08em;opacity:.6;padding:0 8px 6px"><span></span><span></span><span>TEAM</span>' + heads.map(function (h) { return '<span style="text-align:center">' + h + '</span>'; }).join('') + '</div>' +
+        rows.map(function (r, i) {
+          var me = isMine(r, league), c = tc(r), c1 = c ? c.c1 : '#555c68';
+          if (me) glow.push(c ? glowColor({ c1: c.c1, c2: c.c2 }) : 'var(--accent)');
+          return '<div style="' + grid + ';height:' + rh + 'px;padding:0 8px;border-radius:10px;font-size:' + fs + 'px;font-weight:' + (me ? 900 : 600) + ';box-shadow:inset 5px 0 0 ' + c1 + ';' +
+            (me ? 'background:linear-gradient(90deg,' + teamBg({ c1: c1, c2: c ? c.c2 : '' }) + 'ee,' + teamBg({ c1: c1, c2: c ? c.c2 : '' }) + '66);' : i % 2 ? 'background:rgba(255,255,255,.04);' : '') + '">' +
+            '<span style="opacity:.7;text-align:right;padding-right:4px">' + (i + 1) + '</span>' +
+            (r.logo ? '<img src="' + esc(darkLogo(r.logo)) + '" alt="" style="width:' + lp + 'px;height:' + lp + 'px;object-fit:contain" onerror="this.onerror=null;this.src=\'' + esc(r.logo) + '\'">' : '<span></span>') +
+            '<span class="ellip">' + esc(r.name) + (r.clinch && /^[xyz*e]$/i.test(r.clinch) ? ' <span style="font-size:.6em;opacity:.7">' + esc(r.clinch) + '</span>' : '') + '</span>' +
+            vals(r).map(function (x) { return '<span style="text-align:center;font-variant-numeric:tabular-nums">' + esc(x == null ? '' : x) + '</span>'; }).join('') + '</div>';
+        }).join('') + '</div>';
+    };
+    var html = pick.map(panel).join(''), ga = glow[0] || 'var(--accent)', gb = glow[1] || ga;
+    return '<div style="position:absolute;inset:0;background:radial-gradient(ellipse 70% 80% at 0% 0%,' + ga + '66,transparent 70%),radial-gradient(ellipse 70% 80% at 100% 100%,' + gb + '66,transparent 70%),radial-gradient(ellipse at 50% 50%,#151a20,#07090c 80%)"></div>' +
+      btag('Standings · ' + PRO[league]) + top +
+      '<div style="position:absolute;left:36px;right:36px;top:88px;bottom:28px;display:grid;grid-template-columns:repeat(' + pick.length + ',minmax(0,1fr));gap:18px">' + html + '</div>';
   }
 
   // ------------------------------------------------------------ details
@@ -1395,12 +1811,18 @@
   function schedule() {
     clearTimeout(S.timer); if (STATIC) return;
     var s = S.detail ? C.timing.detail : pageDur();
-    S.timer = setTimeout(function () {
-      if (S.detail) return closeDetail();
-      var pg = pageList(S.screen);
-      if (S.screen !== 'home' && S.page < pg.length - 1) { S.page++; render(); schedule(); return; }
-      setScreen(ORDER[(ORDER.indexOf(S.screen) + 1) % ORDER.length]);
-    }, s * 1000);
+    S.timer = setTimeout(advance, s * 1000);
+  }
+  function advance() {
+    if (S.detail) return closeDetail();
+    if (S.screen === 'night') { if (!isNight()) return setScreen('home'); render(); schedule(); return; }
+    var pg = pageList(S.screen);
+    if (S.screen !== 'home' && S.page < pg.length - 1) { S.page++; render(); schedule(); return; }
+    if (S.screen === 'alert') { var back = S.resume; S.resume = null; return setScreen(isNight() ? 'night' : back && back !== 'alert' && back !== 'night' ? back : 'home'); }
+    if (isNight()) return setScreen('night');
+    if (S.screen === 'live') { if (liveList().some(inCrunch)) { S.page = 0; S.lastPage = null; render(); schedule(); return; } return setScreen(ORDER[1]); } // close finish: stay on it
+    if (S.screen === 'home' && liveList().length) return setScreen('live');
+    setScreen(ORDER[(ORDER.indexOf(S.screen) + 1) % ORDER.length]);
   }
   var peekT = null;
   document.addEventListener('click', function (e) {
@@ -1409,6 +1831,7 @@
     if (st.classList.contains('immersive') && !e.target.closest('#overlay')) { // full screens: a tap shows the menu for a few seconds
       st.classList.add('peek'); clearTimeout(peekT); peekT = setTimeout(function () { st.classList.remove('peek'); }, 6000);
     }
+    if (S.screen === 'night') { S.wakeUntil = Date.now() + ((C.night && C.night.wakeMin) || 10) * 60000; return setScreen('home'); } // tap to wake
     if (!el) return;
     if (el.hasAttribute('data-close')) return closeDetail();
     if (el.hasAttribute('data-page')) { S.page = +el.getAttribute('data-page'); render(); schedule(); return; }
@@ -1499,6 +1922,9 @@
   setInterval(loadBackend, 10 * 60000);
   setInterval(function () { if (S.screen === 'home' && !S.detail) { S.photoIdx++; showPhoto('homephoto'); } }, 15000);
   setInterval(function () { if (S.games.some(function (g) { return g.state === 'in'; })) loadScores(); }, 45000);
+  setInterval(function () { liveList().forEach(function (g) { if (g.state === 'in') ensureSummary(g); }); }, 30000); // live game: score, last play and win chances every 30 seconds
+  if (DEMO && Q.get('alerts')) S.alerts = demoAlerts(Q.get('alerts'));
+  if (Q.get('pg')) setTimeout(function () { var i = pageList(S.screen).indexOf(Q.get('pg')); if (i >= 0) { S.page = i; render(); } }, 200);
   var D = Q.get('detail');
-  if (D) { var p = D.split(':'); setTimeout(function () { openDetail(p[0], +(p[1] || 0), +(p[2] || 0)); }, 300); } else schedule();
+  if (D) { var p = D.split(':'); setTimeout(function () { openDetail(p[0], +(p[1] || 0), +(p[2] || 0)); }, 300); } else { if (isNight() && S.screen === 'home') S.screen = 'night'; render(); schedule(); }
 })();

@@ -191,3 +191,29 @@ button { font: inherit; color: inherit; }
 @keyframes layerIn { from { opacity: 0; transform: scale(1.012); } to { opacity: 1; transform: none; } }
 @keyframes layerOut { from { opacity: 1; } to { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .layer.entering, .layer.leaving { animation-duration: .01s; } }
+
+/* ---- night mode, tags, alerts, family board ---- */
+#stage.nocorner #corner { opacity: 0 !important; }
+#stage.night #nav, #stage.night #alert, #stage.night #corner { display: none !important; }
+.nightbg { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 45%, rgba(30,16,6,.88), rgba(0,0,0,.97) 75%); }
+.nightwrap { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #ffb877; opacity: .62; text-align: center; }
+.ntime { font-size: 230px; font-weight: 700; line-height: .9; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+.ntime span { font-size: 54px; margin-left: 14px; letter-spacing: 0; }
+.ndate { font-size: 34px; font-weight: 600; }
+.nbits { display: flex; gap: 56px; margin-top: 34px; }
+.nbits .nl { font-size: 16px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; opacity: .7; }
+.nbits .nv { font-size: 28px; font-weight: 700; margin-top: 4px; max-width: 420px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nhint { position: absolute; bottom: 26px; left: 0; right: 0; text-align: center; color: #ffb877; opacity: .25; font-size: 16px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.tagchip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px; background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.25); font-size: 16px; font-weight: 800; white-space: nowrap; color: #fff; }
+.tagchip.hot { background: var(--accent); color: var(--ink); border-color: transparent; }
+.home .tagchip { font-size: 13px; padding: 4px 10px; }
+@keyframes pulseRed { 0%, 100% { box-shadow: inset 0 0 0 8px rgba(255,60,60,.95); } 50% { box-shadow: inset 0 0 0 18px rgba(255,60,60,.35); } }
+.urgent-frame { position: absolute; inset: 0; z-index: 3; pointer-events: none; animation: pulseRed 1.6s ease-in-out infinite; }
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+.clamp5, .clamp6 { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
+.clamp5 { -webkit-line-clamp: 5; } .clamp6 { -webkit-line-clamp: 6; }
+.notepad { display: flex; flex-direction: column; padding: 24px 30px; border-radius: 18px; background: #fbf4e2; color: #2b2116; box-shadow: 0 14px 34px rgba(0,0,0,.45); overflow: hidden; min-height: 0;
+  background-image: linear-gradient(90deg, transparent 0 46px, rgba(220,80,80,.35) 46px 48px, transparent 48px); }
+.notepad .head { color: #2b2116; }
+.sticky { display: flex; align-items: center; justify-content: center; padding: 22px; color: #2b2116; font-weight: 700; line-height: 1.25; text-align: center; box-shadow: 0 12px 24px rgba(0,0,0,.4); border-radius: 4px; min-height: 0; overflow: hidden; font-family: var(--head, inherit); }
+body.low .urgent-frame, body.low [style*="blink"] { animation: none; }

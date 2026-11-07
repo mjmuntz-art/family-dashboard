@@ -64,6 +64,33 @@ To stop the Echo from going back to its own home screen:
 - `birthdays`: each person's name and birthday, like `{ name: 'Mom', date: '03-14', year: 1985 }`. On that day the whole dashboard switches to the birthday look and says "Happy Birthday, Mom!", with "Turning 41 today" if you include the year. A week ahead, the top banner counts down to it.
 - `lowPower: true`: fewer falling leaves and snowflakes, no paper-grain texture, and no blur behind the panels. Use it if the Echo ever feels sluggish.
 
+## Through the day
+
+- **Night mode (11 PM–5 AM)**: a dim, warm clock with tomorrow's first event and the overnight low. Tap to wake it for 10 minutes. Change the hours in `night`.
+- **Morning briefing (5–8:30 AM weekdays, 5–10 AM weekends)**: replaces Home with today's plans, what to wear, tonight's dinner and games, and the next countdown. Change it in `briefing`.
+- **Live games**: when one of your teams is playing, a live scorebug page shows right after Home: down and distance, the last play and win chances, refreshed every 30 seconds. In a close finish (last 5 minutes, within `closeFinish` points) it stays on the game. The final shows once.
+- **Weather warnings**: tornado, severe thunderstorm, flash flood, extreme wind and snow squall warnings take over for 2½ minutes, then come back every 10 minutes while they're active (`alerts`). Watches, winter storm warnings and advisories show as their own pages at the start of Weather.
+- **Trash day**: "Trash goes out tonight" Sunday after 3 PM, "Trash pickup today" Monday morning. Add other weekly things in `weekly`.
+
+## Extra setup for the new features
+
+1. **Leave-by times**: in Code.gs, set `HOME_ADDRESS` to your street address. Any event with a location gets a "leave by" time from Google Maps traffic. The first run asks you to allow Maps; say yes.
+2. **Countdowns**: make a Google Calendar named **Countdowns**, share it with the account that runs the script, and add it to `CALENDARS` in Code.gs. Put each thing you're counting down to on its date. It shows on the Family countdowns page and in the morning briefing, never on the regular schedule.
+3. **Grocery list and family board (iPhone Reminders)**: build a Shortcut (steps below). Any list with "grocer" or "shopping" in the name becomes the grocery list. A list named **Family Board** becomes sticky notes.
+4. Save Code.gs, then **Deploy → Manage deployments → edit → New version**.
+
+### The Reminders Shortcut
+
+In the Shortcuts app, make a new shortcut named "Send lists to dashboard":
+
+1. **Find Reminders** where *List* is *Groceries* and *Is Not Completed*.
+2. **Get Details of Reminders** → *Title*.
+3. **Combine Text** with *New Lines*.
+4. **Get Contents of URL**: your Apps Script URL, Method **POST**, Request Body **JSON** with three fields: `key` = your KEY, `list` = `Groceries`, `items` = *Combined Text*.
+5. Repeat steps 1–4 for the **Family Board** list (with `list` = `Family Board`).
+
+Then in **Automation**, add **App → Reminders → Is Closed → Run Immediately** with that shortcut, plus a **Time of Day** automation (e.g. every morning) so it stays fresh.
+
 ## Preview tricks (add to the end of the address)
 
 - `?screen=weather&page=2`: jump to a page of a cycling screen (pages count from 0).
@@ -75,13 +102,17 @@ To stop the Echo from going back to its own home screen:
 | `?theme=christmas` | Force a look: `january` … `december`, `newyear`, `mlk`, `valentines`, `presidents`, `stpatricks`, `easter`, `mothers`, `memorial`, `fathers`, `july4`, `labor`, `halloween`, `veterans`, `thanksgiving`, `christmas`, `nye`, `birthday` |
 | `?screen=weather` | Start on a screen: `home`, `family`, `photos`, `scores`, `plays`, `news`, `weather` |
 | `?static` | Stop the rotation |
+| `?night` / `?briefing` | Preview night mode or the morning briefing |
+| `?demo&alerts=demo` | Preview a winter storm warning page (`alerts=urgent` for a takeover) |
 
 You can combine them with `&`, for example `?demo&date=2026-12-25&static`.
 
 ## Where the data comes from
 
 - **Weather**: the National Weather Service supplies the official hourly and 7-day forecast and alerts. Open-Meteo supplies current conditions, UV, sunrise/sunset and air quality. The moon phase is calculated on the page.
-- **Radar**: RainViewer radar over a CARTO/OpenStreetMap map.
+- **Radar**: RainViewer radar over an Esri map.
+- **Standings**: ESPN standings for your NFL, NBA, NHL and MLB teams while they're in season.
+- **Drive times**: Google Maps, through your Apps Script.
 - **Scores, logos, team colors, box scores and pre-game odds**: ESPN's public scoreboard data.
 - **News**: AP (through its Flipboard feed), the Chicago Tribune, Sun-Times, WGN, NBC 5 and ABC 7, plus Shaw Local (Kendall County Now). These are fetched by your Apps Script. Stories without a picture borrow the article's share image.
 - **Calendar, photos, plays, Morris games**: your own Google account, through the Apps Script.

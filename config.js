@@ -8,20 +8,43 @@ window.DASH_CONFIG = {
 
   // Your Google Apps Script web app (see README, step 2).
   // Leave blank until it's deployed — those screens show a setup note until then.
-  appsScriptUrl: 'https://script.google.com/macros/s/AKfycbz7k4Tst0Tj0AtIYF45mipxAJTrFF8xZ7nlkT3vtfmepS6Gl518MwO8FvnOnlo46TWL/exec',
-  appsScriptKey: 'FranklinandWestonarebabies604!',          // the same secret you put in Code.gs (KEY)
+  appsScriptUrl: '',
+  appsScriptKey: '',          // the same secret you put in Code.gs (KEY)
 
   // How long each screen stays up (seconds).
   timing: {            // seconds
-    home: 90,          // home dashboard
+    home: 60,          // home dashboard
     screen: 30,        // Family, Photos and Plays
-    scoresGrid: 30,    // Scores overview (all games)
-    game: 30,          // each of your teams' game pages (box score / up next)
-    photo: 30,
-    story: 30,         // each news story (6 stories)
-    weather: 30,       // each weather page (5 pages: now, hours, week, sun & moon, radar)
-    detail: 60         // pop-ups after you tap something
+    scoresGrid: 15,    // Scores overview (all games)
+    game: 12,          // each of your teams' game pages (box score / up next)
+    story: 10,         // each news story (6 stories)
+    photo: 10,         // each photo collage (3 per visit)
+    weather: 12,       // each weather page (5 pages: now, hours, week, sun & moon, radar)
+    detail: 20,        // pop-ups after you tap something
+    live: 40,          // each live game page (your teams); refreshes every 30 seconds while it's up
+    standings: 15,     // each standings page on Scores
+    alert: 15,         // each watch / advisory page on Weather
+    board: 20          // grocery list / family board and countdowns pages on Family
   },
+
+  // Night mode: dim clock only. Tap the screen to wake it for 10 minutes. Hours use a 24-hour clock.
+  night: { start: 23, end: 5, wakeMin: 10 },
+
+  // Morning briefing replaces Home in the morning: today's plans, what to wear, tonight's dinner and games.
+  briefing: { start: '05:00', weekdayEnd: '08:30', weekendEnd: '10:00' },
+
+  // Urgent warnings (tornado, severe storm, flash flood…) take over the screen for takeoverSec,
+  // then come back every everyMin minutes while they're active. Watches and winter alerts show on Weather.
+  alerts: { takeoverSec: 150, everyMin: 10 },
+
+  // Weekly reminders. day: 0 = Sunday, 1 = Monday … 6 = Saturday.
+  // Shows "tonight" the evening before (from 3 PM) and "today" that morning (until noon).
+  weekly: [
+    { day: 1, emoji: '🗑️', tonight: 'Trash goes out tonight', today: 'Trash pickup today' }
+  ],
+
+  // A live game stays on screen in a close finish: last 5 minutes, within this many points.
+  closeFinish: { football: 8, basketball: 6, hockey: 1, baseball: 1 },
 
   // Your teams: they always get a tile, plus full-screen pages for their last final and next game.
   // team can be the abbreviation ('chi'), the nickname ('Bears'), the school ('Illinois') or ESPN's ID number.
@@ -55,9 +78,6 @@ window.DASH_CONFIG = {
   // Birthdays get their own look for the whole day: date is 'MM-DD'; add year to show their age.
   // Photos in a Drive subfolder named exactly like the person show on their day.
   birthdays: [
-    { name: 'Cate', date: '02-15', year: 1994 },
-    { name: 'Mike', date: '04-06', year: 1990 },
-    { name: 'Weston', date: '12-23', year: 2025 },
     // { name: 'Mom', date: '03-14', year: 1985 },
     // { name: 'Jack', date: '08-02', year: 2016 },
   ],

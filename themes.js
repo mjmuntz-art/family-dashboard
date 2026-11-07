@@ -120,6 +120,14 @@
     });
     return best;
   }
+  // next few holidays with dates, for the Countdowns page
+  window.upcomingHolidays = function (now, count) {
+    var out = [];
+    [now.getFullYear(), now.getFullYear() + 1].forEach(function (y) {
+      HOLIDAYS.forEach(function (h) { var d = h.match(y); if (d && dayDiff(now, d) > 0) out.push({ id: h.id, name: h.name, date: d, n: dayDiff(now, d) }); });
+    });
+    return out.sort(function (x, y) { return x.n - y.n; }).filter(function (h, i, arr) { return arr.findIndex(function (z) { return z.id === h.id; }) === i; }).slice(0, count || 4);
+  };
   function inDays(name, n) { return name + (n === 1 ? ' is tomorrow' : ' in ' + n + ' days'); }
 
   // birthdays: [{ name: 'Mom', date: '03-14', year: 1985 }]
