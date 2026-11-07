@@ -382,6 +382,25 @@
     }
     return c.add(s);
   };
+  P.ghosts = function (c, n, box) { // a little ghost rises out of the pumpkin patch now and then, wobbles, and fades away
+    var r = c.r, s = '';
+    for (var i = 0; i < n; i++) {
+      var x = box[0] + r() * (box[1] - box[0]), y = box[2] + r() * (box[3] - box[2]), sz = 0.8 + r() * 0.5;
+      s += '<g class="a-ghost" style="animation-duration:' + f(18 + r() * 14) + 's;animation-delay:-' + f(r() * 30) + 's"><g transform="translate(' + f(x) + ' ' + f(y) + ') scale(' + f(sz) + ')">' +
+        '<circle r="34" fill="' + c.rad([[0, '#eaf2ff', 0.35], [1, '#eaf2ff', 0]]) + '"/>' +
+        '<path d="M-16,14 L-16,-6 C-16,-28 16,-28 16,-6 L16,14 Q12,9 8,14 Q4,9 0,14 Q-4,9 -8,14 Q-12,9 -16,14Z" fill="#f4f8ff" opacity="0.85"/>' +
+        '<ellipse cx="-6" cy="-7" rx="2.6" ry="3.6" fill="#22223a"/><ellipse cx="6" cy="-7" rx="2.6" ry="3.6" fill="#22223a"/><ellipse cx="0" cy="2" rx="3" ry="2.4" fill="#22223a" opacity="0.8"/></g></g>';
+    }
+    return c.add(s);
+  };
+  P.witch = function (c, y, cycle) { // a witch on her broom crosses the sky (and the moon) every so often
+    return c.add('<g class="a-witch" style="animation-duration:' + cycle + 's"><g transform="translate(1420 ' + y + ') scale(1.7)"><g class="a-bob">' +
+      '<path d="M-38,10 L34,2" stroke="#120d16" stroke-width="3" stroke-linecap="round"/><path d="M30,0 l18,-8 l-4,8 l6,6 l-20,-2 Z" fill="#120d16"/>' +
+      '<path d="M-6,4 C-10,-6 -4,-16 4,-16 C10,-16 12,-8 10,4 Z" fill="#120d16"/><circle cx="0" cy="-20" r="5" fill="#120d16"/>' +
+      '<path d="M-8,-22 L4,-24 L-6,-42 Z" fill="#120d16"/><path d="M-12,-22 L10,-24" stroke="#120d16" stroke-width="3" stroke-linecap="round"/>' +
+      '<path d="M8,-4 C16,-2 22,6 18,12" stroke="#120d16" stroke-width="3" fill="none"/><path d="M-4,4 L-14,14 L-8,16" stroke="#120d16" stroke-width="3" fill="none"/>' +
+      '<path d="M2,-10 C-14,-12 -20,-2 -28,-6" stroke="#120d16" stroke-width="3" fill="none"/></g></g></g>');
+  };
   P.clovers = function (c, n, colors) { // four-leaf clovers tumbling down
     var r = c.r, s = '';
     for (var i = 0; i < c.count(n); i++) {
@@ -728,6 +747,14 @@
       suns: { morning: [1056, 215, 170], evening: [1056, 223, 180] }, moon: { night: [1097, 97, 60] }, mist: { morning: [300, '#fff3e4'] }, stars: [640, 1270, 20, 240],
       geese: { morning: [820, 110], midday: [760, 90], afternoon: [800, 100], evening: [780, 120] },
       bulbs: { dusk: [[170, 171], [228, 150], [258, 154], [325, 190], [374, 215], [414, 232], [457, 239], [487, 225], [520, 187], [341, 263], [470, 335], [535, 330], [593, 336], [604, 370], [720, 372], [736, 372], [820, 430], [842, 420], [1018, 397], [1060, 435], [1122, 232], [1135, 220], [1203, 218], [1220, 353], [1252, 357]] } },
+    // October: pumpkin farm. Jack-o'-lanterns and the lantern flicker, bats at dusk and night, a ghost now and then, a witch across the moon
+    october: { dusk: true, skyMask: 'scenes/october-sky.png', fall: function () { return ['leaves', 12, ['#d9541e', '#e8822c', '#f2b33d', '#b8321a']]; },
+      lights: { morning: [[240, 300, 60, 'lamp'], [238, 600, 74, 'pumpkin'], [450, 545, 40, 'pumpkin']], midday: [[240, 300, 52, 'lamp'], [238, 600, 66, 'pumpkin'], [450, 545, 36, 'pumpkin']],
+        afternoon: [[240, 300, 60, 'lamp'], [238, 600, 74, 'pumpkin'], [450, 545, 40, 'pumpkin'], [1152, 330, 16, 'window']], evening: [[240, 300, 66, 'lamp'], [238, 600, 84, 'pumpkin'], [450, 545, 46, 'pumpkin'], [1152, 330, 18, 'window'], [1160, 470, 50, 'window']],
+        dusk: [[237, 310, 70, 'lamp'], [238, 600, 90, 'pumpkin'], [450, 555, 48, 'pumpkin'], [1152, 325, 18, 'window'], [1160, 470, 54, 'window']], night: [[240, 315, 74, 'lamp'], [238, 600, 92, 'pumpkin'], [450, 545, 50, 'pumpkin'], [520, 570, 26, 'pumpkin'], [1152, 330, 20, 'window'], [1160, 470, 58, 'window']] },
+      suns: { morning: [340, 350, 170], evening: [470, 300, 190] }, moon: { night: [928, 165, 80] }, mist: { morning: [520, '#ffe6cc'], night: [520, '#9aa6c8'] }, stars: [560, 1270, 20, 300],
+      bats: { evening: 3, dusk: 6, night: 9 }, ghosts: { dusk: 1, night: 3, box: [600, 1000, 470, 560] }, witch: { dusk: [120, 70], night: [158, 45] },
+      bulbs: { dusk: [[180, 115], [125, 190], [195, 220], [292, 255], [340, 272], [388, 277], [440, 278], [493, 275], [548, 265], [608, 253], [668, 233], [731, 205], [798, 170], [870, 130], [948, 72], [237, 400]] } },
     august: { dusk: true, skyMask: 'scenes/august-sky.png',
       suns: { morning: [315, 321, 170], afternoon: [370, 225, 150], evening: [335, 302, 180], dusk: [329, 315, 190] }, moon: { night: [325, 223, 70] },
       mist: { morning: [372, '#fff3df'] }, stars: [600, 1270, 20, 290], meteors: { night: 6 },
@@ -743,8 +770,8 @@
     var mist = cfg.mist && cfg.mist[tod];
     if (mist && !low) { out += '<g filter="' + c.blur(16) + '">'; for (var mi = 0; mi < 6; mi++) out += '<ellipse class="a-fog" style="animation-delay:-' + f(r() * 40) + 's" cx="' + f(r() * W) + '" cy="' + f(mist[0] + (r() - 0.5) * 30) + '" rx="' + f(200 + r() * 220) + '" ry="' + f(14 + r() * 12) + '" fill="' + mist[1] + '" opacity="0.4"/>'; out += '</g>'; }
     lights.forEach(function (L) { // warm glow: lamps flicker, windows breathe
-      var g = c.rad([[0, '#ffd590', 0.9 * k], [0.4, '#ffc06a', 0.35 * k], [1, '#ffb050', 0]]);
-      out += '<circle class="' + (L[3] === 'lamp' ? 'a-flicker' : 'a-pulse') + '" style="animation-delay:-' + f(r() * 5) + 's" cx="' + L[0] + '" cy="' + L[1] + '" r="' + L[2] + '" fill="' + g + '"/>';
+      var g = L[3] === 'pumpkin' ? c.rad([[0, '#ffb347', 0.95 * Math.max(k, 0.55)], [0.45, '#ff7a1a', 0.4 * Math.max(k, 0.55)], [1, '#ff6a00', 0]]) : c.rad([[0, '#ffd590', 0.9 * k], [0.4, '#ffc06a', 0.35 * k], [1, '#ffb050', 0]]);
+      out += '<circle class="' + (L[3] === 'window' ? 'a-pulse' : 'a-flicker') + '" style="animation-delay:-' + f(r() * 5) + 's" cx="' + L[0] + '" cy="' + L[1] + '" r="' + L[2] + '" fill="' + g + '"/>';
       if (L[3] === 'lamp' && k > 0.6) out += '<ellipse class="a-pulse" cx="' + L[0] + '" cy="' + (L[1] + L[2] * 1.5) + '" rx="' + f(L[2] * 1.8) + '" ry="' + f(L[2] * 0.35) + '" fill="' + c.rad([[0, '#ffcf8a', 0.35 * k], [1, '#ffcf8a', 0]]) + '"/>';
     });
     var sun = cfg.suns && cfg.suns[tod]; // the low sun breathes
@@ -774,6 +801,10 @@
     var bf = cfg.butterflies && cfg.butterflies[tod]; if (bf) K.butterflies(c, 6, bf[0], bf[1], ['#ffd84d', '#ffffff', '#f7a8c8', '#9ad0ff', '#ff9f43']);
     var ff = cfg.fireflies && cfg.fireflies[tod]; if (ff) P.fireflies(c, tod === 'night' ? 26 : 16, ff[0], ff[1]);
     if (cfg.apples && tod !== 'night') P.apples(c, 6, cfg.apples);
+    var sm = function (fn) { if (!cfg.skyMask) return fn(); var k2 = c.uid('k'); c.defs += '<mask id="' + k2 + '" maskUnits="userSpaceOnUse" x="-71.1" y="0" width="1422.2" height="800"><image href="' + cfg.skyMask + '" x="-71.1" y="0" width="1422.2" height="800" preserveAspectRatio="none"/></mask>'; c.add('<g mask="url(#' + k2 + ')">'); fn(); c.add('</g>'); };
+    if (cfg.bats && cfg.bats[tod]) sm(function () { P.bats(c, cfg.bats[tod]); });
+    if (cfg.witch && cfg.witch[tod]) sm(function () { P.witch(c, cfg.witch[tod][0], cfg.witch[tod][1]); });
+    if (cfg.ghosts && cfg.ghosts[tod]) P.ghosts(c, cfg.ghosts[tod], cfg.ghosts.box);
     var gz = cfg.geese && cfg.geese[tod];
     if (gz) { var gk = cfg.skyMask ? c.uid('k') : ''; if (gk) { c.defs += '<mask id="' + gk + '" maskUnits="userSpaceOnUse" x="-71.1" y="0" width="1422.2" height="800"><image href="' + cfg.skyMask + '" x="-71.1" y="0" width="1422.2" height="800" preserveAspectRatio="none"/></mask>'; c.add('<g mask="url(#' + gk + ')">'); }
       K.geese(c, gz[0], gz[1], tod === 'evening' ? '#3b2140' : '#2c2a33'); if (gk) c.add('</g>'); }

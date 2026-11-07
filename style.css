@@ -248,3 +248,9 @@ body.low .urgent-frame, body.low [style*="blink"] { animation: none; }
 .home.parked > * { transform: translateY(400px); opacity: 0; pointer-events: none; }
 .brief > * { transition: transform 1.1s cubic-bezier(.2,.8,.2,1), opacity 1s ease; }
 .brief.parked > * { transform: translateY(40px); opacity: 0; pointer-events: none; }
+@keyframes aGhost { 0% { transform: translate(0, 30px); opacity: 0; } 6% { opacity: .9; } 16% { transform: translate(-30px, -20px); } 26% { transform: translate(20px, -60px); opacity: .85; } 34% { transform: translate(-10px, -100px); opacity: 0; } 100% { transform: translate(-10px, -100px); opacity: 0; } }
+.a-ghost { animation: aGhost 24s ease-in-out infinite; }
+@keyframes aWitch { 0% { transform: translateX(0); } 18% { transform: translateX(-1560px); } 100% { transform: translateX(-1560px); } }
+.a-witch { animation: aWitch 60s linear infinite; }
+@keyframes aBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+.a-bob { animation: aBob 1.6s ease-in-out infinite; }
