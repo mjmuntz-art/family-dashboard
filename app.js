@@ -12,7 +12,7 @@
   var LABELS = { home: 'Home', family: 'Family', photos: 'Photos', scores: 'Scores', plays: 'Plays', news: 'News', weather: 'Weather' };
   var S = { screen: ORDER.concat(['live', 'alert', 'night']).indexOf(Q.get('screen')) >= 0 ? Q.get('screen') : 'home', detail: null, theme: null, lastScreen: null,
     wx: null, alerts: [], games: [], back: null, backErr: null, wxErr: null, scoresErr: null, photoIdx: 0, timer: null, page: +(Q.get('page') || 0), lastPage: null, sum: {}, homePhase: 'scene',
-    alShown: {}, wasLive: {}, finalShown: load('finalShown', 3 * 86400000) || {}, resume: null, wakeUntil: 0, standings: {} };
+    alShown: {}, wasLive: {}, finalShown: load('finalShown', 3 * 86400000) || {}, resume: null, wakeUntil: 0, standings: {}, standAt: {} };
   var $ = function (id) { return document.getElementById(id); };
 
   // ------------------------------------------------------------ helpers
@@ -223,10 +223,11 @@
       var v = { forecast: j.properties.forecast, hourly: j.properties.forecastHourly }; save('nwsPoint:' + L.lat.toFixed(3) + ',' + L.lon.toFixed(3), v); return v;
     })).then(function (p) { return Promise.all([getJSON(p.forecast), getJSON(p.hourly)]); });
     return Promise.allSettled([om, aq, nws]).then(function (r) {
-      if (r[0].status !== 'fulfilled' && r[2].status !== 'fulfilled') { S.wxErr = 'Weather services unreachable — retrying'; render(); return; }
-      S.wxErr = null;
+      if (r[0].status !== 'fulfilled' && S.wx && Date.now() - (S.wxAt || 0) < 3 * 3600000) return; // keep the last good forecast (up to 3 hours old)
+      if (r[0].status !== 'fulfilled' && r[2].status !== 'fulfilled') { S.wxErr = 'Weather services unreachable — retrying'; refresh(['home', 'weather']); return; }
+      S.wxErr = null; if (r[0].status === 'fulfilled') S.wxAt = Date.now();
       S.wx = buildWeather(r[0].value, r[1].value, r[2].status === 'fulfilled' ? r[2].value : null);
-      renderWxPill(); render();
+      renderWxPill(); refresh(['home', 'weather', 'night']);
     });
   }
   function parseLocal(s) { // "2026-11-06T06:31" (already local)
@@ -452,9 +453,9 @@
         .sort(function (a, b) { return rank(a) - rank(b) || (rank(a) === 1 ? a.date - b.date : b.date - a.date); }).forEach(add);
       var size = Math.min(12, Math.max(6, Math.ceil(mine / 6) * 6)); // full pages of 6 tiles
       out = keepKnown(out); all = keepKnown(all); fillColors(out.concat(all)); // cached colors go on right away
-      S.games = out.slice(0, Math.max(size, mine)); S.mine = all; S.teamMiss = miss; S.scoresErr = null; featureGames().forEach(ensureSummary); liveList().forEach(ensureSummary); standingsLeagues(); render();
+      S.games = out.slice(0, Math.max(size, mine)); S.mine = all; S.teamMiss = miss; S.scoresErr = null; featureGames().forEach(ensureSummary); liveList().forEach(ensureSummary); standingsLeagues(); refresh(['home', 'scores', 'live']);
       Promise.all([fillRecords(S.games.concat(all)), fillColors(S.games.concat(all))]).then(function () { if (S.screen === 'scores' || S.screen === 'home' || S.screen === 'live') render(); });
-    }).catch(function () { S.scoresErr = 'Scores unavailable — retrying'; render(); });
+    }).catch(function () { S.scoresErr = 'Scores unavailable — retrying'; refresh(['home', 'scores']); });
   }
   function morrisGames() {
     var b = S.back, m = C.morris; if (!m.enabled || !b || !b.morris) return [];
@@ -513,12 +514,26 @@
     if (!C.appsScriptUrl) { S.backErr = 'setup'; render(); return Promise.resolve(); }
     return getJSON(C.appsScriptUrl + '?action=all&key=' + encodeURIComponent(C.appsScriptKey || ''), 45000).then(function (j) {
       if (j.error) throw new Error(j.error === 'bad key' ? 'the key in config.js doesn’t match KEY in Code.gs' : j.error);
-      S.back = j; S.backErr = null; save('back', j); render();
+      S.back = keepGood(j, S.back); S.backErr = null; save('back', S.back); refresh(['home', 'family', 'photos', 'news', 'plays']);
     }).catch(function (e) {
       var why = /JSON|Unexpected token/i.test(e.message) ? 'the Apps Script sent a sign-in page — set its deployment to “Anyone”' : e.message;
       S.backErr = 'Couldn’t reach your Google data (' + why + ') — retrying';
       if (!S.back) { S.back = load('back'); if (S.back) render(); }
     });
+  }
+  // If one part of the Apps Script reply failed this time (a calendar, a news feed, the photo folder), keep the last good copy of that part
+  function keepGood(j, old) {
+    if (!old) return j;
+    ['calendar', 'photos', 'news', 'plays', 'morris', 'reminders'].forEach(function (k) { if ((!j[k] || j[k].error) && old[k] && !old[k].error) j[k] = old[k]; });
+    if (j.news && j.news.sources && old.news && old.news.sources) Object.keys(old.news.sources).forEach(function (name) {
+      if (!(j.news.sources[name] || []).length && (old.news.sources[name] || []).length) j.news.sources[name] = old.news.sources[name];
+    });
+    if (j.photos && j.photos.items && old.photos && old.photos.items) { // the server shuffles photos every time; keep our order so the screen doesn't jump
+      var byId = {}; j.photos.items.forEach(function (p) { byId[p.id] = p; });
+      var kept = old.photos.items.filter(function (p) { return byId[p.id]; }).map(function (p) { var x = byId[p.id]; delete byId[p.id]; return x; });
+      j.photos.items = kept.concat(j.photos.items.filter(function (p) { return byId[p.id]; }));
+    }
+    return j;
   }
   function events() {
     var b = S.back; if (!b || !b.calendar) return null;
@@ -592,7 +607,11 @@
       var olds = [].slice.call(el.children);
       olds.forEach(function (o) { o.classList.add('leaving'); [].forEach.call(o.querySelectorAll('[id]'), function (x) { x.removeAttribute('id'); }); setTimeout(function () { if (o.parentNode) o.parentNode.removeChild(o); }, 950); });
       var layer = document.createElement('div'); layer.className = 'layer' + (STATIC ? '' : ' entering'); layer.innerHTML = html; el.appendChild(layer);
-    } else cur.innerHTML = html;
+    } else { // same page: redraw, but keep photos that are already showing
+      var keep = {}; ['homephoto', 'pc0', 'pc1', 'pc2'].forEach(function (id) { var e = $(id); if (e && e.style.backgroundImage) keep[id] = [e.style.backgroundImage, e.style.opacity]; });
+      cur.innerHTML = html;
+      Object.keys(keep).forEach(function (id) { var e = $(id); if (e) { e.style.transition = 'none'; e.style.backgroundImage = keep[id][0]; e.style.opacity = keep[id][1]; } });
+    }
     var st = $('stage'), imm = S.screen !== 'home' || brief; st.classList.toggle('immersive', imm); if (!imm) st.classList.remove('peek');
     st.classList.toggle('night', S.screen === 'night'); st.classList.toggle('nocorner', (brief && S.homePhase !== 'scene') || S.screen === 'night' || S.screen === 'alert');
     $('nav').style.display = imm && S.screen !== 'night' ? 'flex' : 'none'; corner();
@@ -603,6 +622,13 @@
     if (!(S.detail && S.detail.kind === 'radar')) stopRadar();
     if (S.screen === 'weather' && p === 'radar') startRadar();
     if (S.screen === 'news' && p && p.indexOf('s:') === 0) drawQR((newsStories() || [])[+p.slice(2)]);
+  }
+  // A background reload only redraws the screen it affects, and never restarts a playing radar loop
+  function refresh(screens) {
+    if (S.detail) return render();
+    if (screens.indexOf(S.screen) < 0) return;
+    if (S.screen === 'weather' && curPage() === 'radar' && $('radar') && $('radar').innerHTML) return;
+    render();
   }
   function homeHTML() {
     var n = now(), ev = events(), list, label = 'Family today';
@@ -1659,14 +1685,15 @@
       if (!DEMO && !(S.mine || []).some(function (g) { return g.league === tm.league; })) return;
       out.push(tm.league);
     });
-    out.forEach(function (lg) { if (!S.standings[lg]) loadStandings(lg); });
+    out.forEach(function (lg) { if (!S.standings[lg] || Date.now() - (S.standAt[lg] || 0) > 3600000) loadStandings(lg); });
     return out.filter(function (lg) { return S.standings[lg] && S.standings[lg].length; });
   }
   function loadStandings(league) {
     var tm = C.teams.filter(function (t) { return t.league === league; })[0], key = 'stand:' + league, c = load(key, 60 * 60000);
     if (window.__STAND && window.__STAND[league]) { S.standings[league] = window.__STAND[league]; return; }
-    if (c) { S.standings[league] = c; return; }
-    S.standings[league] = [];
+    S.standAt[league] = Date.now();
+    if (c && !S.standings[league]) { S.standings[league] = c; return; }
+    if (!S.standings[league]) S.standings[league] = [];
     var base = 'https://site.api.espn.com/apis/v2/sports/' + tm.sport + '/' + league + '/standings';
     getJSON(base + (league === 'nba' || league === 'wnba' ? '' : '?level=3')).catch(function () { return getJSON(base); }).then(function (j) {
       var groups = [];
@@ -1677,9 +1704,9 @@
         kids.forEach(function (k) { walk(k, o.abbreviation || o.name || ''); });
       })(j, '');
       groups.forEach(function (g) { sortStand(g.entries, league); });
-      S.standings[league] = groups; if (groups.length) save(key, groups);
+      if (groups.length) { S.standings[league] = groups; save(key, groups); }
       if (S.screen === 'scores') render();
-    }).catch(function () { setTimeout(function () { delete S.standings[league]; }, 10 * 60000); });
+    }).catch(function () { S.standAt[league] = Date.now() - 50 * 60000; }); // try again in 10 minutes, keep the old table
   }
   function standRow(en) {
     var st = en.stats || [], t = en.team || {}, g = function (nm) { var x = st.filter(function (y) { return y.name === nm || y.type === nm; })[0]; return x ? (x.displayValue != null ? x.displayValue : x.value) : ''; },
