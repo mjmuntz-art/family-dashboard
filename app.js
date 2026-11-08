@@ -451,8 +451,9 @@
       fillAll.filter(function (g) { return dayDiff(n, g.date) >= -1 && dayDiff(n, g.date) <= 2; })
         .sort(function (a, b) { return rank(a) - rank(b) || (rank(a) === 1 ? a.date - b.date : b.date - a.date); }).forEach(add);
       var size = Math.min(12, Math.max(6, Math.ceil(mine / 6) * 6)); // full pages of 6 tiles
+      out = keepKnown(out); all = keepKnown(all); fillColors(out.concat(all)); // cached colors go on right away
       S.games = out.slice(0, Math.max(size, mine)); S.mine = all; S.teamMiss = miss; S.scoresErr = null; featureGames().forEach(ensureSummary); liveList().forEach(ensureSummary); standingsLeagues(); render();
-      Promise.all([fillRecords(S.games.concat(all)), fillColors(S.games.concat(all))]).then(function () { if (S.screen === 'scores' || S.screen === 'home') render(); });
+      Promise.all([fillRecords(S.games.concat(all)), fillColors(S.games.concat(all))]).then(function () { if (S.screen === 'scores' || S.screen === 'home' || S.screen === 'live') render(); });
     }).catch(function () { S.scoresErr = 'Scores unavailable — retrying'; render(); });
   }
   function morrisGames() {
@@ -935,6 +936,33 @@
       '<div style="border-radius:calc(var(--r2) * .8);overflow:hidden;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center">' + (a.image ? '<img src="' + esc(a.image) + '" alt="" style="width:100%;height:100%;object-fit:cover" onerror="this.remove()">' : icon('photo', 40, 1.3)) + '</div>' +
       '<div style="display:flex;flex-direction:column;gap:10px;min-height:0;padding:4px 6px 4px 0"><div class="lbl">Preview · ESPN</div><div class="head clamp3" style="font-size:26px;line-height:1.15">' + esc(a.headline) + '</div><div class="muted clamp4" style="font-size:17px;line-height:1.45">' + esc(a.description || '') + '</div></div></div>';
   }
+  // The game summary is fresher than a team's schedule: put its score, clock and state on the game
+  function applyLive(g, live) {
+    if (!g || !live || !live.state || live.state === 'pre') return;
+    g.teams.forEach(function (t) { if (live.scores[t.abbr] != null && live.scores[t.abbr] !== '') t.score = live.scores[t.abbr]; });
+    if (live.state === 'post') { g.state = 'post'; g.teams.forEach(function (t) { t.winner = !!live.win[t.abbr]; }); }
+    else if (live.state === 'in') g.state = 'in';
+    if (live.detail) g.status = live.detail;
+  }
+  // When scores reload, ESPN's team schedules come back without team colors and sometimes with an old score or status.
+  // Keep what we already knew about each game (colors, logos, records, the live score) instead of going blank.
+  function keepKnown(games) {
+    var old = {}; S.games.concat(S.mine || []).forEach(function (g) { old[g.id] = g; });
+    games.forEach(function (g) {
+      var o = old[g.id]; if (!o || g.morris) return;
+      g.teams.forEach(function (t) {
+        var p = o.teams.filter(function (x) { return String(x.id) === String(t.id); })[0]; if (!p) return;
+        if ((!t.c1 || t.c1 === NEUTRAL.c1) && p.c1 && p.c1 !== NEUTRAL.c1) { t.c1 = p.c1; t.c2 = p.c2 || t.c2; }
+        if (!t.logo && p.logo) t.logo = p.logo;
+        if (!t.rec && p.rec) t.rec = p.rec;
+        if ((t.score === '' || t.score == null) && p.score !== '' && p.score != null && g.state !== 'pre') t.score = p.score;
+      });
+      if (o.state === 'in' && g.state === 'pre') { g.state = 'in'; g.status = o.status; g.teams.forEach(function (t, i) { if (t.score === '' && o.teams[i]) t.score = o.teams[i].score; }); } // a schedule that hasn't caught up yet
+      if (o.state === 'post' && g.state !== 'post') { g.state = 'post'; g.status = o.status; }
+      var sm = S.sum[g.id] && S.sum[g.id].j; if (sm && sm.live) applyLive(g, sm.live);
+    });
+    return games;
+  }
   function ensureSummary(g) {
     if (DEMO || g.morris || !g.sport) return;
     var c = S.sum[g.id], age = c ? Date.now() - c.t : 1e12, ttl = g.state === 'in' ? 25000 : 30 * 60000;
@@ -963,12 +991,7 @@
       ((lead[0] && lead[0].leaders) || []).slice(0, 3).forEach(function (c) { cats.push({ label: c.displayName || c.name, a: pick(lead[0], c.name), b: pick(lead[1], c.name) }); });
       var pc = (j.pickcenter || [])[0], bc = comp && comp.broadcasts && comp.broadcasts[0];
       var live = liveFromSummary(j, comp, cs);
-      if (live && live.state) { // the summary is fresher than the schedule: update the game itself
-        g.teams.forEach(function (t) { if (live.scores[t.abbr] != null && live.state !== 'pre') t.score = live.scores[t.abbr]; });
-        if (live.state === 'post' && g.state === 'in') { g.state = 'post'; g.teams.forEach(function (t) { t.winner = live.win[t.abbr]; }); }
-        if (live.state === 'in') g.state = 'in';
-        if (live.detail && live.state !== 'pre') g.status = live.detail;
-      }
+      applyLive(g, live);
       var story = bestStory(g, (j.news && j.news.articles || []).concat(j.article && j.article.headline ? [j.article] : []));
       S.sum[g.id] = { t: Date.now(), j: { recs: recs, lines: lines, stats: stats, leaders: cats, venue: j.gameInfo && j.gameInfo.venue ? j.gameInfo.venue.fullName : '',
         live: live, tv: bc ? (bc.media && bc.media.shortName) || (bc.names || []).join(', ') : '', line: pc ? [pc.details, pc.overUnder != null ? 'O/U ' + pc.overUnder : ''].filter(Boolean).join(' · ') : '', story: story } };
