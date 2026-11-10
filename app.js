@@ -2085,7 +2085,7 @@
       '<div class="head" style="font-size:' + size + 'px;line-height:1">' + x.d.getDate() + '</div>' + wx + '</div>';
   }
   function dinnerSlot(x, fs) {
-    return '<div class="ellip" style="flex-shrink:0;padding:8px 6px;border-radius:10px;text-align:center;font-size:' + (fs || 15) + 'px;font-weight:700;background:rgba(232,194,92,.16);border:1px dashed rgba(232,194,92,.5)">' +
+    return '<div class="ellip" style="flex-shrink:0;padding:8px 6px;border-radius:10px;text-align:center;font-size:' + (fs || 15) + 'px;font-weight:700;background:' + SEASON_COLOR[seasonOf(now())] + '29;border:1px dashed ' + SEASON_COLOR[seasonOf(now())] + '80">' +
       (x.dinner ? '🍽️ ' + esc(x.dinner.title) : '<span style="opacity:.45">🍽️ —</span>') + '</div>';
   }
   function weekBleed(top) {
@@ -2122,12 +2122,12 @@
       days.forEach(function (x) {
         var mine = x.list.filter(function (e) { return P.whoOf(e) === r.name; }), shown = mine.slice(0, mine.length > cap ? cap - 1 : cap), more = mine.length - shown.length;
         g += '<div class="glass" style="padding:6px;display:flex;flex-direction:column;gap:5px;min-height:0;min-width:0;overflow:hidden;background:rgba(16,12,24,' + (x.today ? '.62' : '.45') + ')">' + shown.map(function (e) {
-          return '<div style="padding:5px 7px;border-radius:8px;background:' + esc(e.color) + '40;border-left:4px solid ' + esc(e.color) + ';min-width:0"><div style="font-size:12px;font-weight:800;opacity:.85">' + esc(shortTime(e, x.d)) + '</div><div class="clamp2" style="font-size:14px;font-weight:700;line-height:1.2">' + esc(e.title) + '</div></div>';
+          return '<div style="padding:5px 7px;border-radius:8px;background:' + esc(e.color) + '40;border-left:4px solid ' + esc(e.color) + ';min-width:0"><div style="font-size:12px;font-weight:800;opacity:.85">' + esc(shortTime(e, x.d)) + '</div><div class="' + (shown.length > 1 ? 'ellip' : 'clamp2') + '" style="font-size:14px;font-weight:700;line-height:1.2">' + esc(e.title) + '</div></div>';
         }).join('') + (more > 0 ? '<div style="font-size:13px;font-weight:700;opacity:.75;padding-left:4px">+' + more + ' more</div>' : '') + '</div>';
       });
     });
-    g += '<div style="display:flex;align-items:center;gap:10px"><div style="width:44px;height:44px;border-radius:50%;background:#e8c25c;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">🍽️</div><div style="font-size:18px;font-weight:800">Dinner</div></div>' +
-      days.map(function (x) { return '<div class="ellip" style="text-align:center;font-size:14px;font-weight:700;padding:8px 4px;border-radius:10px;background:rgba(232,194,92,.16)">' + (x.dinner ? esc(x.dinner.title) : '<span style="opacity:.45">—</span>') + '</div>'; }).join('');
+    g += '<div style="display:flex;align-items:center;gap:10px"><div style="width:44px;height:44px;border-radius:50%;background:' + SEASON_COLOR[seasonOf(now())] + ';display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">🍽️</div><div style="font-size:18px;font-weight:800">Dinner</div></div>' +
+      days.map(function (x) { return '<div class="ellip" style="text-align:center;font-size:14px;font-weight:700;padding:8px 4px;border-radius:10px;background:' + SEASON_COLOR[seasonOf(now())] + '29">' + (x.dinner ? esc(x.dinner.title) : '<span style="opacity:.45">—</span>') + '</div>'; }).join('');
     return '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,6,18,.45),rgba(10,6,18,.65))"></div>' + btag("Family · Who's doing what") + top +
       '<div class="glass" style="position:absolute;left:40px;right:40px;top:88px;bottom:32px;padding:14px;display:grid;grid-template-columns:150px repeat(7,minmax(0,1fr));grid-template-rows:auto repeat(' + P.rows.length + ',minmax(0,1fr)) auto;gap:8px">' + g + '</div>';
   }
