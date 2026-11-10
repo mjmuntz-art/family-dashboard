@@ -256,3 +256,5 @@ body.low .urgent-frame, body.low [style*="blink"] { animation: none; }
 .a-bob { animation: aBob 1.6s ease-in-out infinite; }
 @keyframes aSteam { 0% { transform: translate(0, 0) scale(.6); opacity: 0; } 20% { opacity: .45; } 100% { transform: translate(8px, -70px) scale(2); opacity: 0; } }
 .a-steam { animation: aSteam 5.6s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes aEmber { 0%, 62% { transform: translate(0, 0); opacity: 0; } 65% { opacity: 1; } 100% { transform: translate(var(--dx), var(--dy)); opacity: 0; } }
+.a-ember { animation: aEmber 3s ease-out infinite; }

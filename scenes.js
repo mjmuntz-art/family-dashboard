@@ -786,7 +786,8 @@
     // Thanksgiving: farmhouse great room. The fire dances and lights the room, candles and lanterns flicker, the ceiling lights twinkle,
     // leaves drift down outside the windows, steam rises from the pie, dust floats in the sunbeams
     thanksgiving: { dusk: true,
-      waves: [{ mask: 'scenes/thanksgiving-fire.png', box: [790, 300, 160, 130], freq: [0.035, 0.09], scale: 9, dur: 1.6, seed: 7 }],
+      waves: [{ mask: 'scenes/thanksgiving-fire.png', box: [790, 300, 160, 130], freq: [0.06, 0.14], scale: 3.5, dur: 6, seed: 7 }],
+      embers: { box: [818, 400, 100], n: 9, when: ['morning', 'midday', 'afternoon', 'evening', 'dusk', 'night'] },
       lights: [[868, 380, 150, 'pumpkin'], [868, 520, 120, 'pumpkin'], [737, 205, 30, 'lamp'], [993, 205, 30, 'lamp'], [775, 215, 16, 'lamp'], [955, 215, 16, 'lamp'],
         [1018, 392, 26, 'lamp'], [1252, 402, 24, 'lamp'], [95, 712, 50, 'lamp'], [125, 425, 30, 'lamp'], [298, 395, 26, 'lamp'], [240, 425, 22, 'lamp'], [545, 330, 22, 'lamp'],
         [178, 170, 16, 'lamp'], [212, 170, 16, 'lamp'], [236, 178, 16, 'lamp'], [256, 180, 16, 'lamp'], [272, 183, 16, 'lamp'], [1205, 280, 40, 'window']],
@@ -863,6 +864,9 @@
     if (cfg.steam && cfg.steam.when.indexOf(tod) >= 0 && !low) { var stm = '<g filter="' + c.blur(4) + '">';
       cfg.steam.at.forEach(function (pt) { for (var si = 0; si < 4; si++) stm += '<ellipse class="a-steam" style="animation-delay:-' + f(si * 1.4 + r() * 0.6) + 's" cx="' + f(pt[0] + (r() - 0.5) * 16) + '" cy="' + pt[1] + '" rx="6" ry="9" fill="#ffffff" opacity="0.5"/>'; });
       c.add(stm + '</g>'); }
+    if (cfg.embers && cfg.embers.when.indexOf(tod) >= 0 && !low) { var eb = cfg.embers.box, em = ''; // the occasional spark pops up out of the fire
+      for (var ei = 0; ei < cfg.embers.n; ei++) em += '<circle class="a-ember" style="animation-duration:' + f(2.2 + r() * 2.4) + 's;animation-delay:-' + f(r() * 9) + 's;--dx:' + f((r() - 0.5) * 30) + 'px;--dy:-' + f(45 + r() * 50) + 'px" cx="' + f(eb[0] + r() * eb[2]) + '" cy="' + f(eb[1] - r() * 20) + '" r="' + f(0.9 + r() * 1.2) + '" fill="' + (r() < 0.5 ? '#ffd27a' : '#ff9a3c') + '"/>';
+      c.add('<g>' + em + '</g>'); }
     var bz = cfg.bees && cfg.bees[tod];
     if (bz) { var bs = ''; bz.forEach(function (bx) { for (var bi = 0; bi < 5; bi++) { var x = bx[0] + r() * (bx[1] - bx[0]), y = bx[2] + r() * (bx[3] - bx[2]), sz = 0.8 + r() * 0.5;
       bs += '<g class="a-bee" style="animation-duration:' + f(1.8 + r() * 1.6) + 's;animation-delay:-' + f(r() * 3) + 's"><g transform="translate(' + f(x) + ' ' + f(y) + ') scale(' + f(sz) + ')">' +
