@@ -595,7 +595,12 @@
   }
   var DEC = document.createElement('textarea');
   function unent(s) { s = String(s || ''); for (var i = 0; i < 3 && /&(#\d+|#x[0-9a-f]+|[a-z]+);/i.test(s); i++) { DEC.innerHTML = s; s = DEC.value; } return s; }
-  function cleanStory(x) { return x ? Object.assign({}, x, { title: unent(x.title), summary: unent(x.summary) }) : x; }
+  function cleanStory(x) {
+    if (!x) return x;
+    var t = unent(x.title), sm = unent(x.summary).replace(/\s*(AP News|Associated Press)\s*$/i, '').trim(), k = function (v) { return v.toLowerCase().replace(/[^a-z0-9]/g, ''); };
+    if (sm && (k(sm).indexOf(k(t).slice(0, 40)) === 0 || k(t).indexOf(k(sm)) === 0)) sm = ''; // Google News repeats the headline as the summary
+    return Object.assign({}, x, { title: t, summary: sm });
+  }
   function newsList() {
     var b = S.back; if (!b || !b.news) return null;
     var src = {}; Object.keys(b.news.sources || {}).forEach(function (k) { src[k] = (b.news.sources[k] || []).map(cleanStory); });
@@ -1748,23 +1753,29 @@
     if (DEMO) { if (window.__EXTRAS) { S.hist = __EXTRAS.hist; S.apod = __EXTRAS.apod; S.meals = __EXTRAS.meals; S.meal = S.meals && S.meals[0]; } return; }
     var day = TODAYKEY(), n = now(), mm = n.getMonth() + 1, dd = n.getDate();
     // on this day (Wikipedia): only events that come with a picture
-    var h = load('hist:' + day, 86400000);
+    var h = load('hist2:' + day, 86400000);
     if (h) S.hist = h; else getJSON('https://en.wikipedia.org/api/rest_v1/feed/onthisday/selected/' + mm + '/' + dd, 20000).then(function (j) {
       var list = (j.selected || []).map(function (e) {
         var pg = (e.pages || []).filter(function (x) { return x.originalimage || x.thumbnail; })[0];
         if (!pg) return null;
-        var img = pg.originalimage && pg.originalimage.width <= 2400 ? pg.originalimage.source : (pg.thumbnail ? pg.thumbnail.source.replace(/\/\d+px-/, '/1200px-') : pg.originalimage.source);
-        return { year: e.year, text: e.text, image: img, title: (pg.titles && pg.titles.normalized) || pg.title || '', extract: pg.extract || '', link: pg.content_urls && pg.content_urls.mobile ? pg.content_urls.mobile.page : '' };
+        var o = pg.originalimage, t = pg.thumbnail, img, alt = t ? t.source : (o ? o.source : '');
+        if (o && o.width <= 1600 && !/\.tiff?$/i.test(o.source)) img = o.source; // small enough: use the original
+        else if (t && o && o.width > 960) img = t.source.replace(/\/\d+px-/, '/960px-'); // Wikipedia only makes certain sizes; 960 is one of them
+        else img = alt;
+        return { year: e.year, text: e.text, image: img, image2: alt, title: (pg.titles && pg.titles.normalized) || pg.title || '', extract: pg.extract || '', link: pg.content_urls && pg.content_urls.mobile ? pg.content_urls.mobile.page : '' };
       }).filter(Boolean);
-      if (list.length) { S.hist = list; save('hist:' + day, list); refresh(['news']); }
+      if (list.length) { S.hist = list; save('hist2:' + day, list); refresh(['news']); }
     }).catch(function () { /* try again later */ });
     // NASA astronomy picture of the day (a video day uses its thumbnail; before it's posted, yesterday's)
-    var a = load('apod:' + day, 86400000);
+    var a = load('apod2:' + day, 86400000);
     if (a) S.apod = a; else {
-      var key = C.nasaKey || 'DEMO_KEY', base = 'https://api.nasa.gov/planetary/apod?thumbs=true&api_key=' + key;
-      var take = function (j) { var img = j.media_type === 'image' ? (j.url || j.hdurl) : j.thumbnail_url; if (!img) throw new Error('no image'); return { title: j.title, text: j.explanation, image: img, credit: (j.copyright || 'NASA').replace(/\s+/g, ' ').trim(), date: j.date }; };
-      getJSON(base, 20000).then(take).catch(function () { var y = new Date(n.getTime() - 86400000); return getJSON(base + '&date=' + y.getFullYear() + '-' + (y.getMonth() + 1) + '-' + y.getDate(), 20000).then(take); })
-        .then(function (x) { S.apod = x; save('apod:' + day, x); refresh(['weather']); }).catch(function () { /* skip today */ });
+      var since = new Date(n.getTime() - 8 * 86400000), ymd = function (d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); };
+      getJSON('https://api.nasa.gov/planetary/apod?api_key=' + (C.nasaKey || 'DEMO_KEY') + '&start_date=' + ymd(since), 20000).then(function (list) {
+        var pics = (Array.isArray(list) ? list : [list]).filter(function (j) { return j.media_type === 'image' && (j.url || j.hdurl); });
+        var j2 = pics[pics.length - 1]; if (!j2) return; // newest photo (video days are skipped)
+        S.apod = { title: j2.title, text: j2.explanation, image: j2.url || j2.hdurl, credit: (j2.copyright || 'NASA').replace(/\s+/g, ' ').trim(), date: j2.date };
+        save('apod2:' + day, S.apod); refresh(['weather']);
+      }).catch(function () { /* skip today */ });
     }
     // seasonal dinner idea (TheMealDB), one per day
     var m = load('meals:' + day, 86400000);
@@ -1805,9 +1816,9 @@
   function histBleed(top) {
     var x = histPick(); if (!x) return emptyBleed('Loading…');
     var n = now(), ago = n.getFullYear() - x.year, fs = x.text.length > 160 ? 30 : x.text.length > 110 ? 34 : 40;
-    return '<div style="position:absolute;inset:0;background:#0d0b12 url(\'' + esc(x.image) + '\') center/cover;filter:blur(28px) brightness(.45);transform:scale(1.15)"></div>' +
+    return '<div id="histbg" style="position:absolute;inset:0;background:#0d0b12 url(\'' + esc(x.image) + '\') center/cover;filter:blur(28px) brightness(.45);transform:scale(1.15)"></div>' +
       '<div class="btag" style="background:var(--accent);color:var(--ink)">On this day · ' + MONL[n.getMonth()] + ' ' + n.getDate() + '</div>' + top +
-      '<div style="position:absolute;left:40px;top:92px;bottom:40px;width:600px;border-radius:18px;overflow:hidden;background:rgba(0,0,0,.35);box-shadow:0 14px 40px rgba(0,0,0,.5)"><img src="' + esc(x.image) + '" alt="" style="width:100%;height:100%;object-fit:contain" onerror="this.style.display=\'none\'"></div>' +
+      '<div style="position:absolute;left:40px;top:92px;bottom:40px;width:600px;border-radius:18px;overflow:hidden;background:rgba(0,0,0,.35);box-shadow:0 14px 40px rgba(0,0,0,.5)"><img src="' + esc(x.image) + '" data-alt="' + esc(x.image2 || '') + '" alt="" style="width:100%;height:100%;object-fit:contain" onerror="var a=this.getAttribute(\'data-alt\');if(a&&this.src!==a){this.src=a;this.removeAttribute(\'data-alt\');var b=document.getElementById(\'histbg\');if(b)b.style.backgroundImage=\'url(\'+a+\')\';}else{this.style.display=\'none\';}"></div>' +
       '<div style="position:absolute;left:680px;right:48px;top:100px;bottom:44px;display:flex;flex-direction:column;gap:12px">' +
       '<div style="display:flex;align-items:baseline;gap:16px"><div class="head" style="font-size:96px;line-height:.9;color:var(--accent)">' + x.year + '</div><div style="font-size:22px;font-weight:700;opacity:.85">' + ago + ' years ago</div></div>' +
       '<div class="head clamp5" style="font-size:' + fs + 'px;line-height:1.15">' + esc(x.text) + '</div>' +
