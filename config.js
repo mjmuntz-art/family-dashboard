@@ -13,19 +13,19 @@ window.DASH_CONFIG = {
 
   // How long each screen stays up (seconds).
   timing: {            // seconds
-    homeScene: 40,     // Home: just the scene (clock, date, weather) before the cards slide up
-    homeCards: 40,     // Home: the cards
+    homeScene: 60,     // Home: just the scene (clock, date, weather) before the cards slide up
+    homeCards: 30,     // Home: the cards
     briefingScene: 25, // morning: just the scene before the briefing slides in
     briefing: 60,      // morning briefing
     screen: 60,        // Family, Photos and Plays
-    scoresGrid: 15,    // Scores overview (all games)
-    game: 22,          // each of your teams' game pages (box score / up next)
-    story: 20,         // each news story (6 stories)
+    scoresGrid: 20,    // Scores overview (all games)
+    game: 20,          // each of your teams' game pages (box score / up next)
+    story: 25,         // each news story (6 stories)
     photo: 60,         // each photo collage (3 per visit)
-    weather: 12,       // each weather page (5 pages: now, hours, week, sun & moon, radar)
+    weather: 25,       // each weather page (5 pages: now, hours, week, sun & moon, radar)
     detail: 20,        // pop-ups after you tap something
-    live: 40,          // each live game page (your teams); refreshes every 30 seconds while it's up
-    standings: 15,     // each standings page on Scores
+    live: 30,          // each live game page (your teams); refreshes every 30 seconds while it's up
+    standings: 20,     // each standings page on Scores
     alert: 45,         // each watch / advisory page on Weather
     board: 30          // grocery list / family board and countdowns pages on Family
   },
