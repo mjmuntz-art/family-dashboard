@@ -1767,18 +1767,20 @@
       if (list.length) { S.hist = list; save('hist2:' + day, list); refresh(['news']); }
     }).catch(function () { /* try again later */ });
     // NASA astronomy picture of the day (a video day uses its thumbnail; before it's posted, yesterday's)
-    var a = load('apod3:' + day, 86400000);
+    S.apodInfo = load('apodinfo:' + day, 86400000) || S.apodInfo;
+    var a = load('apod4:' + day, 86400000);
     if (a) S.apod = a; else {
       var since = new Date(n.getTime() - 8 * 86400000), ymd = function (d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); };
       getJSON('https://api.nasa.gov/planetary/apod?api_key=' + (C.nasaKey || 'DEMO_KEY') + '&start_date=' + ymd(since), 20000).then(function (list) {
         list = Array.isArray(list) ? list : [list];
         var real = function (j) { var u = j.url || j.hdurl || ''; return j.media_type === 'image' && u && !/logo|meatball|wp-content\/themes/i.test(u) && !/^nasa science$/i.test(j.title || ''); }; // real APOD photos live under apod.nasa.gov/apod/image
         var pics = list.filter(real), j2 = pics[pics.length - 1], today = list[list.length - 1] || {};
+        if (today.explanation) { S.apodInfo = { title: today.title, text: today.explanation, credit: today.copyright }; save('apodinfo:' + day, S.apodInfo); refresh(['weather']); } // NASA's words for today, even when its picture link is bad
         var vid = today.media_type === 'video' ? videoEmbed(today.url) : null;
         if (!j2 && !vid) return;
         var src = vid ? today : j2;
         S.apod = { title: src.title, text: src.explanation, image: j2 ? (j2.url || j2.hdurl) : '', video: vid, credit: (src.copyright || 'NASA').replace(/\s+/g, ' ').trim(), date: src.date };
-        save('apod3:' + day, S.apod); refresh(['weather']);
+        save('apod4:' + day, S.apod); refresh(['weather']);
       }).catch(function () { /* skip today */ });
     }
     // seasonal dinner idea (TheMealDB), one per day
@@ -1839,10 +1841,10 @@
     return null;
   }
   function apodNow() { // your Apps Script's copy first; NASA's own words fill in a missing title or caption
-    var b = S.back && S.back.apod, x = S.apod, generic = /^(apod|nasa science|nasa|astronomy picture of the day)?$/i;
+    var b = S.back && S.back.apod, x = S.apodInfo || S.apod, generic = /^(apod|nasa science|nasa|astronomy picture of the day)?$/i;
     if (!b || b.error || !(b.image || b.video)) return x;
     var text = b.text || (x && x.text) || '', title = b.title && !generic.test(b.title) ? b.title : x && x.title && !generic.test(x.title) ? x.title : ((text.match(/^[^.!?]{8,90}[.!?]/) || [''])[0] || b.title || 'Space');
-    return { title: title, text: text, image: b.image, video: b.video ? videoEmbed(b.video) : null, credit: b.credit, date: b.date };
+    return { title: title, text: text, image: b.image, video: b.video ? videoEmbed(b.video) : null, credit: (x && x.credit ? String(x.credit).replace(/\s+/g, ' ').trim() : '') || b.credit || 'NASA', date: b.date };
   }
   function apodBleed(top) {
     var a = apodNow(); if (!a) return emptyBleed('Loading…');
