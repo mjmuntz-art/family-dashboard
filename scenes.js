@@ -793,10 +793,13 @@
   function photoFx(c, cfg, tod, low) {
     var r = c.r, k = LIGHT[tod] != null ? LIGHT[tod] : 0.8, out = '', blur = c.blur(5);
     var lights = cfg.lights && !Array.isArray(cfg.lights) ? cfg.lights[tod] || [] : cfg.lights || [];
-    if (cfg.flagMask && !low) { // light rippling across the flags like a breeze
-      var fmk = c.uid('f'); c.defs += '<mask id="' + fmk + '" maskUnits="userSpaceOnUse" x="-71.1" y="0" width="1422.2" height="800"><image href="' + cfg.flagMask + '" x="-71.1" y="0" width="1422.2" height="800" preserveAspectRatio="none"/></mask>';
-      var sheen = c.lin([[0, '#ffffff', 0], [0.42, '#ffffff', 0], [0.5, '#ffffff', 0.55], [0.58, '#ffffff', 0], [0.7, '#000000', 0], [0.78, '#000000', 0.35], [0.86, '#000000', 0], [1, '#000000', 0]], 1, 0);
-      out += '<g mask="url(#' + fmk + ')" style="mix-blend-mode:soft-light"><rect class="a-flag" x="-260" y="0" width="560" height="380" fill="' + sheen + '"/><rect class="a-flag" style="animation-delay:-1.7s" x="-260" y="0" width="560" height="380" fill="' + sheen + '"/></g>';
+    if (cfg.flagMask && cfg.img && !low) { // the flags themselves ripple: the photo's flags with a slow wave running through them
+      var fmk = c.uid('f'), fw = c.uid('w'), fb = cfg.flagBox || [180, 0, 520, 380];
+      c.defs += '<mask id="' + fmk + '" maskUnits="userSpaceOnUse" x="-71.1" y="0" width="1422.2" height="800"><image href="' + cfg.flagMask + '" x="-71.1" y="0" width="1422.2" height="800" preserveAspectRatio="none"/></mask>' +
+        '<filter id="' + fw + '" filterUnits="userSpaceOnUse" x="' + fb[0] + '" y="' + fb[1] + '" width="' + fb[2] + '" height="' + fb[3] + '" color-interpolation-filters="sRGB">' +
+        '<feTurbulence type="fractalNoise" baseFrequency="0.011 0.045" numOctaves="1" seed="3" result="n"><animate attributeName="baseFrequency" dur="7s" repeatCount="indefinite" values="0.011 0.045;0.014 0.052;0.010 0.040;0.011 0.045" keyTimes="0;0.35;0.7;1" calcMode="spline" keySplines=".45 0 .55 1;.45 0 .55 1;.45 0 .55 1"/></feTurbulence>' +
+        '<feDisplacementMap in="SourceGraphic" in2="n" scale="7" xChannelSelector="R" yChannelSelector="G"/></filter>';
+      out += '<g mask="url(#' + fmk + ')"><image href="' + cfg.img + '" x="-71.1" y="0" width="1422.2" height="800" preserveAspectRatio="xMidYMid slice" filter="url(#' + fw + ')"/></g>';
     }
     var moon = cfg.moon && cfg.moon[tod];
     if (moon) out += '<circle class="a-pulse" cx="' + moon[0] + '" cy="' + moon[1] + '" r="' + moon[2] + '" fill="' + c.rad([[0, '#eef3ff', 0.6], [0.4, '#cfdcff', 0.25], [1, '#cfdcff', 0]]) + '"/>';
@@ -865,7 +868,7 @@
     if (PHOTO[id]) {
       var sc = new Canvas(id + 'x', lowPower), sn = PHOTO[id].snow;
       if (tod === 'dusk' && !PHOTO[id].dusk) tod = 'evening';
-      photoFx(sc, PHOTO[id], tod, lowPower);
+      photoFx(sc, Object.assign({}, PHOTO[id], { img: window.sceneImage(id, tod) }), tod, lowPower);
       if (sn) P.snow(sc, sn[0] * (tod === 'night' ? 1.3 : 1), sn[1], sn[2]);
       var fz = PHOTO[id].flurries && PHOTO[id].flurries[tod]; if (fz) P.snow(sc, fz[0], fz[1], fz[2]);
       var fl = PHOTO[id].fall && PHOTO[id].fall(date || new Date());
