@@ -1666,7 +1666,7 @@
   function boardLists() { // lists your iPhone Shortcut sends: one with "grocer" in the name, and the family board
     var L2 = (S.back && S.back.reminders && S.back.reminders.lists) || {}, out = { grocery: null, notes: [], at: null };
     Object.keys(L2).forEach(function (name) {
-      var items = String(L2[name].items || '').split(/\n/).map(function (x) { return x.trim(); }).filter(Boolean);
+      var raw = L2[name].items || [], items = (Array.isArray(raw) ? raw : String(raw).split(/\r?\n/)).map(function (x) { return x.trim(); }).filter(Boolean);
       if (/grocer|shopping/i.test(name)) { if (items.length) out.grocery = { name: name, items: items, at: L2[name].at }; }
       else if (/board|family|message|note/i.test(name)) out.notes = out.notes.concat(items);
     });
