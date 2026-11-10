@@ -1769,7 +1769,7 @@
       '<div style="position:absolute;left:40px;right:40px;top:88px;bottom:32px;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px">' + cols + '</div>';
   }
   function people() { // rows for "who's doing what": your people, then everyone else
-    var names = C.people || ['Mike', 'Cate', 'Weston'], map = C.peopleMap || {}, ev = events() || [];
+    var names = C.people || ['Mike', 'Cate', 'Weston'], map = C.peopleMap || { School: 'Mike' }, /* School is Mike's teaching calendar */ ev = events() || [];
     var colorOf = function (nm) { var e = ev.filter(function (x) { return (x.who || '').toLowerCase() === nm.toLowerCase(); })[0]; return e ? e.color : '#8fa3c8'; };
     var rows = names.map(function (nm) { return { name: nm, color: colorOf(nm) }; });
     rows.push({ name: 'Everyone', color: '#f0a43c' });
