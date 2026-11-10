@@ -549,7 +549,7 @@
   // If one part of the Apps Script reply failed this time (a calendar, a news feed, the photo folder), keep the last good copy of that part
   function keepGood(j, old) {
     if (!old) return j;
-    ['calendar', 'photos', 'news', 'plays', 'morris', 'reminders', 'gas', 'tle', 'commute'].forEach(function (k) { if ((!j[k] || j[k].error) && old[k] && !old[k].error) j[k] = old[k]; });
+    ['calendar', 'photos', 'news', 'plays', 'morris', 'reminders', 'gas', 'tle', 'commute', 'apod'].forEach(function (k) { if ((!j[k] || j[k].error) && old[k] && !old[k].error) j[k] = old[k]; });
     if (j.news && j.news.sources && old.news && old.news.sources) Object.keys(old.news.sources).forEach(function (name) {
       if (!(j.news.sources[name] || []).length && (old.news.sources[name] || []).length) j.news.sources[name] = old.news.sources[name];
     });
@@ -881,7 +881,7 @@
   function pageList(screen) {
     if (screen === 'scores') { var gp = []; for (var i = 0; i < Math.max(1, Math.ceil(S.games.length / 6)); i++) gp.push('grid:' + i); return gp.concat(featureGames().map(function (g) { return 'g:' + g.id; }), standingsLeagues().map(function (l) { return 'st:' + l; })); }
     if (screen === 'news') { var nw = newsStories(), np = nw && nw.length ? nw.map(function (s, i) { return 's:' + i; }) : ['empty']; if (S.hist && S.hist.length) np.push('hist'); if (gasOK()) np.push('gas'); return np; }
-    if (screen === 'weather') return S.alerts.map(function (a, i) { return 'al:' + i; }).concat(S.wx ? ['now', 'details', 'hours', 'week', 'sky'].concat(window.Astronomy && S.wx.setD ? ['tonight'] : [], S.apod ? ['apod'] : [], ['radar']) : S.alerts.length ? [] : ['empty']);
+    if (screen === 'weather') return S.alerts.map(function (a, i) { return 'al:' + i; }).concat(S.wx ? ['now', 'details', 'hours', 'week', 'sky'].concat(window.Astronomy && S.wx.setD ? ['tonight'] : [], apodNow() ? ['apod'] : [], ['radar']) : S.alerts.length ? [] : ['empty']);
     if (screen === 'photos') { var pgN = Math.min(3, photoGroups().length) + otdGroups().length; var out = []; for (var q = 0; q < Math.max(1, pgN); q++) out.push('c:' + q); return out; }
     if (screen === 'family') { var fp = ['main']; if (events()) fp.push('week', 'who'); if (S.meals && S.meals.length) fp.push('idea'); if (boardLists().grocery || boardLists().notes.length) fp.push('board'); if (countdownItems().length) fp.push('cd'); return fp; }
     if (screen === 'live') { var lv = liveList(); return lv.length ? lv.map(function (g) { return 'g:' + g.id; }) : ['none']; }
@@ -1772,7 +1772,7 @@
       var since = new Date(n.getTime() - 8 * 86400000), ymd = function (d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); };
       getJSON('https://api.nasa.gov/planetary/apod?api_key=' + (C.nasaKey || 'DEMO_KEY') + '&start_date=' + ymd(since), 20000).then(function (list) {
         list = Array.isArray(list) ? list : [list];
-        var real = function (j) { var u = j.url || j.hdurl || ''; return j.media_type === 'image' && /\/apod\/image\//.test(u) && !/^nasa science$/i.test(j.title || ''); }; // real APOD photos live under apod.nasa.gov/apod/image
+        var real = function (j) { var u = j.url || j.hdurl || ''; return j.media_type === 'image' && u && !/logo|meatball|wp-content\/themes/i.test(u) && !/^nasa science$/i.test(j.title || ''); }; // real APOD photos live under apod.nasa.gov/apod/image
         var pics = list.filter(real), j2 = pics[pics.length - 1], today = list[list.length - 1] || {};
         var vid = today.media_type === 'video' ? videoEmbed(today.url) : null;
         if (!j2 && !vid) return;
@@ -1838,8 +1838,9 @@
     if (/\.(mp4|webm|mov)(\?|$)/i.test(u)) return { kind: 'file', src: u };
     return null;
   }
+  function apodNow() { var b = S.back && S.back.apod; if (b && !b.error && (b.image || b.video)) return { title: b.title, text: b.text, image: b.image, video: b.video ? videoEmbed(b.video) : null, credit: b.credit, date: b.date }; return S.apod; } // your Apps Script's copy first
   function apodBleed(top) {
-    var a = S.apod; if (!a) return emptyBleed('Loading…');
+    var a = apodNow(); if (!a) return emptyBleed('Loading…');
     var v = a.video, media = (a.image ? '<img src="' + esc(a.image) + '" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">' : '') + // the photo sits underneath, in case the video can't play
       (v && v.kind === 'file' ? '<video src="' + esc(v.src) + '" autoplay muted loop playsinline style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"></video>' : '') +
       (v && v.kind === 'frame' ? '<iframe src="' + esc(v.src) + '" allow="autoplay; encrypted-media" frameborder="0" style="position:absolute;left:50%;top:50%;width:178vh;height:100vh;min-width:100%;min-height:56.25vw;transform:translate(-50%,-50%);border:0;pointer-events:none"></iframe>' : '');
