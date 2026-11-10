@@ -33,7 +33,7 @@ html, body { background: #000; }
 .dots { display: flex; gap: 8px; }
 .dots button { position: relative; width: 12px; height: 12px; padding: 0; border: none; border-radius: 6px; background: rgba(255,255,255,0.28); cursor: pointer; overflow: hidden; transition: width .3s; }
 .dots button.on { width: 40px; }
-.dots button.on::after { content: ""; position: absolute; inset: 0; background: var(--accent); transform-origin: left; animation: dotFill var(--dur) linear forwards; }
+.dots button.on::after { content: ""; position: absolute; inset: 0; background: var(--accent); transform-origin: left; animation: dotFill var(--dur) linear var(--el, 0s) forwards; }
 @keyframes dotFill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 /* big weather icons breathe a little */
 .wxbig { display: flex; align-items: center; justify-content: center; animation: wxFloat 6s ease-in-out infinite alternate; filter: drop-shadow(0 6px 18px rgba(0,0,0,.35)); }

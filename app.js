@@ -356,6 +356,18 @@
       return got;
     }).catch(function () { return {}; });
   }
+  // Team colors for every NFL, NBA, NHL and MLB team (ESPN abbreviations), used when ESPN hasn't sent colors yet
+  var TC = {
+    nfl: 'ARI 97233F 000000|ATL A71930 000000|BAL 241773 9E7C0C|BUF 00338D C60C30|CAR 0085CA 101820|CHI 0B162A C83803|CIN FB4F14 000000|CLE 311D00 FF3C00|DAL 003594 869397|DEN FB4F14 002244|DET 0076B6 B0B7BC|GB 203731 FFB612|HOU 03202F A71930|IND 002C5F A2AAAD|JAX 006778 D7A22A|KC E31837 FFB81C|LV 000000 A5ACAF|LAC 0080C6 FFC20E|LAR 003594 FFA300|MIA 008E97 FC4C02|MIN 4F2683 FFC62F|NE 002244 C60C30|NO D3BC8D 101820|NYG 0B2265 A71930|NYJ 125740 FFFFFF|PHI 004C54 A5ACAF|PIT 101820 FFB612|SF AA0000 B3995D|SEA 002244 69BE28|TB D50A0A 34302B|TEN 0C2340 4B92DB|WSH 5A1414 FFB612',
+    nba: 'ATL C8102E FDB927|BOS 007A33 BA9653|BKN 111111 FFFFFF|CHA 1D1160 00788C|CHI CE1141 000000|CLE 860038 FDBB30|DAL 00538C B8C4CA|DEN 0E2240 FEC524|DET C8102E 1D42BA|GS 1D428A FFC72C|HOU CE1141 000000|IND 002D62 FDBB30|LAC C8102E 1D428A|LAL 552583 FDB927|MEM 5D76A9 12173F|MIA 98002E F9A01B|MIL 00471B EEE1C6|MIN 0C2340 236192|NO 0C2340 C8102E|NY 006BB6 F58426|OKC 007AC1 EF3B24|ORL 0077C0 C4CED4|PHI 006BB6 ED174C|PHX 1D1160 E56020|POR E03A3E 000000|SAC 5A2D81 63727A|SA 8A8D8F 000000|TOR CE1141 000000|UTAH 4E008E 79A3DC|WSH 002B5C E31837',
+    nhl: 'ANA F47A38 B9975B|BOS FFB81C 000000|BUF 003087 FFB81C|CGY C8102E F1BE48|CAR CE1126 000000|CHI CF0A2C 000000|COL 6F263D 236192|CBJ 002654 CE1126|DAL 006847 8F8F8C|DET CE1126 FFFFFF|EDM 041E42 FF4C00|FLA C8102E 041E42|LA 333333 A2AAAD|MIN 154734 A6192E|MTL AF1E2D 192168|NSH FFB81C 041E42|NJ CE1126 000000|NYI 00539B F47D30|NYR 0038A8 CE1126|OTT C52032 C2912C|PHI F74902 000000|PIT FCB514 000000|SJ 006D75 EA7200|SEA 001628 99D9D9|STL 002F87 FCB514|TB 002868 FFFFFF|TOR 00205B FFFFFF|UTAH 71AFE5 090909|VAN 00205B 00843D|VGK B4975A 333F42|WSH C8102E 041E42|WPG 041E42 004C97',
+    mlb: 'ARI A71930 E3D4AD|ATL CE1141 13274F|BAL DF4601 000000|BOS BD3039 0C2340|CHC 0E3386 CC3433|CHW 27251F C4CED4|CIN C6011F 000000|CLE 00385D E50022|COL 33006F C4CED4|DET 0C2340 FA4616|HOU 002D62 EB6E1F|KC 004687 BD9B60|LAA BA0021 003263|LAD 005A9C EF3E42|MIA 00A3E0 EF3340|MIL 12284B FFC52F|MIN 002B5C D31145|NYM 002D72 FF5910|NYY 0C2340 C4CED4|ATH 003831 EFB21E|OAK 003831 EFB21E|PHI E81828 002D72|PIT 27251F FDB827|SD 2F241D FFC425|SF FD5A1E 27251F|SEA 0C2C56 005C5C|STL C41E3A 0C2340|TB 092C5C 8FBCE6|TEX 003278 C0111F|TOR 134A8E 1D2D5C|WSH AB0003 14225A'
+  };
+  function knownColor(league, abbr) {
+    var row = TC[league]; if (!row || !abbr) return null;
+    var m = new RegExp('(^|\\|)' + String(abbr).toUpperCase() + ' ([0-9A-F]{6}) ([0-9A-F]{6})').exec(row);
+    return m ? { c1: '#' + m[2], c2: '#' + m[3] } : null;
+  }
   function fillColors(games) {
     var jobs = [];
     games.forEach(function (g) {
@@ -364,6 +376,7 @@
         if (!t.id || (t.c1 && t.c1 !== NEUTRAL.c1)) return false;
         var c = load('tc:' + g.league + ':' + t.id, 7 * 86400000);
         if (c && c.c1) { t.c1 = c.c1; t.c2 = c.c2 || t.c2; if (!t.logo && c.logo) t.logo = c.logo; return false; }
+        var kc = knownColor(g.league, t.abbr); if (kc) { t.c1 = kc.c1; t.c2 = kc.c2; if (t.logo) return false; }
         return true;
       });
       if (need.length) jobs.push(colorsFromSummary(g).then(function (got) {
@@ -540,7 +553,7 @@
     if (b.calendar.error) { S.calErr = 'Calendar error: ' + b.calendar.error; return null; }
     S.calErr = null;
     S.calMissing = (b.calendar.missing || []).map(function (m) { return m.name + ': ' + m.why; });
-    return (b.calendar.events || []).map(function (e) { return { title: e.title, start: new Date(e.start), end: new Date(e.end), allDay: e.allDay, who: e.calendar, color: e.color || '#ffb35c', location: e.location, description: e.description, leave: e.leave ? new Date(e.leave) : null, drive: e.drive || null }; })
+    return (b.calendar.events || []).map(function (e) { return { title: e.title || 'Busy', start: new Date(e.start), end: new Date(e.end), allDay: e.allDay, who: e.calendar, color: e.color || '#ffb35c', location: e.location, description: e.description, leave: e.leave ? new Date(e.leave) : null, drive: e.drive || null }; })
       .sort(function (a, b) { return a.start - b.start; });
   }
   function photos() {
@@ -568,9 +581,13 @@
     photoSrc(item, function (src) { var e2 = $(elId); if (e2) e2.style.backgroundImage = 'url("' + src + '")'; });
     var nxt = ph[(S.photoIdx + 1) % ph.length]; photoSrc(nxt, function () { });
   }
+  var DEC = document.createElement('textarea');
+  function unent(s) { s = String(s || ''); for (var i = 0; i < 3 && /&(#\d+|#x[0-9a-f]+|[a-z]+);/i.test(s); i++) { DEC.innerHTML = s; s = DEC.value; } return s; }
+  function cleanStory(x) { return x ? Object.assign({}, x, { title: unent(x.title), summary: unent(x.summary) }) : x; }
   function newsList() {
     var b = S.back; if (!b || !b.news) return null;
-    var src = b.news.sources || {}, take = function (name, k) { return (src[name] || [])[k]; };
+    var src = {}; Object.keys(b.news.sources || {}).forEach(function (k) { src[k] = (b.news.sources[k] || []).map(cleanStory); });
+    var take = function (name, k) { return (src[name] || [])[k]; };
     var chicago = [];
     ['Chicago Tribune', 'Sun-Times', 'WGN', 'NBC 5', 'ABC 7'].forEach(function (name) { (src[name] || []).slice(0, 2).forEach(function (s) { chicago.push(Object.assign({ src: name }, s)); }); });
     chicago.sort(function (a, b) { return new Date(b.date) - new Date(a.date); });
@@ -599,6 +616,7 @@
   // ------------------------------------------------------------ screens
   function render() {
     var el = $('screen'), fresh = S.lastScreen !== S.screen || S.lastPage !== S.page;
+    if (fresh) S.pageStart = Date.now();
     S.lastScreen = S.screen; S.lastPage = S.page;
     var brief = S.screen === 'home' && isBriefing();
     var html = brief ? '<section class="bleed brief' + (S.homePhase === 'scene' ? ' parked' : '') + '">' + briefingBleed() + '</section>' : S.screen === 'home' ? homeHTML() : fullHTML();
@@ -875,7 +893,7 @@
   function curPage() { var pg = pageList(S.screen); return pg[S.page < pg.length ? S.page : 0]; }
   function dotsHTML(pg) {
     if (pg.length < 2) return '';
-    return '<div class="dots">' + pg.map(function (p, i) { return '<button type="button" data-page="' + i + '" class="' + (i === S.page ? 'on' : '') + '" aria-label="Page ' + (i + 1) + '" style="--dur:' + pageDur() + 's"></button>'; }).join('') + '</div>';
+    return '<div class="dots">' + pg.map(function (p, i) { return '<button type="button" data-page="' + i + '" class="' + (i === S.page ? 'on' : '') + '" aria-label="Page ' + (i + 1) + '" style="--dur:' + pageDur() + 's;--el:-' + Math.max(0, (Date.now() - (S.pageStart || Date.now())) / 1000).toFixed(2) + 's"></button>'; }).join('') + '</div>';
   }
 
   // ---- scores
@@ -1231,7 +1249,7 @@
     var nw = newsStories(), s = nw && p && p.indexOf('s:') === 0 ? nw[+p.slice(2)] : null;
     if (!s) return '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">' + note(S.backErr === 'setup' ? SETUP : esc(S.backErr || 'Loading…')) + '</div>';
     var len = s.title.length, fs = len > 110 ? 42 : len > 80 ? 48 : 56;
-    return '<div style="position:absolute;inset:0;background:linear-gradient(135deg,var(--accent) -40%,#1b2433 45%,#140f1c)"></div>' +
+    return (s.image ? '<div style="position:absolute;inset:0;background:#111"></div>' : '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(12,8,22,.25),rgba(12,8,22,.5))"></div>') + // no picture: the season background shows through
       (s.image ? '<img src="' + esc(s.image) + '" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" onerror="this.remove()">' : '') +
       '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.4) 0%,rgba(0,0,0,0) 22%,rgba(0,0,0,.2) 42%,rgba(0,0,0,.9) 100%)"></div>' +
       '<div class="btag" style="background:var(--accent);color:var(--ink)">' + esc(s.src) + ' · Top news</div>' + top +
@@ -1735,7 +1753,7 @@
       var first = pick[0] || groups[0], sib = groups.filter(function (g) { return g !== first && g.parent === first.parent; })[0] || groups.filter(function (g) { return g !== first; })[0];
       pick = [first].concat(sib ? [sib] : []);
     }
-    var tc = function (r) { var c = load('tc:' + league + ':' + r.id); return c && c.c1 ? c : null; };
+    var tc = function (r) { var c = load('tc:' + league + ':' + r.id); return c && c.c1 ? c : knownColor(league, r.abbr); };
     var ties = pick.some(function (g) { return g.entries.some(function (r) { return +r.t > 0; }); });
     var heads = league === 'nhl' ? ['GP', 'W', 'L', 'OTL', 'PTS'] : league === 'nfl' ? ['W', 'L'].concat(ties ? ['T'] : [], ['PCT', 'STRK']) : ['W', 'L', 'PCT', 'GB', 'STRK'];
     var vals = function (r) { return league === 'nhl' ? [r.gp, r.w, r.l, r.otl, r.pts] : league === 'nfl' ? [r.w, r.l].concat(ties ? [r.t || '0'] : [], [r.pct, r.strk]) : [r.w, r.l, r.pct, r.gb, r.strk]; };
