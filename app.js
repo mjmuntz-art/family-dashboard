@@ -1838,7 +1838,12 @@
     if (/\.(mp4|webm|mov)(\?|$)/i.test(u)) return { kind: 'file', src: u };
     return null;
   }
-  function apodNow() { var b = S.back && S.back.apod; if (b && !b.error && (b.image || b.video)) return { title: b.title, text: b.text, image: b.image, video: b.video ? videoEmbed(b.video) : null, credit: b.credit, date: b.date }; return S.apod; } // your Apps Script's copy first
+  function apodNow() { // your Apps Script's copy first; NASA's own words fill in a missing title or caption
+    var b = S.back && S.back.apod, x = S.apod, generic = /^(apod|nasa science|nasa|astronomy picture of the day)?$/i;
+    if (!b || b.error || !(b.image || b.video)) return x;
+    var text = b.text || (x && x.text) || '', title = b.title && !generic.test(b.title) ? b.title : x && x.title && !generic.test(x.title) ? x.title : ((text.match(/^[^.!?]{8,90}[.!?]/) || [''])[0] || b.title || 'Space');
+    return { title: title, text: text, image: b.image, video: b.video ? videoEmbed(b.video) : null, credit: b.credit, date: b.date };
+  }
   function apodBleed(top) {
     var a = apodNow(); if (!a) return emptyBleed('Loading…');
     var v = a.video, media = (a.image ? '<img src="' + esc(a.image) + '" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">' : '') + // the photo sits underneath, in case the video can't play
