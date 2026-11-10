@@ -1843,7 +1843,7 @@
   function apodNow() { // your Apps Script's copy first; NASA's own words fill in a missing title or caption
     var b = S.back && S.back.apod, x = S.apodInfo || S.apod, generic = /^(apod|nasa science|nasa|astronomy picture of the day)?$/i;
     if (!b || b.error || !(b.image || b.video)) return x;
-    var text = b.text || (x && x.text) || '', title = b.title && !generic.test(b.title) ? b.title : x && x.title && !generic.test(x.title) ? x.title : ((text.match(/^[^.!?]{8,90}[.!?]/) || [''])[0] || b.title || 'Space');
+    var text = b.text || (x && x.text) || '', title = x && x.title && !generic.test(x.title) ? x.title : ((text.match(/^[^.!?]{8,90}[.!?]/) || [''])[0] || b.title || 'Space'); // NASA's own title, else its first sentence, else the file name
     return { title: title, text: text, image: b.image, video: b.video ? videoEmbed(b.video) : null, credit: (x && x.credit ? String(x.credit).replace(/\s+/g, ' ').trim() : '') || b.credit || 'NASA', date: b.date };
   }
   function apodBleed(top) {
