@@ -1928,7 +1928,7 @@
       '<div style="font-size:17px;opacity:.75">' + lo.count + ' stations within ' + lo.radius + ' mi</div>' +
       (num(lo.avg) && num(best.regular) && lo.avg - best.regular >= 0.05 ? '<div style="font-size:20px;font-weight:800;color:#7fdc9a;margin-top:10px">Save ' + Math.round((lo.avg - best.regular) * 100) + '¢/gal vs average</div>' : '') + '</div></div>' +
       '<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;height:180px">' + tiles.join('') + '</div>' +
-      '<div style="font-size:14px;opacity:.55;text-align:right">Station prices from Google Maps · state averages from AAA</div></div>';
+      '<div style="font-size:14px;opacity:.55;text-align:right">Station prices from ' + esc(lo.source || 'Google Maps') + ' · state averages from AAA</div></div>';
   }
   function mealBleed(top) { // recipes of the day: a seasonal dinner and a seasonal snack or treat
     var ms = S.meals || []; if (!ms.length) return emptyBleed('Loading…');
