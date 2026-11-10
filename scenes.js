@@ -786,9 +786,9 @@
     // Thanksgiving: farmhouse great room. The fire dances and lights the room, candles and lanterns flicker, the ceiling lights twinkle,
     // leaves drift down outside the windows, steam rises from the pie, dust floats in the sunbeams
     thanksgiving: { dusk: true,
-      waves: [{ mask: 'scenes/thanksgiving-fire.png', box: [790, 300, 160, 130], freq: [0.06, 0.14], scale: 3.5, dur: 6, seed: 7 }],
-      embers: { box: [818, 400, 100], n: 9, when: ['morning', 'midday', 'afternoon', 'evening', 'dusk', 'night'] },
-      lights: [[868, 380, 150, 'pumpkin'], [868, 520, 120, 'pumpkin'], [737, 205, 30, 'lamp'], [993, 205, 30, 'lamp'], [775, 215, 16, 'lamp'], [955, 215, 16, 'lamp'],
+      waves: [{ mask: 'scenes/thanksgiving-fire.png', box: [790, 300, 160, 130], freq: [0.06, 0.14], swing: 0.06, scale: 3, dur: 14, seed: 7 }],
+      embers: { box: [818, 400, 100], n: 6, when: ['morning', 'midday', 'afternoon', 'evening', 'dusk', 'night'] },
+      lights: [[868, 380, 150, 'fire'], [868, 520, 120, 'fire'], [737, 205, 30, 'lamp'], [993, 205, 30, 'lamp'], [775, 215, 16, 'lamp'], [955, 215, 16, 'lamp'],
         [1018, 392, 26, 'lamp'], [1252, 402, 24, 'lamp'], [95, 712, 50, 'lamp'], [125, 425, 30, 'lamp'], [298, 395, 26, 'lamp'], [240, 425, 22, 'lamp'], [545, 330, 22, 'lamp'],
         [178, 170, 16, 'lamp'], [212, 170, 16, 'lamp'], [236, 178, 16, 'lamp'], [256, 180, 16, 'lamp'], [272, 183, 16, 'lamp'], [1205, 280, 40, 'window']],
       bulbR: 14, bulbs: [[879,0],[935,0],[134,3],[101,11],[275,10],[862,11],[957,14],[842,16],[328,32],[803,32],[997,32],[291,40],[34,45],[772,48],[1042,49],[339,52],[737,59],[375,58],[1068,58],[323,64],[691,68],[1102,67],[428,69],[405,69],[617,69],[651,73],[584,76],[1247,77],[1153,78],[484,78],[1201,78],[539,79],[445,91],[32,118],[533,138],[516,156],[377,158],[479,159],[424,171]],
@@ -807,7 +807,7 @@
     var lights = cfg.lights && !Array.isArray(cfg.lights) ? cfg.lights[tod] || [] : cfg.lights || [];
     (cfg.waves || []).forEach(function (wv) { // part of the photo moves: flags wave, a fire dances
       if (!cfg.img || low || (wv.when && wv.when.indexOf(tod) < 0)) return;
-      var mk = c.uid('f'), fl = c.uid('w'), fb = wv.box, f0 = wv.freq || [0.011, 0.045], f1 = [f0[0] * 1.25, f0[1] * 1.15], f2 = [f0[0] * 0.9, f0[1] * 0.9];
+      var mk = c.uid('f'), fl = c.uid('w'), fb = wv.box, f0 = wv.freq || [0.011, 0.045], sw = wv.swing, f1 = sw ? [f0[0] * (1 + sw), f0[1] * (1 + sw)] : [f0[0] * 1.25, f0[1] * 1.15], f2 = sw ? [f0[0] * (1 - sw), f0[1] * (1 - sw)] : [f0[0] * 0.9, f0[1] * 0.9];
       c.defs += '<mask id="' + mk + '" maskUnits="userSpaceOnUse" x="-71.1" y="0" width="1422.2" height="800"><image href="' + wv.mask + '" x="-71.1" y="0" width="1422.2" height="800" preserveAspectRatio="none"/></mask>' +
         '<filter id="' + fl + '" filterUnits="userSpaceOnUse" x="' + fb[0] + '" y="' + fb[1] + '" width="' + fb[2] + '" height="' + fb[3] + '" color-interpolation-filters="sRGB">' +
         '<feTurbulence type="fractalNoise" baseFrequency="' + f0.join(' ') + '" numOctaves="1" seed="' + (wv.seed || 3) + '" result="n"><animate attributeName="baseFrequency" dur="' + (wv.dur || 7) + 's" repeatCount="indefinite" values="' + [f0, f1, f2, f0].map(function (x) { return x.join(' '); }).join(';') + '" keyTimes="0;0.35;0.7;1" calcMode="spline" keySplines=".45 0 .55 1;.45 0 .55 1;.45 0 .55 1"/></feTurbulence>' +
@@ -819,8 +819,8 @@
     var mist = cfg.mist && cfg.mist[tod];
     if (mist && !low) { out += '<g filter="' + c.blur(16) + '">'; for (var mi = 0; mi < 6; mi++) out += '<ellipse class="a-fog" style="animation-delay:-' + f(r() * 40) + 's" cx="' + f(mist[2] != null ? mist[2] + r() * (mist[3] - mist[2]) : r() * W) + '" cy="' + f(mist[0] + (r() - 0.5) * 30) + '" rx="' + f(mist[2] != null ? 90 + r() * 120 : 200 + r() * 220) + '" ry="' + f(14 + r() * 12) + '" fill="' + mist[1] + '" opacity="0.4"/>'; out += '</g>'; }
     lights.forEach(function (L) { // warm glow: lamps flicker, windows breathe
-      var g = L[3] === 'pumpkin' ? c.rad([[0, '#ffb347', 0.95 * Math.max(k, 0.55)], [0.45, '#ff7a1a', 0.4 * Math.max(k, 0.55)], [1, '#ff6a00', 0]]) : c.rad([[0, '#ffd590', 0.9 * k], [0.4, '#ffc06a', 0.35 * k], [1, '#ffb050', 0]]);
-      out += '<circle class="' + (L[3] === 'window' ? 'a-pulse' : 'a-flicker') + '" style="animation-delay:-' + f(r() * 5) + 's" cx="' + L[0] + '" cy="' + L[1] + '" r="' + L[2] + '" fill="' + g + '"/>';
+      var g = L[3] === 'pumpkin' || L[3] === 'fire' ? c.rad([[0, '#ffb347', 0.95 * Math.max(k, 0.55)], [0.45, '#ff7a1a', 0.4 * Math.max(k, 0.55)], [1, '#ff6a00', 0]]) : c.rad([[0, '#ffd590', 0.9 * k], [0.4, '#ffc06a', 0.35 * k], [1, '#ffb050', 0]]);
+      out += '<circle class="' + (L[3] === 'window' ? 'a-pulse' : L[3] === 'fire' ? 'a-hearth' : 'a-flicker') + '" style="animation-delay:-' + f(r() * 5) + 's" cx="' + L[0] + '" cy="' + L[1] + '" r="' + L[2] + '" fill="' + g + '"/>';
       if (L[3] === 'lamp' && k > 0.6) out += '<ellipse class="a-pulse" cx="' + L[0] + '" cy="' + (L[1] + L[2] * 1.5) + '" rx="' + f(L[2] * 1.8) + '" ry="' + f(L[2] * 0.35) + '" fill="' + c.rad([[0, '#ffcf8a', 0.35 * k], [1, '#ffcf8a', 0]]) + '"/>';
     });
     var sun = cfg.suns && cfg.suns[tod]; // the low sun breathes
@@ -865,7 +865,7 @@
       cfg.steam.at.forEach(function (pt) { for (var si = 0; si < 4; si++) stm += '<ellipse class="a-steam" style="animation-delay:-' + f(si * 1.4 + r() * 0.6) + 's" cx="' + f(pt[0] + (r() - 0.5) * 16) + '" cy="' + pt[1] + '" rx="6" ry="9" fill="#ffffff" opacity="0.5"/>'; });
       c.add(stm + '</g>'); }
     if (cfg.embers && cfg.embers.when.indexOf(tod) >= 0 && !low) { var eb = cfg.embers.box, em = ''; // the occasional spark pops up out of the fire
-      for (var ei = 0; ei < cfg.embers.n; ei++) em += '<circle class="a-ember" style="animation-duration:' + f(2.2 + r() * 2.4) + 's;animation-delay:-' + f(r() * 9) + 's;--dx:' + f((r() - 0.5) * 30) + 'px;--dy:-' + f(45 + r() * 50) + 'px" cx="' + f(eb[0] + r() * eb[2]) + '" cy="' + f(eb[1] - r() * 20) + '" r="' + f(0.9 + r() * 1.2) + '" fill="' + (r() < 0.5 ? '#ffd27a' : '#ff9a3c') + '"/>';
+      for (var ei = 0; ei < cfg.embers.n; ei++) em += '<circle class="a-ember" style="animation-duration:' + f(6 + r() * 5) + 's;animation-delay:-' + f(r() * 20) + 's;--dx:' + f((r() - 0.5) * 30) + 'px;--dy:-' + f(45 + r() * 50) + 'px" cx="' + f(eb[0] + r() * eb[2]) + '" cy="' + f(eb[1] - r() * 20) + '" r="' + f(0.9 + r() * 1.2) + '" fill="' + (r() < 0.5 ? '#ffd27a' : '#ff9a3c') + '"/>';
       c.add('<g>' + em + '</g>'); }
     var bz = cfg.bees && cfg.bees[tod];
     if (bz) { var bs = ''; bz.forEach(function (bx) { for (var bi = 0; bi < 5; bi++) { var x = bx[0] + r() * (bx[1] - bx[0]), y = bx[2] + r() * (bx[3] - bx[2]), sz = 0.8 + r() * 0.5;
