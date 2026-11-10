@@ -1689,7 +1689,7 @@
         return '<div class="sticky" style="background:' + cols2[i % cols2.length] + ';transform:rotate(' + [-2, 1.5, -1, 2, -1.5, 1][i % 6] + 'deg)"><div class="clamp5" style="font-size:' + (x.length > 60 ? 22 : 28) + 'px">' + esc(x) + '</div></div>';
       }).join('') + '</div>';
     }
-    return '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,6,18,.5),rgba(10,6,18,.75))"></div>' + btag('Family board') + top +
+    return '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,6,18,.5),rgba(10,6,18,.75))"></div>' + btag(b.grocery && !b.notes.length ? 'Grocery list' : 'Family board') + top +
       '<div style="position:absolute;left:40px;right:40px;top:92px;bottom:32px;display:grid;grid-template-columns:' + (both ? '1fr 1fr' : '1fr') + ';gap:26px">' + groc + notes + '</div>';
   }
 
