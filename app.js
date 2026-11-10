@@ -560,12 +560,21 @@
     }
     return j;
   }
+  // calendar colors: Mike blue, Cate burgundy, Weston green, Family orange, Dinners follow the season
+  var CAL_COLORS = { mike: '#4f8fe8', cate: '#b03a5b', weston: '#4cb86b', family: '#f0a43c' };
+  var SEASON_COLOR = { winter: '#cfd8e3', spring: '#f29cc2', summer: '#f2d14c', fall: '#c9a227' }; // frost silver, blossom pink, sunshine yellow, harvest gold
+  function calColor(name, given) {
+    var n = String(name || '').toLowerCase(), set = Object.assign({}, CAL_COLORS, C.calColors || {});
+    if (/dinner/.test(n)) return SEASON_COLOR[seasonOf(now())];
+    var k = Object.keys(set).filter(function (x) { return n === x || n.indexOf(x) === 0; })[0];
+    return k ? set[k] : given || '#ffb35c';
+  }
   function events() {
     var b = S.back; if (!b || !b.calendar) return null;
     if (b.calendar.error) { S.calErr = 'Calendar error: ' + b.calendar.error; return null; }
     S.calErr = null;
     S.calMissing = (b.calendar.missing || []).map(function (m) { return m.name + ': ' + m.why; });
-    return (b.calendar.events || []).map(function (e) { return { title: e.title || 'Busy', start: new Date(e.start), end: new Date(e.end), allDay: e.allDay, who: e.calendar, color: e.color || '#ffb35c', location: e.location, description: e.description, leave: e.leave ? new Date(e.leave) : null, drive: e.drive || null }; })
+    return (b.calendar.events || []).map(function (e) { return { title: e.title || 'Busy', start: new Date(e.start), end: new Date(e.end), allDay: e.allDay, who: e.calendar, color: calColor(e.calendar, e.color), location: e.location, description: e.description, leave: e.leave ? new Date(e.leave) : null, drive: e.drive || null }; })
       .sort(function (a, b) { return a.start - b.start; });
   }
   function photos() {
