@@ -775,6 +775,14 @@
     december: { dusk: true, snow: [44, 22, 6], bulbR: 13,
       lights: [[295, 302, 54, 'lamp'], [305, 612, 50, 'lamp'], [65, 360, 90, 'window'], [930, 428, 18, 'window'], [963, 428, 14, 'window'], [930, 330, 10, 'window']],
       bulbs: [[8,52],[27,60],[1248,66],[7,71],[103,125],[1206,128],[1226,140],[94,143],[1265,146],[213,156],[246,165],[270,192],[278,216],[339,217],[319,223],[386,239],[560,239],[1265,244],[19,252],[1157,265],[37,269],[13,272],[413,283],[38,289],[1132,291],[105,295],[152,306],[1194,306],[18,309],[41,312],[235,317],[209,328],[90,323],[250,327],[589,325],[933,330],[407,331],[1260,331],[425,332],[36,338],[580,341],[91,343],[16,344],[258,348],[1120,354],[40,370],[374,375],[1111,375],[82,380],[19,387],[424,393],[94,394],[69,399],[32,403],[1169,407],[935,413],[9,414],[1089,416],[964,417],[312,420],[397,419],[907,423],[998,422],[47,429],[1102,429],[1192,430],[87,432],[1129,432],[929,435],[962,439],[385,436],[1225,441],[412,445],[370,446],[458,452],[427,461],[911,462],[801,464],[445,466],[741,472],[356,475],[304,485],[95,493],[23,495],[519,496],[623,497],[659,498],[74,498],[49,499],[547,500],[109,506],[35,511],[17,514],[889,514],[1038,522],[946,524],[1146,527],[1228,526],[560,528],[534,530],[27,536],[70,535],[7,537],[45,537],[1060,539],[1100,541],[888,544],[1136,543],[1225,545],[1253,552],[912,554],[418,560],[1030,564],[938,572],[1044,579],[1089,585],[1114,594],[1008,593],[1030,593],[975,594],[1217,613],[1109,616],[1157,620],[389,629],[1229,630],[1272,634],[449,635],[410,642],[369,652],[389,651],[263,658],[320,669],[280,673]] },
+    // Veterans Day: memorial park. Light ripples across the flags, candles and lanterns flicker, red and gold leaves drift down,
+    // morning mist in the park, stars at night (no confetti: it's a memorial)
+    veterans: { dusk: true, skyMask: 'scenes/veterans-sky.png', flagMask: 'scenes/veterans-flags.png', fall: function () { return ['leaves', 12, ['#b8321a', '#d9541e', '#e8822c', '#f2b33d']]; },
+      lights: { morning: [[132, 556, 46, 'lamp'], [416, 500, 22, 'lamp'], [456, 500, 22, 'lamp']], midday: [[132, 556, 38, 'lamp']], afternoon: [[132, 556, 46, 'lamp'], [416, 500, 22, 'lamp'], [456, 500, 22, 'lamp']],
+        evening: [[132, 556, 56, 'lamp'], [416, 500, 26, 'lamp'], [456, 500, 26, 'lamp'], [309, 492, 30, 'window'], [802, 458, 14, 'lamp'], [934, 458, 14, 'lamp'], [1042, 456, 14, 'lamp']],
+        dusk: [[132, 556, 60, 'lamp'], [416, 500, 28, 'lamp'], [456, 500, 28, 'lamp'], [309, 492, 34, 'window'], [802, 458, 16, 'lamp'], [934, 458, 16, 'lamp'], [1042, 456, 16, 'lamp']],
+        night: [[132, 556, 64, 'lamp'], [416, 500, 30, 'lamp'], [456, 500, 30, 'lamp'], [309, 492, 38, 'window'], [802, 458, 18, 'lamp'], [934, 458, 18, 'lamp'], [1042, 456, 18, 'lamp'], [1250, 520, 40, 'window']] },
+      suns: { morning: [1085, 395, 160], afternoon: [1085, 420, 160], evening: [1104, 455, 180] }, mist: { morning: [400, '#fff1e4', 640, 1280] }, stars: [700, 1270, 20, 230] },
     august: { dusk: true, skyMask: 'scenes/august-sky.png',
       suns: { morning: [315, 321, 170], afternoon: [370, 225, 150], evening: [335, 302, 180], dusk: [329, 315, 190] }, moon: { night: [325, 223, 70] },
       mist: { morning: [372, '#fff3df'] }, stars: [600, 1270, 20, 290], meteors: { night: 6 },
@@ -785,6 +793,11 @@
   function photoFx(c, cfg, tod, low) {
     var r = c.r, k = LIGHT[tod] != null ? LIGHT[tod] : 0.8, out = '', blur = c.blur(5);
     var lights = cfg.lights && !Array.isArray(cfg.lights) ? cfg.lights[tod] || [] : cfg.lights || [];
+    if (cfg.flagMask && !low) { // light rippling across the flags like a breeze
+      var fmk = c.uid('f'); c.defs += '<mask id="' + fmk + '" maskUnits="userSpaceOnUse" x="-71.1" y="0" width="1422.2" height="800"><image href="' + cfg.flagMask + '" x="-71.1" y="0" width="1422.2" height="800" preserveAspectRatio="none"/></mask>';
+      var sheen = c.lin([[0, '#ffffff', 0], [0.42, '#ffffff', 0], [0.5, '#ffffff', 0.55], [0.58, '#ffffff', 0], [0.7, '#000000', 0], [0.78, '#000000', 0.35], [0.86, '#000000', 0], [1, '#000000', 0]], 1, 0);
+      out += '<g mask="url(#' + fmk + ')" style="mix-blend-mode:soft-light"><rect class="a-flag" x="-260" y="0" width="560" height="380" fill="' + sheen + '"/><rect class="a-flag" style="animation-delay:-1.7s" x="-260" y="0" width="560" height="380" fill="' + sheen + '"/></g>';
+    }
     var moon = cfg.moon && cfg.moon[tod];
     if (moon) out += '<circle class="a-pulse" cx="' + moon[0] + '" cy="' + moon[1] + '" r="' + moon[2] + '" fill="' + c.rad([[0, '#eef3ff', 0.6], [0.4, '#cfdcff', 0.25], [1, '#cfdcff', 0]]) + '"/>';
     var mist = cfg.mist && cfg.mist[tod];
