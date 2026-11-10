@@ -876,7 +876,7 @@
     if (screen === 'news') { var nw = newsStories(); return nw && nw.length ? nw.map(function (s, i) { return 's:' + i; }) : ['empty']; }
     if (screen === 'weather') return S.alerts.map(function (a, i) { return 'al:' + i; }).concat(S.wx ? ['now', 'details', 'hours', 'week', 'sky', 'radar'] : S.alerts.length ? [] : ['empty']);
     if (screen === 'photos') { var pgN = Math.min(3, photoGroups().length) + otdGroups().length; var out = []; for (var q = 0; q < Math.max(1, pgN); q++) out.push('c:' + q); return out; }
-    if (screen === 'family') { var fp = ['main']; if (boardLists().grocery || boardLists().notes.length) fp.push('board'); if (countdownItems().length) fp.push('cd'); return fp; }
+    if (screen === 'family') { var fp = ['main']; if (events()) fp.push('week', 'who'); if (boardLists().grocery || boardLists().notes.length) fp.push('board'); if (countdownItems().length) fp.push('cd'); return fp; }
     if (screen === 'live') { var lv = liveList(); return lv.length ? lv.map(function (g) { return 'g:' + g.id; }) : ['none']; }
     if (screen === 'alert') { var ua = S.alerts.filter(isUrgent); return ua.length ? ua.map(function (a, i) { return 'al:' + S.alerts.indexOf(a); }) : ['none']; }
     if (screen === 'night') return ['main'];
@@ -1308,7 +1308,7 @@
     if (S.screen === 'live') return p === 'none' ? emptyBleed('No live games right now') : gameBleed(findGame(p.slice(2)), top, true);
     if (String(p).indexOf('al:') === 0) return alertBleed(S.alerts[+p.slice(3)], top, S.screen === 'alert');
     if (S.screen === 'alert') return emptyBleed('Warning has ended');
-    if (S.screen === 'family') return p === 'board' ? boardBleed(top) : countdownBleed(top);
+    if (S.screen === 'family') return p === 'week' ? weekBleed(top) : p === 'who' ? whoBleed(top) : p === 'board' ? boardBleed(top) : countdownBleed(top);
     if (String(p).indexOf('st:') === 0) return standingsBleed(p.slice(3), top);
     if (S.screen === 'news') return newsBleed(p, top);
     if (S.screen === 'scores') return String(p).indexOf('grid') === 0 ? scoreboardBleed(+p.split(':')[1] || 0, top) : gameBleed(findGame(p.slice(2)), top);
@@ -1729,6 +1729,73 @@
     (window.upcomingHolidays ? window.upcomingHolidays(n, 4) : []).forEach(function (h) { other.push({ name: h.name, date: h.date, n: h.n, emoji: HOLI_EMOJI[h.id] || '🎉' }); });
     mine = mine.slice(0, 6); other.sort(function (a, b) { return a.n - b.n; });
     return mine.concat(other.slice(0, Math.max(0, 6 - mine.length))).sort(function (a, b) { return a.n - b.n; });
+  }
+  // ---- the full week (7 columns) and who's doing what (a row per person)
+  function weekDays() { // today + the next 6 days, each with its events, dinner and weather
+    var ev = events() || [], n = now(), w = S.wx, isDin = function (e) { return /dinner/i.test(e.who || ''); }, out = [];
+    for (var i = 0; i < 7; i++) {
+      var d = new Date(n.getFullYear(), n.getMonth(), n.getDate() + i), wd = w && w.days ? w.days[i] : null;
+      out.push({ d: d, today: i === 0, list: ev.filter(function (e) { return onDay(e, d) && !isDin(e); }).sort(function (a, b) { return (b.allDay ? 1 : 0) - (a.allDay ? 1 : 0) || a.start - b.start; }),
+        dinner: ev.filter(function (e) { return onDay(e, d) && isDin(e); })[0], wx: wd });
+    }
+    return out;
+  }
+  function shortTime(e, d) {
+    if (e.allDay || (d && e.start < dayStart(d))) return 'All day';
+    var h = e.start.getHours(), m = e.start.getMinutes();
+    return (h % 12 || 12) + (m ? ':' + (m < 10 ? '0' : '') + m : '') + (h < 12 ? 'a' : 'p');
+  }
+  function dayHead(x, size) {
+    var wx = x.wx && num(x.wx.hi) ? '<div style="display:flex;align-items:center;justify-content:center;gap:5px;font-size:15px;font-weight:700;opacity:.92"><span style="color:var(--accent);display:flex">' + icon(x.wx.icon, 20, 1.8) + '</span>' + x.wx.hi + '° / ' + x.wx.lo + '°</div>' : '';
+    return '<div style="text-align:center;flex-shrink:0"><div style="font-size:15px;font-weight:800;letter-spacing:.1em;color:' + (x.today ? 'var(--accent)' : '#fff') + '">' + (x.today ? 'TODAY' : DOW[x.d.getDay()].toUpperCase()) + '</div>' +
+      '<div class="head" style="font-size:' + size + 'px;line-height:1">' + x.d.getDate() + '</div>' + wx + '</div>';
+  }
+  function dinnerSlot(x, fs) {
+    return '<div class="ellip" style="flex-shrink:0;padding:8px 6px;border-radius:10px;text-align:center;font-size:' + (fs || 15) + 'px;font-weight:700;background:rgba(232,194,92,.16);border:1px dashed rgba(232,194,92,.5)">' +
+      (x.dinner ? '🍽️ ' + esc(x.dinner.title) : '<span style="opacity:.45">🍽️ —</span>') + '</div>';
+  }
+  function weekBleed(top) {
+    var days = weekDays(), cap = 6;
+    var cols = days.map(function (x) {
+      var shown = x.list.slice(0, x.list.length > cap ? cap - 1 : cap), more = x.list.length - shown.length;
+      return '<div class="glass" style="display:flex;flex-direction:column;gap:8px;padding:12px 9px;min-height:0;min-width:0;' + (x.today ? 'background:rgba(255,179,92,.2);border-color:var(--accent);' : '') + '">' + dayHead(x, 44) +
+        '<div style="display:flex;flex-direction:column;gap:6px;flex:1;min-height:0;overflow:hidden">' + (shown.length ? shown.map(function (e) {
+          return '<div style="display:flex;gap:7px;padding:6px 8px;border-radius:10px;background:rgba(255,255,255,.08);flex-shrink:0"><div style="width:4px;border-radius:2px;background:' + esc(e.color) + ';flex-shrink:0"></div>' +
+            '<div style="min-width:0"><div style="font-size:13px;font-weight:800;opacity:.8">' + esc(shortTime(e, x.d)) + '</div><div class="clamp2" style="font-size:16px;font-weight:700;line-height:1.2">' + esc(e.title) + '</div></div></div>';
+        }).join('') : '<div style="margin:auto 0;text-align:center;font-size:15px;opacity:.5">Nothing planned</div>') +
+        (more > 0 ? '<div style="text-align:center;font-size:14px;font-weight:700;opacity:.75">+' + more + ' more</div>' : '') + '</div>' + dinnerSlot(x, 14) + '</div>';
+    }).join('');
+    return '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,6,18,.45),rgba(10,6,18,.65))"></div>' + btag('Family · This week') + top +
+      '<div style="position:absolute;left:40px;right:40px;top:88px;bottom:32px;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px">' + cols + '</div>';
+  }
+  function people() { // rows for "who's doing what": your people, then everyone else
+    var names = C.people || ['Mike', 'Cate', 'Weston'], map = C.peopleMap || {}, ev = events() || [];
+    var colorOf = function (nm) { var e = ev.filter(function (x) { return (x.who || '').toLowerCase() === nm.toLowerCase(); })[0]; return e ? e.color : '#8fa3c8'; };
+    var rows = names.map(function (nm) { return { name: nm, color: colorOf(nm) }; });
+    rows.push({ name: 'Everyone', color: '#f0a43c' });
+    var whoOf = function (e) {
+      var cal = e.who || '', m = map[cal]; if (m) return m;
+      var hit = names.filter(function (nm) { return cal.toLowerCase() === nm.toLowerCase() || cal.toLowerCase().indexOf(nm.toLowerCase()) === 0; })[0];
+      return hit || 'Everyone';
+    };
+    return { rows: rows, whoOf: whoOf };
+  }
+  function whoBleed(top) {
+    var days = weekDays(), P = people(), cap = 2;
+    var g = '<div></div>' + days.map(function (x) { return '<div style="padding:6px 0;border-radius:12px;' + (x.today ? 'background:rgba(255,179,92,.25);' : '') + '">' + dayHead(x, 30) + '</div>'; }).join('');
+    P.rows.forEach(function (r) {
+      g += '<div style="display:flex;align-items:center;gap:10px;min-width:0"><div style="width:44px;height:44px;border-radius:50%;background:' + esc(r.color) + ';display:flex;align-items:center;justify-content:center;font-weight:900;font-size:20px;color:#1a1020;flex-shrink:0">' + esc(r.name.charAt(0)) + '</div><div class="ellip" style="font-size:18px;font-weight:800">' + esc(r.name) + '</div></div>';
+      days.forEach(function (x) {
+        var mine = x.list.filter(function (e) { return P.whoOf(e) === r.name; }), shown = mine.slice(0, mine.length > cap ? cap - 1 : cap), more = mine.length - shown.length;
+        g += '<div class="glass" style="padding:6px;display:flex;flex-direction:column;gap:5px;min-height:0;min-width:0;overflow:hidden;background:rgba(16,12,24,' + (x.today ? '.62' : '.45') + ')">' + shown.map(function (e) {
+          return '<div style="padding:5px 7px;border-radius:8px;background:' + esc(e.color) + '40;border-left:4px solid ' + esc(e.color) + ';min-width:0"><div style="font-size:12px;font-weight:800;opacity:.85">' + esc(shortTime(e, x.d)) + '</div><div class="clamp2" style="font-size:14px;font-weight:700;line-height:1.2">' + esc(e.title) + '</div></div>';
+        }).join('') + (more > 0 ? '<div style="font-size:13px;font-weight:700;opacity:.75;padding-left:4px">+' + more + ' more</div>' : '') + '</div>';
+      });
+    });
+    g += '<div style="display:flex;align-items:center;gap:10px"><div style="width:44px;height:44px;border-radius:50%;background:#e8c25c;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">🍽️</div><div style="font-size:18px;font-weight:800">Dinner</div></div>' +
+      days.map(function (x) { return '<div class="ellip" style="text-align:center;font-size:14px;font-weight:700;padding:8px 4px;border-radius:10px;background:rgba(232,194,92,.16)">' + (x.dinner ? esc(x.dinner.title) : '<span style="opacity:.45">—</span>') + '</div>'; }).join('');
+    return '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,6,18,.45),rgba(10,6,18,.65))"></div>' + btag("Family · Who's doing what") + top +
+      '<div class="glass" style="position:absolute;left:40px;right:40px;top:88px;bottom:32px;padding:14px;display:grid;grid-template-columns:150px repeat(7,minmax(0,1fr));grid-template-rows:auto repeat(' + P.rows.length + ',minmax(0,1fr)) auto;gap:8px">' + g + '</div>';
   }
   function countdownBleed(top) {
     var all = countdownItems(), k = all.length >= 6 ? 6 : all.length >= 4 ? 4 : all.length, list = all.slice(0, k);
