@@ -549,7 +549,7 @@
   // If one part of the Apps Script reply failed this time (a calendar, a news feed, the photo folder), keep the last good copy of that part
   function keepGood(j, old) {
     if (!old) return j;
-    ['calendar', 'photos', 'news', 'plays', 'morris', 'reminders'].forEach(function (k) { if ((!j[k] || j[k].error) && old[k] && !old[k].error) j[k] = old[k]; });
+    ['calendar', 'photos', 'news', 'plays', 'morris', 'reminders', 'gas', 'tle', 'commute'].forEach(function (k) { if ((!j[k] || j[k].error) && old[k] && !old[k].error) j[k] = old[k]; });
     if (j.news && j.news.sources && old.news && old.news.sources) Object.keys(old.news.sources).forEach(function (name) {
       if (!(j.news.sources[name] || []).length && (old.news.sources[name] || []).length) j.news.sources[name] = old.news.sources[name];
     });
@@ -652,6 +652,8 @@
     if (!(S.detail && S.detail.kind === 'radar')) stopRadar();
     if (S.screen === 'weather' && p === 'radar') startRadar();
     if (S.screen === 'news' && p && p.indexOf('s:') === 0) drawQR((newsStories() || [])[+p.slice(2)]);
+    if (S.screen === 'news' && p === 'hist' && histPick()) drawQR(histPick());
+    if (S.screen === 'family' && p === 'idea' && S.meal) drawQR(S.meal);
   }
   // A background reload only redraws the screen it affects, and never restarts a playing radar loop
   function refresh(screens) {
@@ -751,7 +753,7 @@
       (today.length ? today.length + ' thing' + (today.length === 1 ? '' : 's') + ' today' : 'Nothing scheduled') + '</div></div>' +
       (weeklyTags().length ? '<div style="margin-left:auto">' + tagChip(weeklyTags()[0], true) + '</div>' : '') + '</div>' +
       (rows || '<div class="head" style="font-size:30px;line-height:1.15;flex-shrink:0">' + left + '</div>' + nextCard) +
-      (dinner ? '<div style="margin-top:auto;display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:12px;background:rgba(255,255,255,.08);flex-shrink:0"><span style="font-size:24px">🍽️</span><div style="min-width:0"><div class="lbl">Tonight’s dinner</div><div class="ellip" style="font-size:19px;font-weight:700">' + esc(dinner.title) + '</div></div></div>' : '') + '</div>';
+      (dinner ? '<div style="margin-top:auto;display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:12px;background:rgba(255,255,255,.08);flex-shrink:0"><span style="font-size:24px">🍽️</span><div style="min-width:0"><div class="lbl">Tonight’s dinner</div><div class="ellip" style="font-size:19px;font-weight:700">' + esc(dinner.title) + '</div></div></div>' : S.meal ? '<div style="margin-top:auto;display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:12px;background:rgba(255,255,255,.08);flex-shrink:0"><span style="font-size:24px">💡</span><div style="min-width:0"><div class="lbl">Dinner idea</div><div class="ellip" style="font-size:19px;font-weight:700">' + esc(S.meal.name) + '</div></div></div>' : '') + '</div>';
     // ---- coming up, grouped by day
     var groups = [];
     for (var gd = 1; gd <= 6; gd++) {
@@ -873,10 +875,10 @@
   }
   function pageList(screen) {
     if (screen === 'scores') { var gp = []; for (var i = 0; i < Math.max(1, Math.ceil(S.games.length / 6)); i++) gp.push('grid:' + i); return gp.concat(featureGames().map(function (g) { return 'g:' + g.id; }), standingsLeagues().map(function (l) { return 'st:' + l; })); }
-    if (screen === 'news') { var nw = newsStories(); return nw && nw.length ? nw.map(function (s, i) { return 's:' + i; }) : ['empty']; }
-    if (screen === 'weather') return S.alerts.map(function (a, i) { return 'al:' + i; }).concat(S.wx ? ['now', 'details', 'hours', 'week', 'sky', 'radar'] : S.alerts.length ? [] : ['empty']);
+    if (screen === 'news') { var nw = newsStories(), np = nw && nw.length ? nw.map(function (s, i) { return 's:' + i; }) : ['empty']; if (S.hist && S.hist.length) np.push('hist'); if (gasOK()) np.push('gas'); return np; }
+    if (screen === 'weather') return S.alerts.map(function (a, i) { return 'al:' + i; }).concat(S.wx ? ['now', 'details', 'hours', 'week', 'sky'].concat(window.Astronomy && S.wx.setD ? ['tonight'] : [], S.apod ? ['apod'] : [], ['radar']) : S.alerts.length ? [] : ['empty']);
     if (screen === 'photos') { var pgN = Math.min(3, photoGroups().length) + otdGroups().length; var out = []; for (var q = 0; q < Math.max(1, pgN); q++) out.push('c:' + q); return out; }
-    if (screen === 'family') { var fp = ['main']; if (events()) fp.push('week', 'who'); if (boardLists().grocery || boardLists().notes.length) fp.push('board'); if (countdownItems().length) fp.push('cd'); return fp; }
+    if (screen === 'family') { var fp = ['main']; if (events()) fp.push('week', 'who'); if (S.meal && events() && !tonightDinner()) fp.push('idea'); if (boardLists().grocery || boardLists().notes.length) fp.push('board'); if (countdownItems().length) fp.push('cd'); return fp; }
     if (screen === 'live') { var lv = liveList(); return lv.length ? lv.map(function (g) { return 'g:' + g.id; }) : ['none']; }
     if (screen === 'alert') { var ua = S.alerts.filter(isUrgent); return ua.length ? ua.map(function (a, i) { return 'al:' + S.alerts.indexOf(a); }) : ['none']; }
     if (screen === 'night') return ['main'];
@@ -1308,9 +1310,9 @@
     if (S.screen === 'live') return p === 'none' ? emptyBleed('No live games right now') : gameBleed(findGame(p.slice(2)), top, true);
     if (String(p).indexOf('al:') === 0) return alertBleed(S.alerts[+p.slice(3)], top, S.screen === 'alert');
     if (S.screen === 'alert') return emptyBleed('Warning has ended');
-    if (S.screen === 'family') return p === 'week' ? weekBleed(top) : p === 'who' ? whoBleed(top) : p === 'board' ? boardBleed(top) : countdownBleed(top);
+    if (S.screen === 'family') return p === 'idea' ? mealBleed(top) : p === 'week' ? weekBleed(top) : p === 'who' ? whoBleed(top) : p === 'board' ? boardBleed(top) : countdownBleed(top);
     if (String(p).indexOf('st:') === 0) return standingsBleed(p.slice(3), top);
-    if (S.screen === 'news') return newsBleed(p, top);
+    if (S.screen === 'news') return p === 'hist' ? histBleed(top) : p === 'gas' ? gasBleed(top) : newsBleed(p, top);
     if (S.screen === 'scores') return String(p).indexOf('grid') === 0 ? scoreboardBleed(+p.split(':')[1] || 0, top) : gameBleed(findGame(p.slice(2)), top);
     return weatherBleed(p, top);
   }
@@ -1454,6 +1456,8 @@
   }
   function weatherBleed(p, top) {
     var w = S.wx, names = { now: 'Right now', details: "Today's details", hours: 'Next 12 hours', week: 'The week ahead', sky: 'Sun & moon', radar: 'Live radar' };
+    if (p === 'tonight') return skyBleed(top);
+    if (p === 'apod') return apodBleed(top);
     var tag = btag('Weather · ' + (names[p] || '')) + top;
     if (!w) return '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">' + note(esc(S.wxErr || 'Loading weather…')) + '</div>';
     if (p === 'radar') return '<div id="radar" style="position:absolute;inset:0;background:#0b0f17"></div>' + tag +
@@ -1501,6 +1505,14 @@
   function emptyBleed(msg) { return '<div style="position:absolute;inset:0;background:rgba(8,6,14,.7);display:flex;align-items:center;justify-content:center">' + note(esc(msg)) + '</div>'; }
   function tagChip(t, hot) { return '<span class="tagchip' + (hot && t.hot ? ' hot' : '') + '">' + (t.emoji ? '<span>' + t.emoji + '</span>' : '') + esc(t.text) + '</span>'; }
   // weekly things (trash day): the night before after 3 PM, and the morning of
+  function commuteTags() { // weekday mornings: drive time to work with traffic (from your Apps Script)
+    var c = S.back && S.back.commute, n = now();
+    if (!c || !c.list || !c.list.length || !c.at || n - new Date(c.at) > 45 * 60000) return [];
+    return c.list.map(function (x) {
+      var late = x.mins - x.usual;
+      return { emoji: '🚗', text: x.name + ' → ' + x.place + ' ' + x.mins + ' min' + (late >= 4 ? ' (+' + late + ' traffic)' : ''), hot: late >= 10 };
+    });
+  }
   function weeklyTags() {
     var n = now(), h = n.getHours(), dow = n.getDay(), out = [];
     (C.weekly || []).forEach(function (w) {
@@ -1593,11 +1605,11 @@
     var cd = countdownItems()[0]; if (cd) rows.push([cd.emoji, cd.n === 0 ? 'Today!' : cd.n + ' day' + (cd.n === 1 ? '' : 's') + ' to go', cd.name]);
     var ahead = rows.length ? rows.slice(0, 4).map(function (r) { return '<div style="display:flex;gap:14px;align-items:center"><span style="font-size:34px;width:44px;text-align:center;flex-shrink:0">' + r[0] + '</span><div style="min-width:0"><div style="font-size:14px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;opacity:.7">' + esc(r[1]) + '</div><div class="ellip" style="font-size:22px;font-weight:700">' + esc(r[2]) + '</div></div></div>'; }).join('')
       : '<div style="opacity:.75;font-size:19px">No games or plans tonight</div>';
-    var tags = weeklyTags().concat(leaveTags(ev));
+    var tags = weeklyTags().concat(commuteTags(), leaveTags(ev));
     return '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,6,18,.15) 0%,rgba(10,6,18,.45) 38%,rgba(10,6,18,.8) 100%)"></div>' +
       '<div style="position:absolute;left:44px;right:44px;top:30px;display:flex;justify-content:space-between;align-items:flex-start;text-shadow:0 2px 16px rgba(0,0,0,.4)">' +
       briefHead(greet, n, h, m, wn) + '</div>' +
-      (tags.length ? '<div style="position:absolute;left:44px;right:44px;top:252px;display:flex;gap:10px;flex-wrap:wrap">' + tags.slice(0, 3).map(function (t) { return tagChip(t, true); }).join('') + '</div>' : '') +
+      (tags.length ? '<div style="position:absolute;left:44px;right:44px;top:252px;display:flex;gap:10px;flex-wrap:wrap">' + tags.slice(0, 4).map(function (t) { return tagChip(t, true); }).join('') + '</div>' : '') +
       '<div style="position:absolute;left:36px;right:36px;bottom:30px;top:' + (tags.length ? 306 : 266) + 'px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px">' +
       col('Today', sched) + col('What to wear', wear) + col('Tonight & ahead', ahead) + '</div>';
   }
@@ -1729,6 +1741,178 @@
     (window.upcomingHolidays ? window.upcomingHolidays(n, 4) : []).forEach(function (h) { other.push({ name: h.name, date: h.date, n: h.n, emoji: HOLI_EMOJI[h.id] || '🎉' }); });
     mine = mine.slice(0, 6); other.sort(function (a, b) { return a.n - b.n; });
     return mine.concat(other.slice(0, Math.max(0, 6 - mine.length))).sort(function (a, b) { return a.n - b.n; });
+  }
+  // ------------------------------------------------------------ extras: on this day, NASA picture, tonight's sky, gas, dinner ideas
+  var TODAYKEY = function () { var n = now(); return n.getFullYear() + '-' + (n.getMonth() + 1) + '-' + n.getDate(); };
+  function loadExtras() {
+    if (DEMO) { if (window.__EXTRAS) { S.hist = __EXTRAS.hist; S.apod = __EXTRAS.apod; S.meal = __EXTRAS.meal; } return; }
+    var day = TODAYKEY(), n = now(), mm = n.getMonth() + 1, dd = n.getDate();
+    // on this day (Wikipedia): only events that come with a picture
+    var h = load('hist:' + day, 86400000);
+    if (h) S.hist = h; else getJSON('https://en.wikipedia.org/api/rest_v1/feed/onthisday/selected/' + mm + '/' + dd, 20000).then(function (j) {
+      var list = (j.selected || []).map(function (e) {
+        var pg = (e.pages || []).filter(function (x) { return x.originalimage || x.thumbnail; })[0];
+        if (!pg) return null;
+        var img = pg.originalimage && pg.originalimage.width <= 2400 ? pg.originalimage.source : (pg.thumbnail ? pg.thumbnail.source.replace(/\/\d+px-/, '/1200px-') : pg.originalimage.source);
+        return { year: e.year, text: e.text, image: img, title: (pg.titles && pg.titles.normalized) || pg.title || '', extract: pg.extract || '', link: pg.content_urls && pg.content_urls.mobile ? pg.content_urls.mobile.page : '' };
+      }).filter(Boolean);
+      if (list.length) { S.hist = list; save('hist:' + day, list); refresh(['news']); }
+    }).catch(function () { /* try again later */ });
+    // NASA astronomy picture of the day (a video day uses its thumbnail; before it's posted, yesterday's)
+    var a = load('apod:' + day, 86400000);
+    if (a) S.apod = a; else {
+      var key = C.nasaKey || 'DEMO_KEY', base = 'https://api.nasa.gov/planetary/apod?thumbs=true&api_key=' + key;
+      var take = function (j) { var img = j.media_type === 'image' ? (j.url || j.hdurl) : j.thumbnail_url; if (!img) throw new Error('no image'); return { title: j.title, text: j.explanation, image: img, credit: (j.copyright || 'NASA').replace(/\s+/g, ' ').trim(), date: j.date }; };
+      getJSON(base, 20000).then(take).catch(function () { var y = new Date(n.getTime() - 86400000); return getJSON(base + '&date=' + y.getFullYear() + '-' + (y.getMonth() + 1) + '-' + y.getDate(), 20000).then(take); })
+        .then(function (x) { S.apod = x; save('apod:' + day, x); refresh(['weather']); }).catch(function () { /* skip today */ });
+    }
+    // seasonal dinner idea (TheMealDB), one per day
+    var m = load('meal:' + day, 86400000);
+    if (m) S.meal = m; else mealIdea(n).then(function (x) { if (x) { S.meal = x; save('meal:' + day, x); refresh(['family']); } });
+  }
+  var SEASON_DISHES = { // keywords searched on TheMealDB; the day of the year picks one
+    winter: ['stew', 'soup', 'pie', 'chili', 'lasagne', 'goulash', 'bourguignon', 'curry', 'casserole', 'meatball'],
+    spring: ['lamb', 'salmon', 'risotto', 'carbonara', 'quiche', 'lemon', 'chicken', 'pesto', 'frittata', 'shrimp'],
+    summer: ['burger', 'taco', 'kebab', 'salad', 'shrimp', 'fajita', 'teriyaki', 'grilled', 'corn', 'jerk'],
+    fall: ['pumpkin', 'chili', 'stew', 'roast', 'mushroom', 'pie', 'soup', 'pork', 'sausage', 'squash'] };
+  function seasonOf(d) { var m = d.getMonth(); return m === 11 || m < 2 ? 'winter' : m < 5 ? 'spring' : m < 8 ? 'summer' : 'fall'; }
+  function mealIdea(d) {
+    var words = SEASON_DISHES[seasonOf(d)], doy = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 86400000), mains = /beef|chicken|lamb|pork|pasta|seafood|vegetarian|miscellaneous|goat/i;
+    var tryWord = function (k) {
+      if (k >= words.length) return Promise.resolve(null);
+      var w = words[(doy + k) % words.length];
+      return getJSON('https://www.themealdb.com/api/json/v1/1/search.php?s=' + encodeURIComponent(w), 20000).then(function (j) {
+        var list = (j.meals || []).filter(function (x) { return mains.test(x.strCategory || ''); });
+        if (!list.length) return tryWord(k + 1);
+        var x = list[doy % list.length], ing = [];
+        for (var i = 1; i <= 20; i++) { var a = (x['strIngredient' + i] || '').trim(); if (a) ing.push(((x['strMeasure' + i] || '').trim() + ' ' + a).trim()); }
+        return { name: x.strMeal, image: x.strMealThumb, cat: x.strCategory, area: x.strArea, ing: ing, link: x.strSource || 'https://www.themealdb.com/meal/' + x.idMeal, season: seasonOf(d) };
+      }).catch(function () { return tryWord(k + 1); });
+    };
+    return tryWord(0);
+  }
+  function tonightDinner() { var ev = events() || [], n = now(); return ev.filter(function (e) { return /dinner/i.test(e.who || '') && onDay(e, n); })[0]; }
+  function histPick() { var h = S.hist || []; return h.length ? h[Math.floor(Date.now() / 1800000) % h.length] : null; } // a different event every 30 minutes
+  function histBleed(top) {
+    var x = histPick(); if (!x) return emptyBleed('Loading…');
+    var n = now(), ago = n.getFullYear() - x.year, fs = x.text.length > 160 ? 30 : x.text.length > 110 ? 34 : 40;
+    return '<div style="position:absolute;inset:0;background:#0d0b12 url(\'' + esc(x.image) + '\') center/cover;filter:blur(28px) brightness(.45);transform:scale(1.15)"></div>' +
+      '<div class="btag" style="background:var(--accent);color:var(--ink)">On this day · ' + MONL[n.getMonth()] + ' ' + n.getDate() + '</div>' + top +
+      '<div style="position:absolute;left:40px;top:92px;bottom:40px;width:600px;border-radius:18px;overflow:hidden;background:rgba(0,0,0,.35);box-shadow:0 14px 40px rgba(0,0,0,.5)"><img src="' + esc(x.image) + '" alt="" style="width:100%;height:100%;object-fit:contain" onerror="this.style.display=\'none\'"></div>' +
+      '<div style="position:absolute;left:680px;right:48px;top:100px;bottom:44px;display:flex;flex-direction:column;gap:12px">' +
+      '<div style="display:flex;align-items:baseline;gap:16px"><div class="head" style="font-size:96px;line-height:.9;color:var(--accent)">' + x.year + '</div><div style="font-size:22px;font-weight:700;opacity:.85">' + ago + ' years ago</div></div>' +
+      '<div class="head clamp5" style="font-size:' + fs + 'px;line-height:1.15">' + esc(x.text) + '</div>' +
+      (x.extract ? '<div class="clamp3" style="font-size:18px;line-height:1.45;opacity:.8">' + esc(x.extract) + '</div>' : '') +
+      '<div style="margin-top:auto;display:flex;align-items:center;gap:14px"><div id="qr" style="width:110px;height:110px;padding:6px;box-sizing:border-box;border-radius:12px;background:#fff;overflow:hidden;flex-shrink:0"></div><div style="font-size:15px;opacity:.75">Scan to read more' + (x.title ? ' about ' + esc(x.title) : '') + '<br>Wikipedia</div></div></div>';
+  }
+  function apodBleed(top) {
+    var a = S.apod; if (!a) return emptyBleed('Loading…');
+    return '<div style="position:absolute;inset:0;background:#000"></div><img src="' + esc(a.image) + '" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">' +
+      '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.45) 0%,rgba(0,0,0,0) 22%,rgba(0,0,0,0) 50%,rgba(0,0,0,.88) 100%)"></div>' +
+      btag('Space · NASA picture of the day') + top +
+      '<div style="position:absolute;left:56px;right:56px;bottom:44px;display:flex;flex-direction:column;gap:10px">' +
+      '<div class="head" style="font-size:52px;line-height:1.05;text-shadow:0 2px 14px rgba(0,0,0,.6)">' + esc(a.title) + '</div>' +
+      '<div class="clamp2" style="font-size:20px;line-height:1.45;color:rgba(255,255,255,.85);max-width:1000px">' + esc(a.text || '') + '</div>' +
+      '<div style="font-size:15px;opacity:.65">Image: ' + esc(a.credit) + '</div></div>';
+  }
+  // ---- tonight's sky: planets (astronomy-engine), space station passes (satellite.js + today's orbit), meteor showers
+  var SHOWERS = [[0, 3, 'Quadrantids', 80], [3, 22, 'Lyrids', 18], [4, 6, 'Eta Aquariids', 40], [7, 12, 'Perseids', 100], [9, 21, 'Orionids', 20], [10, 17, 'Leonids', 15], [11, 14, 'Geminids', 120], [11, 22, 'Ursids', 10]];
+  function skyTonight() {
+    if (!window.Astronomy || !S.wx || !S.wx.setD) return null;
+    var A = window.Astronomy, n = now(), obs = new A.Observer(L.lat, L.lon, 200), out = { planets: [], passes: [], shower: null };
+    var dusk = new Date(Math.max(n.getTime(), S.wx.setD.getTime() + 45 * 60000)), dawn = new Date(S.wx.riseD.getTime() + 86400000 - 45 * 60000);
+    if (n < S.wx.riseD) { dusk = n; dawn = new Date(S.wx.riseD.getTime() - 45 * 60000); }
+    var cache = S._sky && S._sky.k === TODAYKEY() + dusk.getHours() ? S._sky.v : null; if (cache) return cache;
+    ['Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn'].forEach(function (b) {
+      var best = null, first = null, last = null;
+      for (var t = dusk.getTime(); t <= dawn.getTime(); t += 20 * 60000) {
+        var d = new Date(t), eq = A.Equator(b, d, obs, true, true), hz = A.Horizon(d, obs, eq.ra, eq.dec, 'normal');
+        if (hz.altitude > 10) { if (!first) first = d; last = d; if (!best || hz.altitude > best.alt) best = { alt: hz.altitude, az: hz.azimuth, t: d }; }
+      }
+      if (best) out.planets.push({ name: b, mag: A.Illumination(b, best.t).mag, from: first, to: last, best: best.t, dir: compass(best.az), alt: Math.round(best.alt), atDark: first - dusk < 25 * 60000, toDawn: dawn - last < 25 * 60000 });
+    });
+    out.planets.sort(function (a, b) { return a.mag - b.mag; });
+    var tle = S.back && S.back.tle;
+    if (window.satellite && tle && tle.line1) {
+      var sat = satellite.twoline2satrec(tle.line1, tle.line2), gd = { latitude: L.lat * Math.PI / 180, longitude: L.lon * Math.PI / 180, height: 0.2 }, cur = null;
+      for (var t2 = n.getTime(); t2 < n.getTime() + 3 * 86400000 && out.passes.length < 3; t2 += 20000) {
+        var d2 = new Date(t2), pv = satellite.propagate(sat, d2); if (!pv.position) continue;
+        var look = satellite.ecfToLookAngles(gd, satellite.eciToEcf(pv.position, satellite.gstime(d2))), el = look.elevation * 180 / Math.PI;
+        if (el > 10) {
+          var sunEq = A.Equator('Sun', d2, obs, true, true), sunAlt = A.Horizon(d2, obs, sunEq.ra, sunEq.dec, 'normal').altitude;
+          var sv = A.GeoVector('Sun', d2, true), sl = Math.sqrt(sv.x * sv.x + sv.y * sv.y + sv.z * sv.z), sx = sv.x / sl, sy = sv.y / sl, sz = sv.z / sl, r = pv.position;
+          var dot = r.x * sx + r.y * sy + r.z * sz, px = r.x - dot * sx, py = r.y - dot * sy, pz = r.z - dot * sz, lit = dot > 0 || Math.sqrt(px * px + py * py + pz * pz) > 6371;
+          var az = compass(look.azimuth * 180 / Math.PI);
+          if (sunAlt < -6 && lit) { if (!cur) cur = { start: d2, from: az, max: el, end: d2, to: az }; cur.end = d2; cur.to = az; if (el > cur.max) cur.max = el; }
+          else if (cur) { out.passes.push(cur); cur = null; }
+        } else if (cur) { out.passes.push(cur); cur = null; }
+      }
+    }
+    var y = n.getFullYear();
+    SHOWERS.forEach(function (sh) { [y, y + 1].forEach(function (yy) { var pk = new Date(yy, sh[0], sh[1]), dd = dayDiff(n, pk); if (dd >= -1 && dd <= 30 && (!out.shower || dd < out.shower.days)) out.shower = { name: sh[2], rate: sh[3], peak: pk, days: dd }; }); });
+    S._sky = { k: TODAYKEY() + dusk.getHours(), v: out };
+    return out;
+  }
+  function planetWhen(p) {
+    var span = p.to - p.from;
+    if (span < 30 * 60000) return 'Briefly, low in the ' + p.dir + ' around ' + hm(p.best) + (p.toDawn ? ' before dawn' : '');
+    var from = p.atDark ? 'dark' : hm(p.from), to = p.toDawn ? 'dawn' : hm(p.to);
+    return 'Up from ' + from + ' to ' + to + ' · best around ' + hm(p.best) + ', look ' + p.dir;
+  }
+  function skyBleed(top) {
+    var k = skyTonight(); if (!k) return emptyBleed('Loading…');
+    var w = S.wx, night = (w.hours || []).filter(function (h, i) { return i >= 2 && i <= 9; }), cloudy = night.filter(function (h) { return /cloud|rain|snow|storm|fog|sleet/.test(h.icon || ''); }).length;
+    var head = cloudy >= 5 ? 'Cloudy tonight — tough viewing' : cloudy >= 2 ? 'Some clouds tonight — look between them' : 'Clear tonight — great for stargazing';
+    var tile = function (label, body) { return '<div class="glass" style="display:flex;flex-direction:column;gap:12px;padding:20px 22px;min-height:0;overflow:hidden"><div class="lbl">' + label + '</div>' + body + '</div>'; };
+    var bright = function (m) { return m < -2 ? 'Very bright' : m < 0 ? 'Bright' : m < 1.5 ? 'Easy to spot' : 'Faint'; };
+    var planets = k.planets.length ? k.planets.slice(0, 4).map(function (p) {
+      return '<div style="display:flex;align-items:center;gap:14px"><div style="width:16px;height:16px;border-radius:50%;flex-shrink:0;background:' + ({ Venus: '#fff3c4', Jupiter: '#f2d7a8', Mars: '#ff8a5c', Saturn: '#e8d08a', Mercury: '#cfc8bd' }[p.name]) + ';box-shadow:0 0 12px rgba(255,240,200,.7)"></div>' +
+        '<div style="min-width:0"><div style="font-size:24px;font-weight:800">' + p.name + ' <span style="font-size:16px;font-weight:700;opacity:.7">· ' + bright(p.mag) + '</span></div><div style="font-size:16px;opacity:.85">' + planetWhen(p) + '</div></div></div>';
+    }).join('') : '<div style="font-size:20px;opacity:.7">No bright planets up tonight</div>';
+    var whenDay = function (d) { return sameDay(d, now()) ? 'Tonight' : dayDiff(now(), d) === 1 ? 'Tomorrow' : DOW[d.getDay()]; };
+    var passes = k.passes.length ? k.passes.slice(0, 2).map(function (p) {
+      var mins = Math.max(1, Math.round((p.end - p.start) / 60000));
+      return '<div><div style="font-size:26px;font-weight:800">' + whenDay(p.start) + ' · ' + hm(p.start) + '</div><div style="font-size:16px;opacity:.85">' + mins + ' min · ' + p.from + ' → ' + p.to + ' · ' + (p.max > 50 ? 'almost overhead' : p.max > 30 ? 'high in the sky' : 'low in the sky') + '</div></div>';
+    }).join('') + '<div style="margin-top:auto;font-size:15px;opacity:.65">Looks like a bright, steady star moving across the sky — no blinking</div>' : '<div style="font-size:20px;opacity:.7">' + (S.back && S.back.tle ? 'No visible passes in the next 3 days' : 'Pass times appear once your Apps Script is updated') + '</div>';
+    var sh = k.shower, shower = sh ? '<div class="head" style="font-size:34px;line-height:1.1">' + sh.name + '</div><div style="font-size:20px;font-weight:700">' + (sh.days <= 0 ? 'Peaking tonight' : sh.days === 1 ? 'Peaks tomorrow night' : 'Peaks ' + DOW[sh.peak.getDay()] + ', ' + MON[sh.peak.getMonth()] + ' ' + sh.peak.getDate()) + '</div>' +
+      '<div style="font-size:17px;opacity:.85">Up to ' + sh.rate + ' meteors an hour in a dark spot · best after midnight</div>' + (w.moon && w.moon.illum > 60 ? '<div style="font-size:15px;opacity:.65;margin-top:auto">The bright moon will wash out the fainter ones</div>' : '')
+      : '<div style="font-size:20px;opacity:.7">No major meteor shower in the next month</div>' + (w.moon ? '<div style="margin-top:auto;font-size:17px;opacity:.8">Moon: ' + esc(w.moon.name) + ', ' + w.moon.illum + '% lit</div>' : '');
+    return '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(6,8,22,.75),rgba(6,8,22,.85))"></div>' + btag("Weather · Tonight's sky") + top +
+      '<div style="position:absolute;left:40px;right:40px;top:92px;bottom:36px;display:flex;flex-direction:column;gap:14px">' +
+      '<div class="head" style="font-size:38px">' + esc(head) + '</div>' +
+      '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;flex:1;min-height:0">' + tile('Planets to look for', planets) + tile('Space station flyovers', passes) + tile('Meteor showers', shower) + '</div></div>';
+  }
+  function gasOK() { var g = S.back && S.back.gas; return g && g.prices && g.prices.now ? g : null; }
+  function gasBleed(top) {
+    var g = gasOK(); if (!g) return emptyBleed('Loading…');
+    var P = g.prices, f$ = function (v) { return num(v) ? '$' + v.toFixed(2) : '—'; }, ch = function (a, b) { if (!num(a) || !num(b)) return ''; var c = Math.round((a - b) * 100); return c === 0 ? 'no change' : (c > 0 ? '▲ up ' : '▼ down ') + Math.abs(c) + '¢'; };
+    var wk = ch(P.now[0], P.week && P.week[0]), up = P.week && P.now[0] > P.week[0];
+    var tile = function (label, val, sub) { return '<div class="glass" style="display:flex;flex-direction:column;gap:6px;padding:18px 22px;justify-content:center"><div class="lbl">' + label + '</div><div style="font-size:48px;font-weight:800;line-height:1">' + val + '</div><div style="font-size:16px;opacity:.75">' + (sub || '&nbsp;') + '</div></div>'; };
+    var metro = g.metro && g.metro.now ? g.metro : null;
+    return '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,6,18,.6),rgba(10,6,18,.8))"></div>' + btag('Gas prices · ' + (g.state === 'IL' ? 'Illinois' : g.state)) + top +
+      '<div style="position:absolute;left:40px;right:40px;top:92px;bottom:36px;display:flex;flex-direction:column;gap:14px">' +
+      '<div class="glass" style="flex:1;display:flex;align-items:center;justify-content:space-between;padding:26px 40px;min-height:0">' +
+      '<div><div class="lbl">Regular · state average today</div><div style="font-size:150px;font-weight:800;line-height:.95;letter-spacing:-.03em">' + f$(P.now[0]) + '</div></div>' +
+      '<div style="text-align:right"><div style="font-size:40px;font-weight:800;color:' + (up ? '#ff8a70' : '#7fdc9a') + '">' + esc(wk) + '</div><div style="font-size:20px;opacity:.8">since last week</div>' +
+      (P.year ? '<div style="font-size:18px;opacity:.65;margin-top:14px">A year ago: ' + f$(P.year[0]) + '</div>' : '') + '</div></div>' +
+      '<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;height:170px">' +
+      tile(metro ? 'Chicago area' : 'Yesterday', metro ? f$(metro.now[0]) : f$(P.yday && P.yday[0]), metro ? 'Regular · ' + ch(metro.now[0], metro.week && metro.week[0]) + ' this week' : 'Regular') +
+      tile('Mid-grade', f$(P.now[1]), '') + tile('Premium', f$(P.now[2]), '') + tile('Diesel', f$(P.now[3]), ch(P.now[3], P.week && P.week[3]) + (P.week ? ' this week' : '')) + '</div>' +
+      '<div style="font-size:14px;opacity:.55;text-align:right">AAA daily averages</div></div>';
+  }
+  function mealBleed(top) {
+    var m = S.meal; if (!m) return emptyBleed('Loading…');
+    var ing = m.ing.slice(0, 10);
+    return '<div style="position:absolute;inset:0;background:#0d0b12 url(\'' + esc(m.image) + '\') center/cover;filter:blur(30px) brightness(.4);transform:scale(1.15)"></div>' +
+      btag('Family · Dinner idea') + top +
+      '<div style="position:absolute;left:40px;top:92px;bottom:40px;width:640px;border-radius:18px;overflow:hidden;box-shadow:0 14px 40px rgba(0,0,0,.5)"><img src="' + esc(m.image) + '" alt="" style="width:100%;height:100%;object-fit:cover"></div>' +
+      '<div style="position:absolute;left:716px;right:48px;top:100px;bottom:44px;display:flex;flex-direction:column;gap:12px">' +
+      '<div class="lbl">Nothing planned tonight? Try a ' + esc(m.season) + ' favorite</div>' +
+      '<div class="head" style="font-size:' + (m.name.length > 28 ? 40 : 50) + 'px;line-height:1.05">' + esc(m.name) + '</div>' +
+      '<div style="display:flex;gap:8px">' + [m.cat, m.area].filter(function (x) { return x && x !== 'Unknown'; }).map(function (t) { return '<span style="padding:4px 12px;border-radius:999px;background:rgba(255,255,255,.14);font-size:15px;font-weight:700">' + esc(t) + '</span>'; }).join('') + '</div>' +
+      '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 18px;font-size:17px;line-height:1.35">' + ing.map(function (x) { return '<div class="ellip">• ' + esc(x) + '</div>'; }).join('') + '</div>' +
+      (m.ing.length > ing.length ? '<div style="font-size:15px;opacity:.7">+ ' + (m.ing.length - ing.length) + ' more ingredients</div>' : '') +
+      '<div style="margin-top:auto;display:flex;align-items:center;gap:14px"><div id="qr" style="width:110px;height:110px;padding:6px;box-sizing:border-box;border-radius:12px;background:#fff;overflow:hidden;flex-shrink:0"></div><div style="font-size:15px;opacity:.75">Scan for the full recipe</div></div></div>';
   }
   // ---- the full week (7 columns) and who's doing what (a row per person)
   function weekDays() { // today + the next 6 days, each with its events, dinner and weather
@@ -2214,6 +2398,7 @@
   if (!DEMO && location.protocol.indexOf('http') === 0) every(checkUpdate, 5 * 60000);
   every(loadWeather, 10 * 60000);
   every(loadAlerts, 5 * 60000);
+  every(loadExtras, 60 * 60000);
   loadBackend().then(function () { every(loadScores, 2 * 60000); });
   setInterval(loadBackend, 10 * 60000);
   setInterval(function () { if (S.screen === 'home' && !S.detail) { S.photoIdx++; showPhoto('homephoto'); } }, 15000);
