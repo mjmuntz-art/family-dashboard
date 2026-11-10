@@ -1767,14 +1767,18 @@
       if (list.length) { S.hist = list; save('hist2:' + day, list); refresh(['news']); }
     }).catch(function () { /* try again later */ });
     // NASA astronomy picture of the day (a video day uses its thumbnail; before it's posted, yesterday's)
-    var a = load('apod2:' + day, 86400000);
+    var a = load('apod3:' + day, 86400000);
     if (a) S.apod = a; else {
       var since = new Date(n.getTime() - 8 * 86400000), ymd = function (d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); };
       getJSON('https://api.nasa.gov/planetary/apod?api_key=' + (C.nasaKey || 'DEMO_KEY') + '&start_date=' + ymd(since), 20000).then(function (list) {
-        var pics = (Array.isArray(list) ? list : [list]).filter(function (j) { return j.media_type === 'image' && (j.url || j.hdurl); });
-        var j2 = pics[pics.length - 1]; if (!j2) return; // newest photo (video days are skipped)
-        S.apod = { title: j2.title, text: j2.explanation, image: j2.url || j2.hdurl, credit: (j2.copyright || 'NASA').replace(/\s+/g, ' ').trim(), date: j2.date };
-        save('apod2:' + day, S.apod); refresh(['weather']);
+        list = Array.isArray(list) ? list : [list];
+        var real = function (j) { var u = j.url || j.hdurl || ''; return j.media_type === 'image' && /\/apod\/image\//.test(u) && !/^nasa science$/i.test(j.title || ''); }; // real APOD photos live under apod.nasa.gov/apod/image
+        var pics = list.filter(real), j2 = pics[pics.length - 1], today = list[list.length - 1] || {};
+        var vid = today.media_type === 'video' ? videoEmbed(today.url) : null;
+        if (!j2 && !vid) return;
+        var src = vid ? today : j2;
+        S.apod = { title: src.title, text: src.explanation, image: j2 ? (j2.url || j2.hdurl) : '', video: vid, credit: (src.copyright || 'NASA').replace(/\s+/g, ' ').trim(), date: src.date };
+        save('apod3:' + day, S.apod); refresh(['weather']);
       }).catch(function () { /* skip today */ });
     }
     // seasonal dinner idea (TheMealDB), one per day
@@ -1825,11 +1829,23 @@
       (x.extract ? '<div class="clamp3" style="font-size:18px;line-height:1.45;opacity:.8">' + esc(x.extract) + '</div>' : '') +
       '<div style="margin-top:auto;display:flex;align-items:center;gap:14px"><div id="qr" style="width:110px;height:110px;padding:6px;box-sizing:border-box;border-radius:12px;background:#fff;overflow:hidden;flex-shrink:0"></div><div style="font-size:15px;opacity:.75">Scan to read more' + (x.title ? ' about ' + esc(x.title) : '') + '<br>Wikipedia</div></div></div>';
   }
+  function videoEmbed(u) { // a NASA video we can play quietly on the screen
+    u = String(u || '');
+    var yt = /(?:youtube\.com\/(?:embed\/|watch\?v=)|youtu\.be\/)([\w-]{6,})/.exec(u);
+    if (yt) return { kind: 'frame', src: 'https://www.youtube.com/embed/' + yt[1] + '?autoplay=1&mute=1&loop=1&playlist=' + yt[1] + '&controls=0&modestbranding=1&rel=0&playsinline=1' };
+    var vm = /vimeo\.com\/(?:video\/)?(\d+)/.exec(u);
+    if (vm) return { kind: 'frame', src: 'https://player.vimeo.com/video/' + vm[1] + '?autoplay=1&muted=1&loop=1&background=1' };
+    if (/\.(mp4|webm|mov)(\?|$)/i.test(u)) return { kind: 'file', src: u };
+    return null;
+  }
   function apodBleed(top) {
     var a = S.apod; if (!a) return emptyBleed('Loading…');
-    return '<div style="position:absolute;inset:0;background:#000"></div><img src="' + esc(a.image) + '" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">' +
+    var v = a.video, media = (a.image ? '<img src="' + esc(a.image) + '" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">' : '') + // the photo sits underneath, in case the video can't play
+      (v && v.kind === 'file' ? '<video src="' + esc(v.src) + '" autoplay muted loop playsinline style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"></video>' : '') +
+      (v && v.kind === 'frame' ? '<iframe src="' + esc(v.src) + '" allow="autoplay; encrypted-media" frameborder="0" style="position:absolute;left:50%;top:50%;width:178vh;height:100vh;min-width:100%;min-height:56.25vw;transform:translate(-50%,-50%);border:0;pointer-events:none"></iframe>' : '');
+    return '<div style="position:absolute;inset:0;background:#000;overflow:hidden">' + media + '</div>' +
       '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.45) 0%,rgba(0,0,0,0) 22%,rgba(0,0,0,0) 50%,rgba(0,0,0,.88) 100%)"></div>' +
-      btag('Space · NASA picture of the day') + top +
+      btag('Space · NASA ' + (a.video ? 'video' : 'picture') + ' of the day') + top +
       '<div style="position:absolute;left:56px;right:56px;bottom:44px;display:flex;flex-direction:column;gap:10px">' +
       '<div class="head" style="font-size:52px;line-height:1.05;text-shadow:0 2px 14px rgba(0,0,0,.6)">' + esc(a.title) + '</div>' +
       '<div class="clamp2" style="font-size:20px;line-height:1.45;color:rgba(255,255,255,.85);max-width:1000px">' + esc(a.text || '') + '</div>' +
