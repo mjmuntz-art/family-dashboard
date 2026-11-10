@@ -608,10 +608,10 @@
       for (var j = 0; j < chicago.length; j++) if (!chicago[j]._u) { chicago[j]._u = 1; return chicago[j]; }
       return null;
     };
-    var apList = src['AP'] || [], apShift = apList.length > 2 ? Math.floor(Date.now() / 7200000) * 2 % apList.length : 0; // walk through AP's list two stories at a time, every 2 hours
+    var apAll = src['AP'] || [], apPics = apAll.filter(function (x) { return x.image; }), apList = apPics.length >= 3 ? apPics : apAll, apShift = apList.length > 3 ? Math.floor(Date.now() / 7200000) * 3 % apList.length : 0; // walk through AP's list three stories at a time, every 2 hours
     var ap = function (k) { var s = apList.length ? apList[(apShift + k) % apList.length] : null; return s ? Object.assign({ src: 'AP' }, s) : null; };
     var sl = function (k) { var s = take('Shaw Local', k); return s ? Object.assign({ src: 'Shaw Local' }, s) : null; };
-    var list = [ap(0), pickChicago(), sl(0), ap(1), pickChicago(), sl(1)].map(function (x) { return x || pickChicago(); });
+    var list = [ap(0), pickChicago(), sl(0), ap(1), pickChicago(), sl(1), ap(2), pickChicago(), sl(2)].map(function (x) { return x || pickChicago(); });
     return list.filter(Boolean);
   }
   var MODEL_STYLE = {
