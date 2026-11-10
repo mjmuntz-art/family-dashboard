@@ -1852,7 +1852,7 @@
       '<div style="font-size:15px;opacity:.65">Image: ' + esc(a.credit) + '</div></div>';
   }
   // ---- tonight's sky: planets (astronomy-engine), space station passes (satellite.js + today's orbit), meteor showers
-  var SHOWERS = [[0, 3, 'Quadrantids', 80], [3, 22, 'Lyrids', 18], [4, 6, 'Eta Aquariids', 40], [7, 12, 'Perseids', 100], [9, 21, 'Orionids', 20], [10, 17, 'Leonids', 15], [11, 14, 'Geminids', 120], [11, 22, 'Ursids', 10]];
+  var SHOWERS = [[0, 3, 'Quadrantids', 80, 15.3, 49, 'Boötes'], [3, 22, 'Lyrids', 18, 18.07, 34, 'Lyra'], [4, 6, 'Eta Aquariids', 40, 22.5, -1, 'Aquarius'], [7, 12, 'Perseids', 100, 3.2, 58, 'Perseus'], [9, 21, 'Orionids', 20, 6.33, 16, 'Orion'], [10, 17, 'Leonids', 15, 10.2, 22, 'Leo'], [11, 14, 'Geminids', 120, 7.47, 33, 'Gemini'], [11, 22, 'Ursids', 10, 14.47, 75, 'Ursa Minor']];
   function skyTonight() {
     if (!window.Astronomy || !S.wx || !S.wx.setD) return null;
     var A = window.Astronomy, n = now(), obs = new A.Observer(L.lat, L.lon, 200), out = { planets: [], passes: [], shower: null };
@@ -1868,6 +1868,15 @@
       if (best) out.planets.push({ name: b, mag: A.Illumination(b, best.t).mag, from: first, to: last, best: best.t, dir: compass(best.az), alt: Math.round(best.alt), atDark: first - dusk < 25 * 60000, toDawn: dawn - last < 25 * 60000 });
     });
     out.planets.sort(function (a, b) { return a.mag - b.mag; });
+    out.dusk = dusk; out.dawn = dawn;
+    var show = new Date(Math.max(dusk.getTime(), new Date(n.getFullYear(), n.getMonth(), n.getDate(), 20, 30).getTime())); if (n > show || n < S.wx.riseD) show = new Date(Math.max(n.getTime(), dusk.getTime()));
+    out.show = show;
+    out.at = ['Moon', 'Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn'].map(function (b) { var eq = A.Equator(b, show, obs, true, true), hz = A.Horizon(show, obs, eq.ra, eq.dec, 'normal'); return { name: b, az: hz.azimuth, alt: hz.altitude, mag: b === 'Moon' ? -10 : A.Illumination(b, show).mag }; }).filter(function (x) { return x.alt > 0; });
+    var mf = null, ml = null; // when the moon is up tonight
+    for (var tm = dusk.getTime(); tm <= dawn.getTime(); tm += 20 * 60000) { var dm = new Date(tm), em = A.Equator('Moon', dm, obs, true, true); if (A.Horizon(dm, obs, em.ra, em.dec, 'normal').altitude > 5) { if (!mf) mf = dm; ml = dm; } }
+    out.moonUp = mf ? { from: mf, to: ml } : null;
+    if (!mf) { try { var mr0 = A.SearchRiseSet('Moon', obs, +1, dusk, 2); if (mr0) out.moonRise = mr0.date; } catch (e) { /* skip */ } }
+    if (mf) { var bm = null; for (var tb = mf.getTime(); tb <= ml.getTime(); tb += 20 * 60000) { var db = new Date(tb), eb = A.Equator('Moon', db, obs, true, true), hb = A.Horizon(db, obs, eb.ra, eb.dec, 'normal'); if (!bm || hb.altitude > bm.alt) bm = { az: hb.azimuth, alt: hb.altitude, t: db }; } out.moonBest = bm; }
     var tle = S.back && S.back.tle;
     if (window.satellite && tle && tle.line1) {
       var sat = satellite.twoline2satrec(tle.line1, tle.line2), gd = { latitude: L.lat * Math.PI / 180, longitude: L.lon * Math.PI / 180, height: 0.2 }, cur = null;
@@ -1879,13 +1888,19 @@
           var sv = A.GeoVector('Sun', d2, true), sl = Math.sqrt(sv.x * sv.x + sv.y * sv.y + sv.z * sv.z), sx = sv.x / sl, sy = sv.y / sl, sz = sv.z / sl, r = pv.position;
           var dot = r.x * sx + r.y * sy + r.z * sz, px = r.x - dot * sx, py = r.y - dot * sy, pz = r.z - dot * sz, lit = dot > 0 || Math.sqrt(px * px + py * py + pz * pz) > 6371;
           var az = compass(look.azimuth * 180 / Math.PI);
-          if (sunAlt < -6 && lit) { if (!cur) cur = { start: d2, from: az, max: el, end: d2, to: az }; cur.end = d2; cur.to = az; if (el > cur.max) cur.max = el; }
+          if (sunAlt < -6 && lit) { if (!cur) cur = { start: d2, from: az, max: el, end: d2, to: az, path: [] }; cur.end = d2; cur.to = az; if (el > cur.max) cur.max = el; cur.path.push([look.azimuth * 180 / Math.PI, el]); }
           else if (cur) { out.passes.push(cur); cur = null; }
         } else if (cur) { out.passes.push(cur); cur = null; }
       }
     }
     var y = n.getFullYear();
-    SHOWERS.forEach(function (sh) { [y, y + 1].forEach(function (yy) { var pk = new Date(yy, sh[0], sh[1]), dd = dayDiff(n, pk); if (dd >= -1 && dd <= 30 && (!out.shower || dd < out.shower.days)) out.shower = { name: sh[2], rate: sh[3], peak: pk, days: dd }; }); });
+    SHOWERS.forEach(function (sh) { [y, y + 1].forEach(function (yy) { var pk = new Date(yy, sh[0], sh[1]), dd = dayDiff(n, pk); if (dd >= -1 && dd <= 30 && (!out.shower || dd < out.shower.days)) out.shower = { name: sh[2], rate: sh[3], peak: pk, days: dd, ra: sh[4], dec: sh[5], con: sh[6] }; }); });
+    if (out.shower && out.shower.days >= -1 && out.shower.days <= 1) { // showcase night: show the sky at the best viewing time and where the meteors come from
+      out.showcase = true;
+      var best = new Date(dusk.getFullYear(), dusk.getMonth(), dusk.getDate() + (dusk.getHours() >= 12 ? 1 : 0), 3, 0); if (best > dawn) best = new Date(dawn.getTime() - 60 * 60000);
+      if (best > n) { out.show = best; out.at = ['Moon', 'Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn'].map(function (b) { var eq = A.Equator(b, best, obs, true, true), hz = A.Horizon(best, obs, eq.ra, eq.dec, 'normal'); return { name: b, az: hz.azimuth, alt: hz.altitude, mag: b === 'Moon' ? -10 : A.Illumination(b, best).mag }; }).filter(function (x) { return x.alt > 0; }); }
+      var rh = A.Horizon(out.show, obs, out.shower.ra, out.shower.dec, 'normal'); out.radiant = { az: rh.azimuth, alt: rh.altitude };
+    }
     S._sky = { k: TODAYKEY() + dusk.getHours(), v: out };
     return out;
   }
@@ -1899,24 +1914,82 @@
     var k = skyTonight(); if (!k) return emptyBleed('Loading…');
     var w = S.wx, night = (w.hours || []).filter(function (h, i) { return i >= 2 && i <= 9; }), cloudy = night.filter(function (h) { return /cloud|rain|snow|storm|fog|sleet/.test(h.icon || ''); }).length;
     var head = cloudy >= 5 ? 'Cloudy tonight — tough viewing' : cloudy >= 2 ? 'Some clouds tonight — look between them' : 'Clear tonight — great for stargazing';
-    var tile = function (label, body) { return '<div class="glass" style="display:flex;flex-direction:column;gap:12px;padding:20px 22px;min-height:0;overflow:hidden"><div class="lbl">' + label + '</div>' + body + '</div>'; };
-    var bright = function (m) { return m < -2 ? 'Very bright' : m < 0 ? 'Bright' : m < 1.5 ? 'Easy to spot' : 'Faint'; };
-    var planets = k.planets.length ? k.planets.slice(0, 4).map(function (p) {
-      return '<div style="display:flex;align-items:center;gap:14px"><div style="width:16px;height:16px;border-radius:50%;flex-shrink:0;background:' + ({ Venus: '#fff3c4', Jupiter: '#f2d7a8', Mars: '#ff8a5c', Saturn: '#e8d08a', Mercury: '#cfc8bd' }[p.name]) + ';box-shadow:0 0 12px rgba(255,240,200,.7)"></div>' +
-        '<div style="min-width:0"><div style="font-size:24px;font-weight:800">' + p.name + ' <span style="font-size:16px;font-weight:700;opacity:.7">· ' + bright(p.mag) + '</span></div><div style="font-size:16px;opacity:.85">' + planetWhen(p) + '</div></div></div>';
-    }).join('') : '<div style="font-size:20px;opacity:.7">No bright planets up tonight</div>';
+    if (k.showcase) head = '☄️ ' + k.shower.name + ' ' + (k.shower.days <= 0 ? 'peak tonight' : 'peak tomorrow night') + (cloudy >= 5 ? ' — clouds may hide them' : cloudy >= 2 ? ' — look between clouds' : ' — clear skies!');
+    var PC = { Venus: '#fff3c4', Jupiter: '#f2d7a8', Mars: '#ff8a5c', Saturn: '#e8d08a', Mercury: '#cfc8bd', Moon: '#f4efdc' };
+    var F = function (v) { return (+v).toFixed(1); };
+    // ---- panorama: the whole horizon, north to north, at the showcase time
+    var PW = 760, PH = 400, top0 = 30, gy = PH - 40, X = function (az) { return 44 + ((az % 360) + 360) % 360 / 360 * (PW - 88); }, Y = function (alt) { return gy - Math.max(0, Math.min(90, alt)) / 90 * (gy - top0); };
+    var rnd = (function () { var sd = 7; return function () { sd = (sd * 9301 + 49297) % 233280; return sd / 233280; }; })();
+    var stars = ''; for (var si = 0; si < 90; si++) { var sx = 20 + rnd() * (PW - 40), sy = top0 + rnd() * (gy - top0 - 10), sr = rnd() < 0.15 ? 1.6 : 0.9; stars += '<circle class="a-twinkle" style="animation-delay:-' + F(rnd() * 6) + 's" cx="' + F(sx) + '" cy="' + F(sy) + '" r="' + sr + '" fill="#fff" opacity="' + F(0.35 + rnd() * 0.5) + '"/>'; }
+    var hills = 'M0,' + gy; for (var hx = 0; hx <= PW; hx += 20) hills += ' L' + hx + ',' + F(gy - 6 - Math.abs(Math.sin(hx / 53)) * 9 - (Math.sin(hx / 17) + 1) * 3);
+    hills += ' L' + PW + ',' + PH + ' L0,' + PH + ' Z';
+    var compass = [[0, 'N'], [90, 'E'], [180, 'S'], [270, 'W'], [360, 'N']].map(function (c) { return '<text x="' + F(X(c[0] === 360 ? 359.9 : c[0])) + '" y="' + (PH - 10) + '" text-anchor="middle" font-size="15" font-weight="800" fill="rgba(255,255,255,.75)">' + c[1] + '</text>'; }).join('');
+    var grid = [30, 60].map(function (a) { return '<line x1="20" x2="' + (PW - 20) + '" y1="' + F(Y(a)) + '" y2="' + F(Y(a)) + '" stroke="rgba(255,255,255,.08)" stroke-dasharray="3 6"/>'; }).join('');
+    var pass = k.passes.filter(function (p) { return p.path && p.path.length > 1 && sameDay(p.start, k.show) || (p.start - k.show < 12 * 3600000 && p.start > now()); })[0], iss = '';
+    if (pass && pass.path.length > 1) {
+      var pts = pass.path.map(function (q) { return [X(q[0]), Y(q[1])]; }), dpath = 'M' + pts.map(function (q) { return F(q[0]) + ',' + F(q[1]); }).join(' L'), wrap = pts.some(function (q, i) { return i && Math.abs(q[0] - pts[i - 1][0]) > PW / 2; });
+      if (!wrap) { var e2 = pts[pts.length - 1], e1 = pts[Math.max(0, pts.length - 4)], ang = Math.atan2(e2[1] - e1[1], e2[0] - e1[0]) * 180 / Math.PI, mid = pts[Math.floor(pts.length / 2)];
+        iss = '<path d="' + dpath + '" fill="none" stroke="#8fd0ff" stroke-width="3" stroke-dasharray="7 6" stroke-linecap="round"/><path d="M0,-6 L10,0 L0,6 Z" fill="#8fd0ff" transform="translate(' + F(e2[0]) + ',' + F(e2[1]) + ') rotate(' + F(ang) + ')"/>' +
+          '<text x="' + F(mid[0]) + '" y="' + F(mid[1] - 12) + '" text-anchor="middle" font-size="14" font-weight="800" fill="#8fd0ff">Space station ' + hm(pass.start) + '</text>'; }
+    }
+    var placed = [], spot = function (x, y) { for (var g = 0; g < 6; g++) { var hit = placed.filter(function (q) { return Math.abs(q[0] - x) < 70 && Math.abs(q[1] - y) < 18; })[0]; if (!hit) break; y -= 18; } placed.push([x, y]); return y; };
+    var moonDraw = function (az, alt, label) { // the real moon with tonight's phase
+      if (!w.moon) return '';
+      var x = X(az), y = Y(alt), sz = 46;
+      return '<circle cx="' + F(x) + '" cy="' + F(y) + '" r="34" fill="#f4efdc" opacity=".08"/>' + moonSvg(w.moon, sz).replace('<svg ', '<svg x="' + F(x - sz / 2) + '" y="' + F(y - sz / 2) + '" ') +
+        '<text x="' + F(x) + '" y="' + F(spot(x, y - sz / 2 - 8)) + '" text-anchor="middle" font-size="15" font-weight="800" fill="#fff">' + esc(label) + '</text>' +
+        '<text x="' + F(x) + '" y="' + F(y + sz / 2 + 17) + '" text-anchor="middle" font-size="13" font-weight="700" fill="rgba(255,255,255,.75)">' + esc(w.moon.name + ' · ' + w.moon.illum + '%') + '</text>';
+    };
+    var moonNow = k.at.filter(function (b) { return b.name === 'Moon'; })[0];
+    var bodies = k.at.filter(function (b) { return b.name !== 'Moon'; }).map(function (b) {
+      var x = X(b.az), y = Y(b.alt), r = b.mag < -2 ? 8 : b.mag < 0 ? 6.5 : 5;
+      return '<circle cx="' + F(x) + '" cy="' + F(y) + '" r="' + (r * 2.6) + '" fill="' + PC[b.name] + '" opacity=".16"/><circle cx="' + F(x) + '" cy="' + F(y) + '" r="' + r + '" fill="' + PC[b.name] + '"/>' +
+        '<text x="' + F(x) + '" y="' + F(spot(x, y - r - 9)) + '" text-anchor="middle" font-size="15" font-weight="800" fill="#fff">' + b.name + '</text>';
+    }).join('') + (moonNow ? moonDraw(moonNow.az, moonNow.alt, 'Moon') : k.moonBest ? moonDraw(k.moonBest.az, Math.max(12, k.moonBest.alt), 'Moon · ' + hm(k.moonBest.t)) : w.moon ? '<g>' + moonSvg(w.moon, 52).replace('<svg ', '<svg x="' + (PW - 92) + '" y="' + (top0 + 2) + '" ') +
+      '<text x="' + (PW - 104) + '" y="' + (top0 + 24) + '" text-anchor="end" font-size="15" font-weight="800" fill="#fff">Moon · ' + esc(w.moon.name) + ' · ' + w.moon.illum + '%</text>' +
+      '<text x="' + (PW - 104) + '" y="' + (top0 + 44) + '" text-anchor="end" font-size="13" font-weight="700" fill="rgba(255,255,255,.7)">' + (k.moonRise ? 'Not up tonight · rises ' + (sameDay(k.moonRise, now()) ? '' : DOW[k.moonRise.getDay()] + ' ') + hm(k.moonRise) : 'Not up tonight') + '</text></g>' : '');
+    var meteors = '';
+    if (k.showcase && k.radiant && k.radiant.alt > 0) {
+      var rx0 = X(k.radiant.az), ry0 = Y(k.radiant.alt), mr = (function () { var sd = 3; return function () { sd = (sd * 9301 + 49297) % 233280; return sd / 233280; }; })();
+      for (var mi = 0; mi < 14; mi++) {
+        var a = mr() * Math.PI * 2, d0 = 30 + mr() * 50, len = 60 + mr() * 90, x1 = rx0 + Math.cos(a) * d0, y1 = ry0 + Math.sin(a) * d0, x2 = rx0 + Math.cos(a) * (d0 + len), y2 = ry0 + Math.sin(a) * (d0 + len);
+        if (y2 > gy - 10 || y2 < 4) continue;
+        meteors += '<line class="a-streak" style="animation-delay:' + F(mr() * 9) + 's;animation-duration:' + F(4 + mr() * 5) + 's" x1="' + F(x1) + '" y1="' + F(y1) + '" x2="' + F(x2) + '" y2="' + F(y2) + '" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>';
+      }
+      meteors += '<circle cx="' + F(rx0) + '" cy="' + F(ry0) + '" r="20" fill="none" stroke="#f5c66b" stroke-width="2" stroke-dasharray="4 4"/><text x="' + F(rx0) + '" y="' + F(ry0 + 38) + '" text-anchor="middle" font-size="14" font-weight="800" fill="#f5c66b" paint-order="stroke" stroke="#0a0d22" stroke-width="4">' + esc(k.shower.name) + ' come from here (' + esc(k.shower.con) + ')</text>';
+    }
+    var pano = '<svg viewBox="0 0 ' + PW + ' ' + PH + '" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" style="display:block"><defs><linearGradient id="skyg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#070a1c"/><stop offset=".75" stop-color="#16204a"/><stop offset="1" stop-color="#2d2f5e"/></linearGradient></defs>' +
+      '<rect x="0" y="0" width="' + PW + '" height="' + gy + '" rx="14" fill="url(#skyg)"/>' + stars + grid + meteors + iss + bodies +
+      '<path d="' + hills + '" fill="#0b0a12"/>' + compass + '</svg>';
+    // ---- side cards
     var whenDay = function (d) { return sameDay(d, now()) ? 'Tonight' : dayDiff(now(), d) === 1 ? 'Tomorrow' : DOW[d.getDay()]; };
-    var passes = k.passes.length ? k.passes.slice(0, 2).map(function (p) {
-      var mins = Math.max(1, Math.round((p.end - p.start) / 60000));
-      return '<div><div style="font-size:26px;font-weight:800">' + whenDay(p.start) + ' · ' + hm(p.start) + '</div><div style="font-size:16px;opacity:.85">' + mins + ' min · ' + p.from + ' → ' + p.to + ' · ' + (p.max > 50 ? 'almost overhead' : p.max > 30 ? 'high in the sky' : 'low in the sky') + '</div></div>';
-    }).join('') + '<div style="margin-top:auto;font-size:15px;opacity:.65">Looks like a bright, steady star moving across the sky — no blinking</div>' : '<div style="font-size:20px;opacity:.7">' + (S.back && S.back.tle ? 'No visible passes in the next 3 days' : 'Pass times appear once your Apps Script is updated') + '</div>';
-    var sh = k.shower, shower = sh ? '<div class="head" style="font-size:34px;line-height:1.1">' + sh.name + '</div><div style="font-size:20px;font-weight:700">' + (sh.days <= 0 ? 'Peaking tonight' : sh.days === 1 ? 'Peaks tomorrow night' : 'Peaks ' + DOW[sh.peak.getDay()] + ', ' + MON[sh.peak.getMonth()] + ' ' + sh.peak.getDate()) + '</div>' +
-      '<div style="font-size:17px;opacity:.85">Up to ' + sh.rate + ' meteors an hour in a dark spot · best after midnight</div>' + (w.moon && w.moon.illum > 60 ? '<div style="font-size:15px;opacity:.65;margin-top:auto">The bright moon will wash out the fainter ones</div>' : '')
-      : '<div style="font-size:20px;opacity:.7">No major meteor shower in the next month</div>' + (w.moon ? '<div style="margin-top:auto;font-size:17px;opacity:.8">Moon: ' + esc(w.moon.name) + ', ' + w.moon.illum + '% lit</div>' : '');
-    return '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(6,8,22,.75),rgba(6,8,22,.85))"></div>' + btag("Weather · Tonight's sky") + top +
-      '<div style="position:absolute;left:40px;right:40px;top:92px;bottom:36px;display:flex;flex-direction:column;gap:14px">' +
-      '<div class="head" style="font-size:38px">' + esc(head) + '</div>' +
-      '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;flex:1;min-height:0">' + tile('Planets to look for', planets) + tile('Space station flyovers', passes) + tile('Meteor showers', shower) + '</div></div>';
+    var np = k.passes[0], mins = np ? Math.max(1, Math.round((np.end - np.start) / 60000)) : 0, until = np ? Math.round((np.start - now()) / 60000) : 0;
+    var issCard = '<div class="glass" style="display:flex;flex-direction:column;gap:6px;padding:16px 20px;min-height:0"><div class="lbl" style="color:#8fd0ff">🛰️ Space station</div>' +
+      (np ? '<div style="font-size:15px;font-weight:700;opacity:.8">' + whenDay(np.start) + (until > 0 && until < 180 ? ' · in ' + (until >= 60 ? Math.floor(until / 60) + 'h ' : '') + (until % 60) + 'm' : '') + '</div><div style="font-size:46px;font-weight:800;line-height:1">' + hm(np.start) + '</div>' +
+        '<div style="font-size:16px;opacity:.85">' + mins + ' min · ' + np.from + ' → ' + np.to + ' · ' + (np.max > 50 ? 'nearly overhead' : np.max > 30 ? 'high' : 'low') + '</div>' +
+        (k.passes[1] ? '<div style="font-size:14px;opacity:.6;margin-top:auto">Next: ' + whenDay(k.passes[1].start) + ' ' + hm(k.passes[1].start) + '</div>' : '')
+        : '<div style="font-size:19px;opacity:.75">' + (S.back && S.back.tle ? 'No visible flyovers in the next 3 days' : 'Flyover times appear once your Apps Script is updated') + '</div>') + '</div>';
+    var sh = k.shower, metCard = '<div class="glass" style="display:flex;flex-direction:column;gap:6px;padding:16px 20px;min-height:0;' + (k.showcase ? 'border:2px solid #f5c66b;background:rgba(245,198,107,.14);' : '') + '"><div class="lbl" style="color:#f5c66b">☄️ Meteor shower' + (k.showcase ? ' · tonight' : '') + '</div>' +
+      (sh ? '<div class="head" style="font-size:34px;line-height:1">' + sh.name + '</div><div style="font-size:17px;font-weight:700">' + (sh.days <= 0 ? 'Peaking tonight' : sh.days === 1 ? 'Peaks tomorrow night' : 'Peaks ' + DOW[sh.peak.getDay()] + ', ' + MON[sh.peak.getMonth()] + ' ' + sh.peak.getDate() + ' · ' + sh.days + ' days') + '</div>' +
+        '<div style="font-size:15px;opacity:.8">Up to ' + sh.rate + ' an hour · best after midnight' + (w.moon && w.moon.illum > 60 ? ' · bright moon' : '') + '</div>' + (k.showcase ? '<div style="font-size:14px;opacity:.75;margin-top:auto">Find a dark spot, give your eyes 20 minutes, and look toward ' + esc(sh.con) + '</div>' : '')
+        : '<div style="font-size:18px;opacity:.75">None in the next month</div>' + (w.moon ? '<div style="font-size:16px;opacity:.8">Moon: ' + esc(w.moon.name) + ', ' + w.moon.illum + '% lit</div>' : '')) + '</div>';
+    // ---- tonight's timeline: dark to dawn
+    var TW = 1500, t0 = k.dusk.getTime(), t1 = k.dawn.getTime(), TX = function (d) { return 90 + (Math.max(t0, Math.min(t1, d.getTime())) - t0) / (t1 - t0) * (TW - 110); };
+    var rows = k.planets.slice(0, 4).map(function (p) { return { name: p.name, from: p.from, to: p.to, c: PC[p.name] }; });
+    if (k.moonUp) rows.push({ name: 'Moon', from: k.moonUp.from, to: k.moonUp.to, c: PC.Moon });
+    var RH = 24, TH = 30 + rows.length * RH + 14, tl = '';
+    for (var hh = Math.ceil(t0 / 3600000) * 3600000; hh <= t1; hh += 7200000) { var hd = new Date(hh), hx2 = TX(hd); tl += '<line x1="' + F(hx2) + '" x2="' + F(hx2) + '" y1="24" y2="' + (TH - 6) + '" stroke="rgba(255,255,255,.1)"/><text x="' + F(hx2) + '" y="16" text-anchor="middle" font-size="13" font-weight="700" fill="rgba(255,255,255,.65)">' + ((hd.getHours() % 12) || 12) + (hd.getHours() < 12 ? 'a' : 'p') + '</text>'; }
+    var mid0 = new Date(k.dusk.getFullYear(), k.dusk.getMonth(), k.dusk.getDate() + 1, 0, 0); if (sh && mid0 > k.dusk && mid0 < k.dawn) tl += '<rect x="' + F(TX(mid0)) + '" y="24" width="' + F(TX(k.dawn) - TX(mid0)) + '" height="' + (TH - 30) + '" fill="#f5c66b" opacity=".07"/>';
+    rows.forEach(function (r, i) { var y = 30 + i * RH; tl += '<text x="0" y="' + (y + 13) + '" font-size="15" font-weight="800" fill="#fff">' + r.name + '</text><rect x="' + F(TX(r.from)) + '" y="' + (y + 2) + '" width="' + F(Math.max(8, TX(r.to) - TX(r.from))) + '" height="14" rx="7" fill="' + r.c + '" opacity=".85"/>'; });
+    k.passes.filter(function (p) { return p.start >= k.dusk && p.start <= k.dawn; }).forEach(function (p) { var px = TX(p.start); tl += '<line x1="' + F(px) + '" x2="' + F(px) + '" y1="24" y2="' + (TH - 6) + '" stroke="#8fd0ff" stroke-width="2" stroke-dasharray="4 4"/><text x="' + F(px + 5) + '" y="' + (TH - 8) + '" font-size="12" font-weight="800" fill="#8fd0ff">🛰️ ' + hm(p.start) + '</text>'; });
+    var nx = now(); if (nx > k.dusk && nx < k.dawn) tl += '<line x1="' + F(TX(nx)) + '" x2="' + F(TX(nx)) + '" y1="20" y2="' + (TH - 4) + '" stroke="var(--accent)" stroke-width="3"/>';
+    var timeline = '<svg viewBox="0 0 ' + TW + ' ' + TH + '" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style="display:block">' + tl + '</svg>';
+    return '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(6,8,22,.78),rgba(6,8,22,.9))"></div>' + btag("Weather · Tonight's sky") + top +
+      '<div style="position:absolute;left:40px;right:40px;top:88px;bottom:30px;display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto;gap:12px 14px">' +
+      '<div style="grid-column:1 / span 2;display:flex;align-items:baseline;justify-content:space-between;gap:20px;min-width:0"><div class="head ellip" style="font-size:' + (k.showcase ? 32 : 34) + 'px;min-width:0">' + esc(head) + '</div><div style="font-size:16px;font-weight:700;opacity:.7" class="ellip">The sky at ' + hm(k.show) + (k.showcase ? ' (best for meteors)' : '') + ' · dark ' + hm(k.dusk) + ' to ' + hm(k.dawn) + '</div></div>' +
+      '<div class="glass" style="padding:10px;min-height:0;display:flex;align-items:center">' + pano + '</div>' +
+      '<div style="display:grid;grid-template-rows:repeat(2,minmax(0,1fr));gap:12px;min-height:0">' + issCard + metCard + '</div>' +
+      '<div class="glass" style="grid-column:1 / span 2;padding:12px 18px;height:' + (54 + rows.length * 30) + 'px"><div class="lbl" style="margin-bottom:4px">Tonight, dark to dawn</div><div style="height:calc(100% - 20px)">' + timeline + '</div></div></div>';
   }
   function gasOK() { var g = S.back && S.back.gas; return g && g.prices && g.prices.now ? g : null; }
   function gasBleed(top) {

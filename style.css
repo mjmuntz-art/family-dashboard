@@ -260,3 +260,5 @@ body.low .urgent-frame, body.low [style*="blink"] { animation: none; }
 .a-ember { animation: aEmber 3s ease-out infinite; }
 @keyframes aHearth { 0% { opacity: .82; } 18% { opacity: .9; } 31% { opacity: .78; } 47% { opacity: .92; } 63% { opacity: .84; } 70% { opacity: .9; } 86% { opacity: .8; } 100% { opacity: .82; } }
 .a-hearth { animation: aHearth 9s ease-in-out infinite; }
+@keyframes aStreak { 0%, 82% { opacity: 0; stroke-dasharray: 0 400; } 86% { opacity: 1; } 96% { opacity: 1; stroke-dasharray: 400 0; } 100% { opacity: 0; stroke-dasharray: 400 0; } }
+.a-streak { animation: aStreak 6s linear infinite; opacity: 0; }
