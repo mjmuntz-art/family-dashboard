@@ -560,8 +560,8 @@
     }
     return j;
   }
-  // calendar colors: Mike blue, Cate burgundy, Weston green, Family orange, Dinners follow the season
-  var CAL_COLORS = { mike: '#4f8fe8', cate: '#b03a5b', weston: '#4cb86b', family: '#f0a43c' };
+  // calendar colors: Mike blue, Cate pink, Weston green, Bills red, Family orange, Dinners follow the season
+  var CAL_COLORS = { mike: '#4f8fe8', cate: '#e86fa8', weston: '#4cb86b', family: '#f0a43c', bills: '#e04848' };
   var SEASON_COLOR = { winter: '#cfd8e3', spring: '#f29cc2', summer: '#f2d14c', fall: '#c9a227' }; // frost silver, blossom pink, sunshine yellow, harvest gold
   function calColor(name, given) {
     var n = String(name || '').toLowerCase(), set = Object.assign({}, CAL_COLORS, C.calColors || {});
