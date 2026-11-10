@@ -777,12 +777,23 @@
       bulbs: [[8,52],[27,60],[1248,66],[7,71],[103,125],[1206,128],[1226,140],[94,143],[1265,146],[213,156],[246,165],[270,192],[278,216],[339,217],[319,223],[386,239],[560,239],[1265,244],[19,252],[1157,265],[37,269],[13,272],[413,283],[38,289],[1132,291],[105,295],[152,306],[1194,306],[18,309],[41,312],[235,317],[209,328],[90,323],[250,327],[589,325],[933,330],[407,331],[1260,331],[425,332],[36,338],[580,341],[91,343],[16,344],[258,348],[1120,354],[40,370],[374,375],[1111,375],[82,380],[19,387],[424,393],[94,394],[69,399],[32,403],[1169,407],[935,413],[9,414],[1089,416],[964,417],[312,420],[397,419],[907,423],[998,422],[47,429],[1102,429],[1192,430],[87,432],[1129,432],[929,435],[962,439],[385,436],[1225,441],[412,445],[370,446],[458,452],[427,461],[911,462],[801,464],[445,466],[741,472],[356,475],[304,485],[95,493],[23,495],[519,496],[623,497],[659,498],[74,498],[49,499],[547,500],[109,506],[35,511],[17,514],[889,514],[1038,522],[946,524],[1146,527],[1228,526],[560,528],[534,530],[27,536],[70,535],[7,537],[45,537],[1060,539],[1100,541],[888,544],[1136,543],[1225,545],[1253,552],[912,554],[418,560],[1030,564],[938,572],[1044,579],[1089,585],[1114,594],[1008,593],[1030,593],[975,594],[1217,613],[1109,616],[1157,620],[389,629],[1229,630],[1272,634],[449,635],[410,642],[369,652],[389,651],[263,658],[320,669],[280,673]] },
     // Veterans Day: memorial park. Light ripples across the flags, candles and lanterns flicker, red and gold leaves drift down,
     // morning mist in the park, stars at night (no confetti: it's a memorial)
-    veterans: { dusk: true, skyMask: 'scenes/veterans-sky.png', flagMask: 'scenes/veterans-flags.png', fall: function () { return ['leaves', 12, ['#b8321a', '#d9541e', '#e8822c', '#f2b33d']]; },
+    veterans: { dusk: true, skyMask: 'scenes/veterans-sky.png', waves: [{ mask: 'scenes/veterans-flags.png', box: [180, 0, 520, 380] }], fall: function () { return ['leaves', 12, ['#b8321a', '#d9541e', '#e8822c', '#f2b33d']]; },
       lights: { morning: [[132, 556, 46, 'lamp'], [416, 500, 22, 'lamp'], [456, 500, 22, 'lamp']], midday: [[132, 556, 38, 'lamp']], afternoon: [[132, 556, 46, 'lamp'], [416, 500, 22, 'lamp'], [456, 500, 22, 'lamp']],
         evening: [[132, 556, 56, 'lamp'], [416, 500, 26, 'lamp'], [456, 500, 26, 'lamp'], [309, 492, 30, 'window'], [802, 458, 14, 'lamp'], [934, 458, 14, 'lamp'], [1042, 456, 14, 'lamp']],
         dusk: [[132, 556, 60, 'lamp'], [416, 500, 28, 'lamp'], [456, 500, 28, 'lamp'], [309, 492, 34, 'window'], [802, 458, 16, 'lamp'], [934, 458, 16, 'lamp'], [1042, 456, 16, 'lamp']],
         night: [[132, 556, 64, 'lamp'], [416, 500, 30, 'lamp'], [456, 500, 30, 'lamp'], [309, 492, 38, 'window'], [802, 458, 18, 'lamp'], [934, 458, 18, 'lamp'], [1042, 456, 18, 'lamp'], [1250, 520, 40, 'window']] },
       suns: { morning: [1085, 395, 160], afternoon: [1085, 420, 160], evening: [1104, 455, 180] }, mist: { morning: [400, '#fff1e4', 640, 1280] }, stars: [700, 1270, 20, 230] },
+    // Thanksgiving: farmhouse great room. The fire dances and lights the room, candles and lanterns flicker, the ceiling lights twinkle,
+    // leaves drift down outside the windows, steam rises from the pie, dust floats in the sunbeams
+    thanksgiving: { dusk: true,
+      waves: [{ mask: 'scenes/thanksgiving-fire.png', box: [790, 300, 160, 130], freq: [0.035, 0.09], scale: 9, dur: 1.6, seed: 7 }],
+      lights: [[868, 380, 150, 'pumpkin'], [868, 520, 120, 'pumpkin'], [737, 205, 30, 'lamp'], [993, 205, 30, 'lamp'], [775, 215, 16, 'lamp'], [955, 215, 16, 'lamp'],
+        [1018, 392, 26, 'lamp'], [1252, 402, 24, 'lamp'], [95, 712, 50, 'lamp'], [125, 425, 30, 'lamp'], [298, 395, 26, 'lamp'], [240, 425, 22, 'lamp'], [545, 330, 22, 'lamp'],
+        [178, 170, 16, 'lamp'], [212, 170, 16, 'lamp'], [236, 178, 16, 'lamp'], [256, 180, 16, 'lamp'], [272, 183, 16, 'lamp'], [1205, 280, 40, 'window']],
+      bulbR: 14, bulbs: [[879,0],[935,0],[134,3],[101,11],[275,10],[862,11],[957,14],[842,16],[328,32],[803,32],[997,32],[291,40],[34,45],[772,48],[1042,49],[339,52],[737,59],[375,58],[1068,58],[323,64],[691,68],[1102,67],[428,69],[405,69],[617,69],[651,73],[584,76],[1247,77],[1153,78],[484,78],[1201,78],[539,79],[445,91],[32,118],[533,138],[516,156],[377,158],[479,159],[424,171]],
+      outside: { when: ['morning', 'midday', 'afternoon', 'evening', 'dusk'], mask: 'scenes/thanksgiving-windows.png', n: 16, colors: ['#c9502f', '#e07a3c', '#f0b04a', '#9a2a1a'] },
+      steam: { when: ['midday', 'afternoon', 'evening', 'dusk'], at: [[55, 448], [340, 410]] },
+      motes: { morning: [180, 760, 300, 660], midday: [180, 760, 300, 660], afternoon: [180, 760, 300, 660] } },
     august: { dusk: true, skyMask: 'scenes/august-sky.png',
       suns: { morning: [315, 321, 170], afternoon: [370, 225, 150], evening: [335, 302, 180], dusk: [329, 315, 190] }, moon: { night: [325, 223, 70] },
       mist: { morning: [372, '#fff3df'] }, stars: [600, 1270, 20, 290], meteors: { night: 6 },
@@ -793,14 +804,15 @@
   function photoFx(c, cfg, tod, low) {
     var r = c.r, k = LIGHT[tod] != null ? LIGHT[tod] : 0.8, out = '', blur = c.blur(5);
     var lights = cfg.lights && !Array.isArray(cfg.lights) ? cfg.lights[tod] || [] : cfg.lights || [];
-    if (cfg.flagMask && cfg.img && !low) { // the flags themselves ripple: the photo's flags with a slow wave running through them
-      var fmk = c.uid('f'), fw = c.uid('w'), fb = cfg.flagBox || [180, 0, 520, 380];
-      c.defs += '<mask id="' + fmk + '" maskUnits="userSpaceOnUse" x="-71.1" y="0" width="1422.2" height="800"><image href="' + cfg.flagMask + '" x="-71.1" y="0" width="1422.2" height="800" preserveAspectRatio="none"/></mask>' +
-        '<filter id="' + fw + '" filterUnits="userSpaceOnUse" x="' + fb[0] + '" y="' + fb[1] + '" width="' + fb[2] + '" height="' + fb[3] + '" color-interpolation-filters="sRGB">' +
-        '<feTurbulence type="fractalNoise" baseFrequency="0.011 0.045" numOctaves="1" seed="3" result="n"><animate attributeName="baseFrequency" dur="7s" repeatCount="indefinite" values="0.011 0.045;0.014 0.052;0.010 0.040;0.011 0.045" keyTimes="0;0.35;0.7;1" calcMode="spline" keySplines=".45 0 .55 1;.45 0 .55 1;.45 0 .55 1"/></feTurbulence>' +
-        '<feDisplacementMap in="SourceGraphic" in2="n" scale="7" xChannelSelector="R" yChannelSelector="G"/></filter>';
-      out += '<g mask="url(#' + fmk + ')"><image href="' + cfg.img + '" x="-71.1" y="0" width="1422.2" height="800" preserveAspectRatio="xMidYMid slice" filter="url(#' + fw + ')"/></g>';
-    }
+    (cfg.waves || []).forEach(function (wv) { // part of the photo moves: flags wave, a fire dances
+      if (!cfg.img || low || (wv.when && wv.when.indexOf(tod) < 0)) return;
+      var mk = c.uid('f'), fl = c.uid('w'), fb = wv.box, f0 = wv.freq || [0.011, 0.045], f1 = [f0[0] * 1.25, f0[1] * 1.15], f2 = [f0[0] * 0.9, f0[1] * 0.9];
+      c.defs += '<mask id="' + mk + '" maskUnits="userSpaceOnUse" x="-71.1" y="0" width="1422.2" height="800"><image href="' + wv.mask + '" x="-71.1" y="0" width="1422.2" height="800" preserveAspectRatio="none"/></mask>' +
+        '<filter id="' + fl + '" filterUnits="userSpaceOnUse" x="' + fb[0] + '" y="' + fb[1] + '" width="' + fb[2] + '" height="' + fb[3] + '" color-interpolation-filters="sRGB">' +
+        '<feTurbulence type="fractalNoise" baseFrequency="' + f0.join(' ') + '" numOctaves="1" seed="' + (wv.seed || 3) + '" result="n"><animate attributeName="baseFrequency" dur="' + (wv.dur || 7) + 's" repeatCount="indefinite" values="' + [f0, f1, f2, f0].map(function (x) { return x.join(' '); }).join(';') + '" keyTimes="0;0.35;0.7;1" calcMode="spline" keySplines=".45 0 .55 1;.45 0 .55 1;.45 0 .55 1"/></feTurbulence>' +
+        '<feDisplacementMap in="SourceGraphic" in2="n" scale="' + (wv.scale || 7) + '" xChannelSelector="R" yChannelSelector="G"/></filter>';
+      out += '<g mask="url(#' + mk + ')"><image href="' + cfg.img + '" x="-71.1" y="0" width="1422.2" height="800" preserveAspectRatio="xMidYMid slice" filter="url(#' + fl + ')"/></g>';
+    });
     var moon = cfg.moon && cfg.moon[tod];
     if (moon) out += '<circle class="a-pulse" cx="' + moon[0] + '" cy="' + moon[1] + '" r="' + moon[2] + '" fill="' + c.rad([[0, '#eef3ff', 0.6], [0.4, '#cfdcff', 0.25], [1, '#cfdcff', 0]]) + '"/>';
     var mist = cfg.mist && cfg.mist[tod];
@@ -844,6 +856,13 @@
     var gz = cfg.geese && cfg.geese[tod];
     if (gz) { var gk = cfg.skyMask ? c.uid('k') : ''; if (gk) { c.defs += '<mask id="' + gk + '" maskUnits="userSpaceOnUse" x="-71.1" y="0" width="1422.2" height="800"><image href="' + cfg.skyMask + '" x="-71.1" y="0" width="1422.2" height="800" preserveAspectRatio="none"/></mask>'; c.add('<g mask="url(#' + gk + ')">'); }
       K.geese(c, gz[0], gz[1], tod === 'evening' ? '#3b2140' : '#2c2a33'); if (gk) c.add('</g>'); }
+    if (cfg.outside && cfg.outside.when.indexOf(tod) >= 0) { // leaves drift down outside the windows
+      var om = c.uid('o'); c.defs += '<mask id="' + om + '" maskUnits="userSpaceOnUse" x="-71.1" y="0" width="1422.2" height="800"><image href="' + cfg.outside.mask + '" x="-71.1" y="0" width="1422.2" height="800" preserveAspectRatio="none"/></mask>';
+      c.add('<g mask="url(#' + om + ')">'); P.leaves(c, cfg.outside.n, cfg.outside.colors, 16, 28); c.add('</g>');
+    }
+    if (cfg.steam && cfg.steam.when.indexOf(tod) >= 0 && !low) { var stm = '<g filter="' + c.blur(4) + '">';
+      cfg.steam.at.forEach(function (pt) { for (var si = 0; si < 4; si++) stm += '<ellipse class="a-steam" style="animation-delay:-' + f(si * 1.4 + r() * 0.6) + 's" cx="' + f(pt[0] + (r() - 0.5) * 16) + '" cy="' + pt[1] + '" rx="6" ry="9" fill="#ffffff" opacity="0.5"/>'; });
+      c.add(stm + '</g>'); }
     var bz = cfg.bees && cfg.bees[tod];
     if (bz) { var bs = ''; bz.forEach(function (bx) { for (var bi = 0; bi < 5; bi++) { var x = bx[0] + r() * (bx[1] - bx[0]), y = bx[2] + r() * (bx[3] - bx[2]), sz = 0.8 + r() * 0.5;
       bs += '<g class="a-bee" style="animation-duration:' + f(1.8 + r() * 1.6) + 's;animation-delay:-' + f(r() * 3) + 's"><g transform="translate(' + f(x) + ' ' + f(y) + ') scale(' + f(sz) + ')">' +
