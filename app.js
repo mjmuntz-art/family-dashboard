@@ -653,7 +653,7 @@
     if (S.screen === 'weather' && p === 'radar') startRadar();
     if (S.screen === 'news' && p && p.indexOf('s:') === 0) drawQR((newsStories() || [])[+p.slice(2)]);
     if (S.screen === 'news' && p === 'hist' && histPick()) drawQR(histPick());
-    if (S.screen === 'family' && p === 'idea' && S.meal) drawQR(S.meal);
+    if (S.screen === 'family' && p === 'idea' && S.meals) S.meals.forEach(function (m, i) { drawQR(m, 'qr' + i); });
   }
   // A background reload only redraws the screen it affects, and never restarts a playing radar loop
   function refresh(screens) {
@@ -878,7 +878,7 @@
     if (screen === 'news') { var nw = newsStories(), np = nw && nw.length ? nw.map(function (s, i) { return 's:' + i; }) : ['empty']; if (S.hist && S.hist.length) np.push('hist'); if (gasOK()) np.push('gas'); return np; }
     if (screen === 'weather') return S.alerts.map(function (a, i) { return 'al:' + i; }).concat(S.wx ? ['now', 'details', 'hours', 'week', 'sky'].concat(window.Astronomy && S.wx.setD ? ['tonight'] : [], S.apod ? ['apod'] : [], ['radar']) : S.alerts.length ? [] : ['empty']);
     if (screen === 'photos') { var pgN = Math.min(3, photoGroups().length) + otdGroups().length; var out = []; for (var q = 0; q < Math.max(1, pgN); q++) out.push('c:' + q); return out; }
-    if (screen === 'family') { var fp = ['main']; if (events()) fp.push('week', 'who'); if (S.meal && events() && !tonightDinner()) fp.push('idea'); if (boardLists().grocery || boardLists().notes.length) fp.push('board'); if (countdownItems().length) fp.push('cd'); return fp; }
+    if (screen === 'family') { var fp = ['main']; if (events()) fp.push('week', 'who'); if (S.meals && S.meals.length) fp.push('idea'); if (boardLists().grocery || boardLists().notes.length) fp.push('board'); if (countdownItems().length) fp.push('cd'); return fp; }
     if (screen === 'live') { var lv = liveList(); return lv.length ? lv.map(function (g) { return 'g:' + g.id; }) : ['none']; }
     if (screen === 'alert') { var ua = S.alerts.filter(isUrgent); return ua.length ? ua.map(function (a, i) { return 'al:' + S.alerts.indexOf(a); }) : ['none']; }
     if (screen === 'night') return ['main'];
@@ -1745,7 +1745,7 @@
   // ------------------------------------------------------------ extras: on this day, NASA picture, tonight's sky, gas, dinner ideas
   var TODAYKEY = function () { var n = now(); return n.getFullYear() + '-' + (n.getMonth() + 1) + '-' + n.getDate(); };
   function loadExtras() {
-    if (DEMO) { if (window.__EXTRAS) { S.hist = __EXTRAS.hist; S.apod = __EXTRAS.apod; S.meal = __EXTRAS.meal; } return; }
+    if (DEMO) { if (window.__EXTRAS) { S.hist = __EXTRAS.hist; S.apod = __EXTRAS.apod; S.meals = __EXTRAS.meals; S.meal = S.meals && S.meals[0]; } return; }
     var day = TODAYKEY(), n = now(), mm = n.getMonth() + 1, dd = n.getDate();
     // on this day (Wikipedia): only events that come with a picture
     var h = load('hist:' + day, 86400000);
@@ -1767,17 +1767,26 @@
         .then(function (x) { S.apod = x; save('apod:' + day, x); refresh(['weather']); }).catch(function () { /* skip today */ });
     }
     // seasonal dinner idea (TheMealDB), one per day
-    var m = load('meal:' + day, 86400000);
-    if (m) S.meal = m; else mealIdea(n).then(function (x) { if (x) { S.meal = x; save('meal:' + day, x); refresh(['family']); } });
+    var m = load('meals:' + day, 86400000);
+    if (m) { S.meals = m; S.meal = m[0]; } else Promise.all([mealIdea(n, SEASON_DISHES, MAINS), mealIdea(n, SEASON_SNACKS, TREATS)]).then(function (r) {
+      var list = r.filter(Boolean); if (!list.length) return;
+      S.meals = list; S.meal = r[0] || null; save('meals:' + day, list); refresh(['family']);
+    });
   }
   var SEASON_DISHES = { // keywords searched on TheMealDB; the day of the year picks one
     winter: ['stew', 'soup', 'pie', 'chili', 'lasagne', 'goulash', 'bourguignon', 'curry', 'casserole', 'meatball'],
     spring: ['lamb', 'salmon', 'risotto', 'carbonara', 'quiche', 'lemon', 'chicken', 'pesto', 'frittata', 'shrimp'],
     summer: ['burger', 'taco', 'kebab', 'salad', 'shrimp', 'fajita', 'teriyaki', 'grilled', 'corn', 'jerk'],
     fall: ['pumpkin', 'chili', 'stew', 'roast', 'mushroom', 'pie', 'soup', 'pork', 'sausage', 'squash'] };
+  var SEASON_SNACKS = { // snacks and treats
+    winter: ['chocolate', 'cookie', 'gingerbread', 'brownie', 'cinnamon', 'pudding', 'fudge', 'toffee'],
+    spring: ['lemon', 'strawberry', 'carrot', 'rhubarb', 'banana', 'scone', 'muffin', 'coconut'],
+    summer: ['berry', 'peach', 'lime', 'watermelon', 'blueberry', 'cherry', 'mango', 'salsa'],
+    fall: ['apple', 'pumpkin', 'pecan', 'cinnamon', 'maple', 'pear', 'caramel', 'oat'] };
+  var MAINS = /beef|chicken|lamb|pork|pasta|seafood|vegetarian|miscellaneous|goat/i, TREATS = /dessert|side|starter|breakfast/i;
   function seasonOf(d) { var m = d.getMonth(); return m === 11 || m < 2 ? 'winter' : m < 5 ? 'spring' : m < 8 ? 'summer' : 'fall'; }
-  function mealIdea(d) {
-    var words = SEASON_DISHES[seasonOf(d)], doy = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 86400000), mains = /beef|chicken|lamb|pork|pasta|seafood|vegetarian|miscellaneous|goat/i;
+  function mealIdea(d, lists, mains) {
+    var words = lists[seasonOf(d)], doy = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 86400000);
     var tryWord = function (k) {
       if (k >= words.length) return Promise.resolve(null);
       var w = words[(doy + k) % words.length];
@@ -1885,6 +1894,8 @@
   function gasOK() { var g = S.back && S.back.gas; return g && g.prices && g.prices.now ? g : null; }
   function gasBleed(top) {
     var g = gasOK(); if (!g) return emptyBleed('Loading…');
+    var lo = g.local && g.local.stations && g.local.stations.length ? g.local : null;
+    if (lo) return localGasBleed(g, lo, top);
     var P = g.prices, f$ = function (v) { return num(v) ? '$' + v.toFixed(2) : '—'; }, ch = function (a, b) { if (!num(a) || !num(b)) return ''; var c = Math.round((a - b) * 100); return c === 0 ? 'no change' : (c > 0 ? '▲ up ' : '▼ down ') + Math.abs(c) + '¢'; };
     var wk = ch(P.now[0], P.week && P.week[0]), up = P.week && P.now[0] > P.week[0];
     var tile = function (label, val, sub) { return '<div class="glass" style="display:flex;flex-direction:column;gap:6px;padding:18px 22px;justify-content:center"><div class="lbl">' + label + '</div><div style="font-size:48px;font-weight:800;line-height:1">' + val + '</div><div style="font-size:16px;opacity:.75">' + (sub || '&nbsp;') + '</div></div>'; };
@@ -1900,19 +1911,41 @@
       tile('Mid-grade', f$(P.now[1]), '') + tile('Premium', f$(P.now[2]), '') + tile('Diesel', f$(P.now[3]), ch(P.now[3], P.week && P.week[3]) + (P.week ? ' this week' : '')) + '</div>' +
       '<div style="font-size:14px;opacity:.55;text-align:right">AAA daily averages</div></div>';
   }
-  function mealBleed(top) {
-    var m = S.meal; if (!m) return emptyBleed('Loading…');
-    var ing = m.ing.slice(0, 10);
-    return '<div style="position:absolute;inset:0;background:#0d0b12 url(\'' + esc(m.image) + '\') center/cover;filter:blur(30px) brightness(.4);transform:scale(1.15)"></div>' +
-      btag('Family · Dinner idea') + top +
-      '<div style="position:absolute;left:40px;top:92px;bottom:40px;width:640px;border-radius:18px;overflow:hidden;box-shadow:0 14px 40px rgba(0,0,0,.5)"><img src="' + esc(m.image) + '" alt="" style="width:100%;height:100%;object-fit:cover"></div>' +
-      '<div style="position:absolute;left:716px;right:48px;top:100px;bottom:44px;display:flex;flex-direction:column;gap:12px">' +
-      '<div class="lbl">Nothing planned tonight? Try a ' + esc(m.season) + ' favorite</div>' +
-      '<div class="head" style="font-size:' + (m.name.length > 28 ? 40 : 50) + 'px;line-height:1.05">' + esc(m.name) + '</div>' +
-      '<div style="display:flex;gap:8px">' + [m.cat, m.area].filter(function (x) { return x && x !== 'Unknown'; }).map(function (t) { return '<span style="padding:4px 12px;border-radius:999px;background:rgba(255,255,255,.14);font-size:15px;font-weight:700">' + esc(t) + '</span>'; }).join('') + '</div>' +
-      '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 18px;font-size:17px;line-height:1.35">' + ing.map(function (x) { return '<div class="ellip">• ' + esc(x) + '</div>'; }).join('') + '</div>' +
-      (m.ing.length > ing.length ? '<div style="font-size:15px;opacity:.7">+ ' + (m.ing.length - ing.length) + ' more ingredients</div>' : '') +
-      '<div style="margin-top:auto;display:flex;align-items:center;gap:14px"><div id="qr" style="width:110px;height:110px;padding:6px;box-sizing:border-box;border-radius:12px;background:#fff;overflow:hidden;flex-shrink:0"></div><div style="font-size:15px;opacity:.75">Scan for the full recipe</div></div></div>';
+  function localGasBleed(g, lo, top) { // station prices near home (Google Maps), with the state picture on the side
+    var P = g.prices, f$ = function (v) { return num(v) ? '$' + v.toFixed(2) : '—'; }, st = lo.stations, best = st[0], town = (L.name || 'home').split(',')[0];
+    var wk = P.week ? Math.round((P.now[0] - P.week[0]) * 100) : null;
+    var tile = function (label, val, sub, sub2) { return '<div class="glass" style="display:flex;flex-direction:column;gap:6px;padding:16px 20px;justify-content:center;min-width:0"><div class="lbl ellip">' + label + '</div><div style="font-size:44px;font-weight:800;line-height:1">' + val + '</div><div class="ellip" style="font-size:15px;opacity:.8">' + (sub || '&nbsp;') + '</div>' + (sub2 ? '<div class="ellip" style="font-size:14px;opacity:.6">' + sub2 + '</div>' : '') + '</div>'; };
+    var tiles = st.slice(1, 5).map(function (x) { return tile(esc(x.name), f$(x.regular), esc(x.addr), x.miles != null ? x.miles + ' mi away' : ''); });
+    var extra = [tile('Illinois average', f$(P.now[0]), wk == null ? '' : wk === 0 ? 'No change this week' : (wk > 0 ? '▲ up ' : '▼ down ') + Math.abs(wk) + '¢ this week'), tile('Diesel near you', f$(st.filter(function (x) { return x.diesel; }).map(function (x) { return x.diesel; }).sort()[0]), 'Cheapest diesel'), tile('Premium near you', f$(st.filter(function (x) { return x.premium; }).map(function (x) { return x.premium; }).sort()[0]), 'Cheapest premium'), tile('Chicago area', f$(g.metro && g.metro.now ? g.metro.now[0] : null), 'Regular average')];
+    while (tiles.length < 4) tiles.push(extra.shift());
+    var upd = best.updated ? Math.round((Date.now() - new Date(best.updated)) / 3600000) : null;
+    return '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,6,18,.6),rgba(10,6,18,.8))"></div>' + btag('Gas prices · ' + esc(town) + ' area') + top +
+      '<div style="position:absolute;left:40px;right:40px;top:92px;bottom:36px;display:flex;flex-direction:column;gap:14px">' +
+      '<div class="glass" style="flex:1;display:flex;align-items:center;justify-content:space-between;gap:30px;padding:26px 40px;min-height:0">' +
+      '<div style="min-width:0"><div class="lbl">Cheapest regular near you</div><div style="font-size:150px;font-weight:800;line-height:.95;letter-spacing:-.03em">' + f$(best.regular) + '</div>' +
+      '<div class="ellip" style="font-size:28px;font-weight:800;margin-top:6px">' + esc(best.name) + '</div><div class="ellip" style="font-size:18px;opacity:.8">' + esc(best.addr) + (best.miles != null ? ' · ' + best.miles + ' mi' : '') + (upd != null ? ' · updated ' + (upd < 1 ? 'within the hour' : upd + 'h ago') : '') + '</div></div>' +
+      '<div style="text-align:right;flex-shrink:0"><div style="font-size:16px;font-weight:800;letter-spacing:.08em;opacity:.7">AREA AVERAGE</div><div style="font-size:64px;font-weight:800;line-height:1">' + f$(lo.avg) + '</div>' +
+      '<div style="font-size:17px;opacity:.75">' + lo.count + ' stations within ' + lo.radius + ' mi</div>' +
+      (num(lo.avg) && num(best.regular) && lo.avg - best.regular >= 0.05 ? '<div style="font-size:20px;font-weight:800;color:#7fdc9a;margin-top:10px">Save ' + Math.round((lo.avg - best.regular) * 100) + '¢/gal vs average</div>' : '') + '</div></div>' +
+      '<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;height:180px">' + tiles.join('') + '</div>' +
+      '<div style="font-size:14px;opacity:.55;text-align:right">Station prices from Google Maps · state averages from AAA</div></div>';
+  }
+  function mealBleed(top) { // recipes of the day: a seasonal dinner and a seasonal snack or treat
+    var ms = S.meals || []; if (!ms.length) return emptyBleed('Loading…');
+    var labels = ['Dinner idea', 'Snack or treat'];
+    var card = function (m, i) {
+      var ing = m.ing.slice(0, 8);
+      return '<div class="glass" style="display:flex;flex-direction:column;overflow:hidden;min-height:0;min-width:0;padding:0">' +
+        '<div style="position:relative;height:350px;flex-shrink:0;background:#111"><img src="' + esc(m.image) + '" alt="" style="width:100%;height:100%;object-fit:cover">' +
+        '<div style="position:absolute;left:16px;top:16px;padding:6px 14px;border-radius:999px;background:var(--accent);color:var(--ink);font-size:14px;font-weight:900;letter-spacing:.08em;text-transform:uppercase">' + labels[i] + '</div></div>' +
+        '<div style="display:flex;gap:16px;padding:16px 20px;flex:1;min-height:0"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:8px">' +
+        '<div class="head clamp2" style="font-size:' + (m.name.length > 30 ? 28 : 34) + 'px;line-height:1.08">' + esc(m.name) + '</div>' +
+        '<div style="display:flex;gap:6px;flex-wrap:wrap">' + [m.cat, m.area].filter(function (x) { return x && x !== 'Unknown'; }).map(function (t) { return '<span style="padding:3px 10px;border-radius:999px;background:rgba(255,255,255,.14);font-size:13px;font-weight:700">' + esc(t) + '</span>'; }).join('') + '</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 14px;font-size:15px;line-height:1.35;opacity:.9">' + ing.map(function (x) { return '<div class="ellip">• ' + esc(x) + '</div>'; }).join('') + '</div></div>' +
+        '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex-shrink:0;justify-content:flex-end"><div id="qr' + i + '" style="width:100px;height:100px;padding:5px;box-sizing:border-box;border-radius:10px;background:#fff;overflow:hidden"></div><div style="font-size:12px;opacity:.7">Full recipe</div></div></div></div>';
+    };
+    return '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,6,18,.55),rgba(10,6,18,.75))"></div>' + btag('Family · Recipes of the day') + top +
+      '<div style="position:absolute;left:40px;right:40px;top:92px;bottom:36px;display:grid;grid-template-columns:repeat(' + ms.length + ',minmax(0,1fr));gap:16px">' + ms.map(card).join('') + '</div>';
   }
   // ---- the full week (7 columns) and who's doing what (a row per person)
   function weekDays() { // today + the next 6 days, each with its events, dinner and weather
@@ -2179,10 +2212,10 @@
       '<div class="muted clamp3" style="font-size:18px;line-height:1.5">' + esc(s.summary || '') + '</div>' +
       '<div style="display:flex;align-items:center;gap:16px;margin-top:auto"><div id="qr" style="width:110px;height:110px;border-radius:10px;background:#fff;display:flex;align-items:center;justify-content:center"></div><div class="muted" style="font-size:16px">Scan to read the full story on your phone</div></div></div></div>';
   }
-  function drawQR(s) {
+  function drawQR(s, id) {
     if (!s || !s.link) return;
-    var go = function () { var q = window.qrcode(0, 'M'); q.addData(s.link); q.make(); var el = $('qr'); if (el) { el.innerHTML = q.createSvgTag({ cellSize: 3, margin: 2 }); var sv = el.querySelector('svg'); if (sv) { sv.removeAttribute('width'); sv.removeAttribute('height'); sv.style.width = '100%'; sv.style.height = '100%'; } } };
-    if (window.qrcode) go(); else loadScript('https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js').then(go).catch(function () { var el = $('qr'); if (el) el.style.display = 'none'; });
+    var go = function () { var q = window.qrcode(0, 'M'); q.addData(s.link); q.make(); var el = $(id || 'qr'); if (el) { el.innerHTML = q.createSvgTag({ cellSize: 3, margin: 2 }); var sv = el.querySelector('svg'); if (sv) { sv.removeAttribute('width'); sv.removeAttribute('height'); sv.style.width = '100%'; sv.style.height = '100%'; } } };
+    if (window.qrcode) go(); else loadScript('https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js').then(go).catch(function () { var el = $(id || 'qr'); if (el) el.style.display = 'none'; });
   }
   function playDetailHTML(m, p) {
     if (!p) return note('Play not found');
