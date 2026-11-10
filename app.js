@@ -127,16 +127,22 @@
     var names = [[1.84566, 'New moon'], [5.53699, 'Waxing crescent'], [9.22831, 'First quarter'], [12.91963, 'Waxing gibbous'], [16.61096, 'Full moon'], [20.30228, 'Waning gibbous'], [23.99361, 'Last quarter'], [27.68493, 'Waning crescent'], [99, 'New moon']];
     var name = names.filter(function (n) { return age < n[0]; })[0][1];
     var toFull = age < syn / 2 ? syn / 2 - age : syn - age + syn / 2;
-    var full = new Date(d.getTime() + toFull * 86400000);
-    return { name: name, illum: Math.round(illum * 100), f: illum, waxing: frac < 0.5, nextFull: MON[full.getMonth()] + ' ' + full.getDate() };
+    var full = new Date(d.getTime() + toFull * 86400000), nw = new Date(d.getTime() + (syn - age) * 86400000);
+    var FULLN = ['Wolf', 'Snow', 'Worm', 'Pink', 'Flower', 'Strawberry', 'Buck', 'Sturgeon', 'Harvest', "Hunter's", 'Beaver', 'Cold'];
+    return { name: name, illum: Math.round(illum * 100), f: illum, waxing: frac < 0.5, nextFull: MON[full.getMonth()] + ' ' + full.getDate(), fullName: FULLN[full.getMonth()] + ' Moon',
+      nextNew: MON[nw.getMonth()] + ' ' + nw.getDate(), toFull: Math.round(toFull) };
   }
-  function moonSvg(m, size) {
+  function moonSvg(m, size) { // the real moon, with the unlit part in shadow
     var R = 34, cx = 40, cy = 40, rx = Math.abs(1 - 2 * m.f) * R, path;
     if (m.waxing) path = 'M' + cx + ' ' + (cy - R) + ' A' + R + ' ' + R + ' 0 0 1 ' + cx + ' ' + (cy + R) + ' A' + rx.toFixed(1) + ' ' + R + ' 0 0 ' + (m.f < 0.5 ? 0 : 1) + ' ' + cx + ' ' + (cy - R) + 'Z';
     else path = 'M' + cx + ' ' + (cy - R) + ' A' + R + ' ' + R + ' 0 0 0 ' + cx + ' ' + (cy + R) + ' A' + rx.toFixed(1) + ' ' + R + ' 0 0 ' + (m.f < 0.5 ? 1 : 0) + ' ' + cx + ' ' + (cy - R) + 'Z';
-    return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 80 80" role="img" aria-label="' + esc(m.name) + '"><circle cx="40" cy="40" r="34" fill="rgba(255,255,255,0.14)"/><path d="' + path + '" fill="#f4efdc"/></svg>';
+    var id = 'mn' + (++moonSvg.k), lit = m.f > 0.985 ? '<circle cx="40" cy="40" r="34" fill="#000"/>' : m.f < 0.015 ? '' : '<path d="' + path + '" fill="#000"/>';
+    return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 80 80" role="img" aria-label="' + esc(m.name) + '"><defs><filter id="' + id + 'b" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="1.1"/></filter>' +
+      '<mask id="' + id + '" maskUnits="userSpaceOnUse" x="0" y="0" width="80" height="80"><circle cx="40" cy="40" r="34" fill="#fff"/><g filter="url(#' + id + 'b)">' + lit + '</g></mask></defs>' +
+      '<image href="scenes/moon.png" x="6" y="6" width="68" height="68"/><circle cx="40" cy="40" r="34.3" fill="#05070d" opacity="0.9" mask="url(#' + id + ')"/></svg>';
   }
 
+  moonSvg.k = 0;
   // ------------------------------------------------------------ theme + clock
   function applyTheme() {
     var t = resolveTheme(now(), FORCE_THEME, C.birthdays || []), tod = timeOfDay();
@@ -213,10 +219,10 @@
   function loadWeather() {
     if (DEMO) { S.wx = demoWeather(); renderWxPill(); render(); return Promise.resolve(); }
     var tz = encodeURIComponent(L.timezone), ll = 'latitude=' + L.lat + '&longitude=' + L.lon;
-    var om = getJSON('https://api.open-meteo.com/v1/forecast?' + ll + '&timezone=' + tz + '&temperature_unit=fahrenheit&wind_speed_unit=mph&forecast_days=8' +
-      '&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m,weather_code,is_day' +
-      '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset,uv_index_max' +
-      '&hourly=temperature_2m,precipitation_probability,weather_code,is_day');
+    var om = getJSON('https://api.open-meteo.com/v1/forecast?' + ll + '&timezone=' + tz + '&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&forecast_days=8' +
+      '&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m,weather_code,is_day,dew_point_2m,pressure_msl,visibility' +
+      '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset,uv_index_max,precipitation_sum' +
+      '&hourly=temperature_2m,precipitation_probability,weather_code,is_day,wind_speed_10m,pressure_msl');
     var aq = getJSON('https://air-quality-api.open-meteo.com/v1/air-quality?' + ll + '&current=us_aqi&timezone=' + tz);
     var pt = load('nwsPoint:' + L.lat.toFixed(3) + ',' + L.lon.toFixed(3), 7 * 86400000);
     var nws = (pt ? Promise.resolve(pt) : getJSON('https://api.weather.gov/points/' + L.lat.toFixed(4) + ',' + L.lon.toFixed(4)).then(function (j) {
@@ -230,6 +236,7 @@
       renderWxPill(); refresh(['home', 'weather', 'night']);
     });
   }
+  function dl0(om, k) { return om.daily && om.daily[k] && num(om.daily[k][0]); }
   function parseLocal(s) { // "2026-11-06T06:31" (already local)
     var m = /(\d+)-(\d+)-(\d+)T(\d+):(\d+)/.exec(s || ''); return m ? new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) : null;
   }
@@ -238,7 +245,9 @@
     if (om) {
       var cu = om.current, cond = wmo(cu.weather_code, cu.is_day);
       wx.now = { temp: Math.round(cu.temperature_2m), feels: Math.round(cu.apparent_temperature), hum: Math.round(cu.relative_humidity_2m),
-        wind: Math.round(cu.wind_speed_10m), gust: Math.round(cu.wind_gusts_10m), dir: compass(cu.wind_direction_10m), text: cond.text, icon: cond.icon };
+        wind: Math.round(cu.wind_speed_10m), gust: Math.round(cu.wind_gusts_10m), dir: compass(cu.wind_direction_10m), deg: cu.wind_direction_10m, text: cond.text, icon: cond.icon,
+        dew: num(cu.dew_point_2m) ? Math.round(cu.dew_point_2m) : null, press: num(cu.pressure_msl) ? Math.round(cu.pressure_msl * 0.02953 * 100) / 100 : null, vis: num(cu.visibility) ? Math.round(cu.visibility / 1609) : null };
+      if (dl0(om, 'precipitation_sum')) wx.rainIn = Math.round(om.daily.precipitation_sum[0] * 100) / 100;
       var dl = om.daily;
       wx.hi = Math.round(dl.temperature_2m_max[0]); wx.lo = Math.round(dl.temperature_2m_min[0]); wx.uv = Math.round(dl.uv_index_max[0]);
       var rise = parseLocal(dl.sunrise[0]), set = parseLocal(dl.sunset[0]);
@@ -252,10 +261,12 @@
       om.hourly.time.forEach(function (t, i) {
         var d = parseLocal(t); if (d && d >= new Date(n.getTime() - 3600000) && hrs.length < 12) {
           var c = wmo(om.hourly.weather_code[i], om.hourly.is_day[i]);
-          hrs.push({ t: hrs.length === 0 ? 'Now' : hShort(d), temp: Math.round(om.hourly.temperature_2m[i]), pop: om.hourly.precipitation_probability[i], icon: c.icon });
+          hrs.push({ t: hrs.length === 0 ? 'Now' : hShort(d), temp: Math.round(om.hourly.temperature_2m[i]), pop: om.hourly.precipitation_probability[i], icon: c.icon, wind: om.hourly.wind_speed_10m ? Math.round(om.hourly.wind_speed_10m[i]) : null, press: om.hourly.pressure_msl ? om.hourly.pressure_msl[i] : null });
         }
       });
       wx.hours = hrs; wx.src.push('Open-Meteo');
+      var p0 = hrs[0] && hrs[0].press, p3 = hrs[3] && hrs[3].press; // pressure trend over the next 3 hours
+      if (num(p0) && num(p3)) wx.pressTrend = p3 - p0 > 0.7 ? 'Rising' : p0 - p3 > 0.7 ? 'Falling' : 'Steady';
     }
     if (aq && aq.current) { wx.aqi = aq.current.us_aqi; }
     if (nws) {
@@ -263,7 +274,7 @@
       // NWS hourly (official)
       var hh = hr.filter(function (p) { return new Date(p.endTime) > n; }).slice(0, 12);
       if (hh.length) wx.hours = hh.map(function (p, i) {
-        return { t: i === 0 ? 'Now' : hShort(new Date(p.startTime)), temp: p.temperature, pop: p.probabilityOfPrecipitation && p.probabilityOfPrecipitation.value != null ? p.probabilityOfPrecipitation.value : 0, icon: iconFromText(p.shortForecast, p.isDaytime) };
+        return { t: i === 0 ? 'Now' : hShort(new Date(p.startTime)), temp: p.temperature, pop: p.probabilityOfPrecipitation && p.probabilityOfPrecipitation.value != null ? p.probabilityOfPrecipitation.value : 0, icon: iconFromText(p.shortForecast, p.isDaytime), wind: parseInt(p.windSpeed, 10) || null };
       });
       // NWS 7-day: pair each daytime high with the following night's low
       var byDay = {};
@@ -281,6 +292,7 @@
         return { label: sameDay(x.d, n) ? 'Today' : DOW[x.d.getDay()], hi: x.hi != null ? x.hi : (omDay ? omDay.hi : '—'), lo: x.lo != null ? x.lo : (omDay ? omDay.lo : '—'), pop: x.pop, icon: x.icon, text: x.text };
       });
       wx.nwsNow = fc[0] ? fc[0].name + ': ' + fc[0].shortForecast : '';
+      wx.periods = fc.slice(0, 2).map(function (p) { return { name: p.name, text: p.detailedForecast || p.shortForecast }; }); // the forecaster's own words
       wx.src.unshift('National Weather Service');
     }
     wx.moon = moonInfo(n);
@@ -862,7 +874,7 @@
   function pageList(screen) {
     if (screen === 'scores') { var gp = []; for (var i = 0; i < Math.max(1, Math.ceil(S.games.length / 6)); i++) gp.push('grid:' + i); return gp.concat(featureGames().map(function (g) { return 'g:' + g.id; }), standingsLeagues().map(function (l) { return 'st:' + l; })); }
     if (screen === 'news') { var nw = newsStories(); return nw && nw.length ? nw.map(function (s, i) { return 's:' + i; }) : ['empty']; }
-    if (screen === 'weather') return S.alerts.map(function (a, i) { return 'al:' + i; }).concat(S.wx ? ['now', 'hours', 'week', 'sky', 'radar'] : S.alerts.length ? [] : ['empty']);
+    if (screen === 'weather') return S.alerts.map(function (a, i) { return 'al:' + i; }).concat(S.wx ? ['now', 'details', 'hours', 'week', 'sky', 'radar'] : S.alerts.length ? [] : ['empty']);
     if (screen === 'photos') { var pgN = Math.min(3, photoGroups().length) + otdGroups().length; var out = []; for (var q = 0; q < Math.max(1, pgN); q++) out.push('c:' + q); return out; }
     if (screen === 'family') { var fp = ['main']; if (boardLists().grocery || boardLists().notes.length) fp.push('board'); if (countdownItems().length) fp.push('cd'); return fp; }
     if (screen === 'live') { var lv = liveList(); return lv.length ? lv.map(function (g) { return 'g:' + g.id; }) : ['none']; }
@@ -1148,23 +1160,58 @@
           var ok = num(x.hi) && num(x.lo), t0 = ok ? (top - x.hi) / span * 100 : 20, t1 = ok ? (x.lo - bot) / span * 100 : 20;
           return '<div class="tile" style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 8px;min-height:0" title="' + esc(x.text || '') + '">' +
             '<div style="font-size:20px;font-weight:800">' + esc(x.label) + '</div><div style="color:var(--accent)">' + icon(x.icon, 50, 1.4) + '</div>' +
+            '<div class="clamp2" style="font-size:15px;font-weight:600;line-height:1.25;text-align:center;min-height:38px;opacity:.85">' + esc(x.text || '') + '</div>' +
             '<div style="font-size:26px;font-weight:800">' + d(x.hi) + '</div>' +
             '<div style="flex:1;width:14px;position:relative;border-radius:7px;background:rgba(255,255,255,.08)"><div style="position:absolute;left:0;right:0;top:' + t0.toFixed(1) + '%;bottom:' + t1.toFixed(1) + '%;border-radius:7px;background:linear-gradient(#ffb35c,#6fb7ff)"></div></div>' +
             '<div class="muted" style="font-size:22px;font-weight:700">' + d(x.lo) + '</div>' +
             '<div style="font-size:15px;font-weight:700;color:' + (num(x.pop) && x.pop >= 40 ? '#8fc8ff' : 'var(--muted)') + '">💧 ' + (num(x.pop) ? x.pop + '%' : '—') + '</div></div>';
         }).join('') + '</div></div>';
     }
+    if (p === 'details') {
+      var scale = function (val, max, stops, lab) { // a colored scale with a marker
+        var f2 = num(val) ? Math.max(0, Math.min(1, val / max)) : 0;
+        return '<div style="position:relative;height:12px;border-radius:6px;margin-top:auto;background:linear-gradient(90deg,' + stops + ')"><div style="position:absolute;top:-5px;left:calc(' + (f2 * 100).toFixed(1) + '% - 11px);width:22px;height:22px;border-radius:50%;background:#fff;border:4px solid rgba(0,0,0,.35)"></div></div>';
+      };
+      var tile = function (label, val, unit, sub, vis) {
+        return '<div class="tile" style="display:flex;flex-direction:column;gap:6px;padding:18px 22px;min-height:0;min-width:0"><div class="lbl">' + label + '</div>' +
+          '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><div><span style="font-size:58px;font-weight:800;line-height:1">' + val + '</span><span style="font-size:22px;font-weight:700;margin-left:6px;opacity:.85">' + (unit || '') + '</span></div>' + (vis && vis.side ? vis.side : '') + '</div>' +
+          '<div style="font-size:19px;font-weight:600;opacity:.85">' + (sub || '&nbsp;') + '</div>' + (vis && vis.bottom ? vis.bottom : '') + '</div>';
+      };
+      var arrow = '<svg width="120" height="120" viewBox="-40 -40 80 80"><circle r="34" fill="none" stroke="rgba(255,255,255,.3)" stroke-width="3"/>' +
+        ['N', 'E', 'S', 'W'].map(function (k, i) { var a = i * Math.PI / 2; return '<text x="' + (Math.sin(a) * 25).toFixed(1) + '" y="' + (-Math.cos(a) * 25 + 4).toFixed(1) + '" text-anchor="middle" font-size="10" font-weight="800" fill="rgba(255,255,255,.6)">' + k + '</text>'; }).join('') +
+        '<g transform="rotate(' + ((n.deg || 0) + 180) + ')"><path d="M0,-30 L9,-8 L0,-13 L-9,-8 Z" fill="var(--accent)"/><line x1="0" y1="-12" x2="0" y2="22" stroke="var(--accent)" stroke-width="4" stroke-linecap="round"/></g></svg>';
+      var hrs2 = w.hours || [], wet2 = hrs2.filter(function (h) { return num(h.pop) && h.pop >= 40; })[0], today2 = (w.days || [])[0] || {};
+      var uvL = !num(w.uv) ? '' : w.uv <= 2 ? 'Low · no sunscreen needed' : w.uv <= 5 ? 'Moderate · sunscreen if outside long' : w.uv <= 7 ? 'High · sunscreen & shade' : 'Very high · limit midday sun';
+      var dewL = !num(n.dew) ? '' : 'Dew point ' + n.dew + '° · ' + (n.dew < 50 ? 'comfortable' : n.dew < 60 ? 'a little sticky' : n.dew < 65 ? 'muggy' : 'oppressive');
+      var trend = { Rising: '↗', Falling: '↘', Steady: '→' }[w.pressTrend] || '';
+      var per = (w.periods && w.periods.length ? w.periods : [{ name: 'Today', text: vibe(w).sub }]).slice(0, 2);
+      return '<div style="display:flex;flex-direction:column;gap:14px;flex:1;min-height:0">' +
+        '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));gap:14px;flex:1;min-height:0">' +
+        tile('Wind', num(n.wind) ? n.wind : '—', 'mph ' + esc(n.dir || ''), (num(n.wind) ? (n.wind < 8 ? 'Calm' : n.wind < 15 ? 'Breezy' : n.wind < 25 ? 'Windy' : 'Very windy') : '') + (num(n.gust) ? ' · gusts to ' + n.gust + ' mph' : ''), { side: arrow }) +
+        tile('Rain today', num(today2.pop) ? today2.pop : '—', '%', wet2 ? 'Most likely around ' + esc(wet2.t) + (num(w.rainIn) && w.rainIn >= 0.01 ? ' · ' + w.rainIn + '"' : '') : 'Staying dry', { bottom: scale(today2.pop, 100, '#2b4b6b,#6fb7ff,#2f7de1') }) +
+        tile('Humidity', num(n.hum) ? n.hum : '—', '%', esc(dewL), { bottom: scale(n.hum, 100, '#c9a26b,#7fc4a0,#4f8fd8') }) +
+        tile('UV index', num(w.uv) ? w.uv : '—', '', esc(uvL), { bottom: scale(w.uv, 11, '#5cc46b,#e8d24a,#f08a3c,#e0453a,#9b4fd0') }) +
+        tile('Air quality', num(w.aqi) ? w.aqi : '—', esc(aqiLabel(w.aqi)), num(w.aqi) ? (w.aqi <= 50 ? 'Great for being outside' : w.aqi <= 100 ? 'Fine for most people' : 'Sensitive groups take it easy') : '', { bottom: scale(w.aqi, 200, '#5cc46b,#e8d24a,#f08a3c,#e0453a,#9b4fd0') }) +
+        tile('Pressure', num(n.press) ? n.press.toFixed(2) : '—', 'in ' + trend, w.pressTrend ? esc(w.pressTrend) + (w.pressTrend === 'Falling' ? ' · weather on the way' : w.pressTrend === 'Rising' ? ' · clearing out' : '') : '', { bottom: num(n.vis) ? '<div style="margin-top:auto;font-size:17px;opacity:.7">Visibility ' + Math.min(n.vis, 10) + (n.vis >= 10 ? '+' : '') + ' miles</div>' : '' }) + '</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(' + per.length + ',minmax(0,1fr));gap:14px;height:170px">' + per.map(function (x) {
+          return '<div class="tile" style="display:flex;flex-direction:column;gap:8px;padding:16px 22px;min-height:0"><div class="lbl">' + esc(x.name) + '</div><div class="clamp4" style="font-size:20px;line-height:1.4;font-weight:500">' + esc(x.text || '') + '</div></div>';
+        }).join('') + '</div></div>';
+    }
     if (p === 'sky') {
-      var m = w.moon;
+      var m = w.moon, sk = skyFacts(w), fact = function (l, v) { return '<div><div class="muted" style="font-size:14px;font-weight:700;letter-spacing:.08em">' + l + '</div><div style="font-size:26px;font-weight:800">' + esc(v || '—') + '</div></div>'; };
       return '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;flex:1;min-height:0">' +
-        '<div class="tile" style="display:flex;flex-direction:column;gap:6px;padding:18px 24px;min-height:0"><div class="lbl">Sun</div>' + sunArc(w, 520, 210) +
-        '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">' +
-        '<div><div class="muted" style="font-size:14px;font-weight:700;letter-spacing:.08em">SUNRISE</div><div style="font-size:34px;font-weight:800">' + esc(w.rise || '—') + '</div></div>' +
-        '<div style="text-align:right"><div class="muted" style="font-size:14px;font-weight:700;letter-spacing:.08em">SUNSET</div><div style="font-size:34px;font-weight:800">' + esc(w.set || '—') + '</div></div></div>' +
-        '<div class="muted" style="font-size:17px;text-align:center">' + esc(w.daylight ? w.daylight + ' of daylight' + (num(w.dayDelta) && w.dayDelta !== 0 ? ' · ' + Math.abs(w.dayDelta) + ' min ' + (w.dayDelta < 0 ? 'shorter' : 'longer') + ' tomorrow' : '') : '') + '</div></div>' +
-        '<div class="tile" style="display:flex;align-items:center;justify-content:center;gap:34px;padding:18px 24px"><div class="wxbig wx-moon">' + moonSvg(m, 210) + '</div>' +
-        '<div style="display:flex;flex-direction:column;gap:8px"><div class="lbl">Moon</div><div class="head" style="font-size:40px;line-height:1.05">' + esc(m.name) + '</div>' +
-        '<div style="font-size:22px">' + m.illum + '% lit</div><div class="muted" style="font-size:18px">Next full moon ' + esc(m.nextFull) + '</div></div></div></div>';
+        '<div class="tile" style="display:flex;flex-direction:column;gap:8px;padding:18px 24px;min-height:0"><div class="lbl">Sun</div>' +
+        '<div class="head" style="font-size:40px;line-height:1.05">' + esc(sk.big) + '</div><div style="font-size:19px;font-weight:600;opacity:.85">' + esc(sk.sub) + '</div>' +
+        '<div style="flex:1;min-height:0;display:flex;align-items:center">' + sunArc(w, 520, 230) + '</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;text-align:center">' + fact('SUNRISE', w.rise) + fact('SOLAR NOON', sk.noon) + fact('SUNSET', w.set) + '</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;text-align:center">' + fact('FIRST LIGHT', sk.first) + fact('GOLDEN HOUR', sk.gold) + fact('DARK BY', sk.dark) + '</div>' +
+        '<div class="muted" style="font-size:17px;text-align:center;margin-top:2px">' + esc(w.daylight ? w.daylight + ' of daylight today' + (num(w.dayDelta) && w.dayDelta !== 0 ? ' · ' + Math.abs(w.dayDelta) + ' min ' + (w.dayDelta < 0 ? 'shorter' : 'longer') + ' tomorrow' : '') : '') + '</div></div>' +
+        '<div class="tile" style="display:flex;flex-direction:column;gap:10px;padding:18px 24px;min-height:0"><div class="lbl">Moon</div>' +
+        '<div style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;gap:30px"><div class="wxbig wx-moon">' + moonSvg(m, 250) + '</div>' +
+        '<div style="display:flex;flex-direction:column;gap:6px"><div class="head" style="font-size:40px;line-height:1.05">' + esc(m.name) + '</div><div style="font-size:24px;font-weight:700">' + m.illum + '% lit</div>' +
+        '<div style="font-size:18px;opacity:.85">' + (m.waxing ? 'Growing toward full' : 'Shrinking toward new') + '</div></div></div>' +
+        '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;text-align:center">' + fact('NEXT FULL', m.nextFull) + fact('NAME', m.fullName) + fact('NEXT NEW', m.nextNew) + '</div>' +
+        '<div class="muted" style="font-size:17px;text-align:center;margin-top:2px">' + (m.toFull <= 0 ? 'Full moon tonight' : m.toFull === 1 ? 'Full moon tomorrow night' : m.toFull + ' days until the ' + esc(m.fullName)) + '</div></div></div>';
     }
     if (p === 'radar') {
       return '<div style="display:flex;flex-direction:column;gap:8px;flex:1;min-height:0"><div id="radar" style="flex:1;position:relative;overflow:hidden;border-radius:var(--r2);background:#0b0f17"></div>' +
@@ -1198,25 +1245,59 @@
       s += '<text x="' + x + '" y="' + (pts[i][1] - 16).toFixed(1) + '" text-anchor="middle" font-size="24" font-weight="800" fill="currentColor">' + (num(h.temp) ? h.temp + '°' : '—') + '</text>';
       var pop = num(h.pop) ? h.pop : 0, bh = pop / 100 * 64;
       s += '<rect x="' + (x - 14) + '" y="' + (H - 34 - bh).toFixed(1) + '" width="28" height="' + Math.max(2, bh).toFixed(1) + '" rx="5" fill="#6fb7ff" opacity="' + (pop >= 40 ? .95 : .55) + '"/>';
-      s += '<text x="' + x + '" y="' + (H - 10) + '" text-anchor="middle" font-size="15" font-weight="700" fill="#8fc8ff">' + (num(h.pop) ? h.pop + '%' : '—') + '</text>';
+      s += '<text x="' + x + '" y="' + (H - 10) + '" text-anchor="middle" font-size="18" font-weight="800" fill="#8fc8ff">' + (num(h.pop) ? h.pop + '%' : '—') + '</text>';
     });
     return s + '</svg>';
   }
-  function sunArc(w, W, H) {
-    var cx = W / 2, cy = H - 22, rx = W / 2 - 40, ry = H - 52, n = now(), f = null;
-    if (w.riseD && w.setD) f = (n - w.riseD) / (w.setD - w.riseD);
-    var up = f != null && f >= 0 && f <= 1, ff = f == null ? 0.5 : Math.max(0, Math.min(1, f)), ang = Math.PI * (1 - ff);
-    var sx = cx + rx * Math.cos(ang), sy = cy - ry * Math.sin(ang);
-    var arc = 'M' + (cx - rx) + ',' + cy + ' A' + rx + ',' + ry + ' 0 0 1 ' + (cx + rx) + ',' + cy;
-    var done = up ? 'M' + (cx - rx) + ',' + cy + ' A' + rx + ',' + ry + ' 0 0 1 ' + sx.toFixed(1) + ',' + sy.toFixed(1) : '';
-    return '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="display:block;flex:1;min-height:0">' +
-      '<path d="' + arc + '" fill="none" stroke="rgba(255,255,255,.28)" stroke-width="3" stroke-dasharray="2 9" stroke-linecap="round"/>' +
-      (done ? '<path d="' + done + '" fill="none" stroke="#ffc65c" stroke-width="4" stroke-linecap="round"/>' : '') +
-      '<line x1="18" y1="' + cy + '" x2="' + (W - 18) + '" y2="' + cy + '" stroke="rgba(255,255,255,.35)" stroke-width="2"/>' +
-      (up ? '<circle cx="' + sx.toFixed(1) + '" cy="' + sy.toFixed(1) + '" r="30" fill="#ffc65c" opacity=".25"/><circle cx="' + sx.toFixed(1) + '" cy="' + sy.toFixed(1) + '" r="17" fill="#ffd27a"/>'
-        : '<text x="' + cx + '" y="' + (cy - ry / 2) + '" text-anchor="middle" font-size="20" fill="rgba(255,255,255,.6)">' + (f != null && f > 1 ? 'The sun has set' : f != null ? 'Before sunrise' : '') + '</text>') + '</svg>';
+  function skyFacts(w) { // daylight left, golden hour, first light and dark (twilight is about 28 min either side of the sun)
+    var o = { big: '', sub: '', noon: '', first: '', gold: '', dark: '' };
+    if (!w.riseD || !w.setD) return o;
+    var n = now(), M = 60000, dur = function (ms) { var m = Math.max(0, Math.round(ms / M)); return (m >= 60 ? Math.floor(m / 60) + 'h ' : '') + (m % 60) + 'm'; };
+    var gold = new Date(w.setD - 60 * M), first = new Date(w.riseD - 28 * M), dark = new Date(w.setD.getTime() + 28 * M);
+    o.noon = hm(new Date((w.riseD.getTime() + w.setD.getTime()) / 2)); o.first = hm(first); o.gold = hm(gold); o.dark = hm(dark);
+    if (n < w.riseD) { o.big = 'Sunrise in ' + dur(w.riseD - n); o.sub = n < first ? 'First light at ' + hm(first) : 'Getting light out now'; }
+    else if (n < w.setD) { o.big = dur(w.setD - n) + ' of daylight left'; o.sub = n < gold ? 'Golden hour starts at ' + hm(gold) : 'Golden hour now · sunset at ' + w.set; }
+    else if (n < dark) { o.big = 'Sun just set'; o.sub = 'Dark by ' + hm(dark); }
+    else { o.big = 'Sun is down'; o.sub = 'Sunrise in ' + dur(w.riseD.getTime() + 86400000 - n); }
+    return o;
   }
-
+  function sunArc(w, W, H) { // the day as a dome: sky fills in as the day goes, golden hours glow on the path, twilight at both ends
+    var cx = W / 2, cy = H - 18, rx = W / 2 - 70, ry = H - 58, n = now(), f = null, F = function (v) { return v.toFixed(1); };
+    if (w.riseD && w.setD) f = (n - w.riseD) / (w.setD - w.riseD);
+    var up = f != null && f >= 0 && f <= 1, ff = f == null ? 0.5 : Math.max(0, Math.min(1, f));
+    var pt = function (fr) { var a = Math.PI * (1 - fr); return [cx + rx * Math.cos(a), cy - ry * Math.sin(a)]; };
+    var seg = function (a, b) { var p0 = pt(a), p1 = pt(b); return 'M' + F(p0[0]) + ',' + F(p0[1]) + ' A' + rx + ',' + ry + ' 0 0 1 ' + F(p1[0]) + ',' + F(p1[1]); };
+    var dome = seg(0, 1) + ' Z', sp = pt(ff), g = w.riseD && w.setD ? Math.min(0.2, 3600000 / (w.setD - w.riseD)) : 0.1;
+    var tw = 28 / 60 * g * 60 / 60, tx = Math.min(56, rx * tw * 3.2), id = 'sa' + (++sunArc.k);
+    var lab = function (x, y, t, anchor, op) { return '<text x="' + F(x) + '" y="' + F(y) + '" text-anchor="' + (anchor || 'middle') + '" font-size="17" font-weight="800" fill="#fff" opacity="' + (op || .85) + '">' + esc(t || '') + '</text>'; };
+    var sky = up ? (ff < g || ff > 1 - g ? ['#ffb46b', '#ff8a5c', '#6a4a7a'] : ['#8fd0ff', '#5aa8e8', '#2c5d9a']) : ['#2a3560', '#1a2244', '#0d1228'];
+    var o = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="display:block;flex:1;min-height:0;overflow:visible"><defs>' +
+      '<linearGradient id="' + id + 'g" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="' + sky[0] + '" stop-opacity=".55"/><stop offset=".5" stop-color="' + sky[1] + '" stop-opacity=".45"/><stop offset="1" stop-color="' + sky[2] + '" stop-opacity=".35"/></linearGradient>' +
+      '<linearGradient id="' + id + 't" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#2b3a78" stop-opacity="0"/><stop offset="1" stop-color="#ff9a5c" stop-opacity=".8"/></linearGradient>' +
+      '<radialGradient id="' + id + 's"><stop offset="0" stop-color="#fff3c4"/><stop offset=".55" stop-color="#ffd25c"/><stop offset="1" stop-color="#ffb02e"/></radialGradient>' +
+      '<linearGradient id="' + id + 'f" gradientUnits="userSpaceOnUse" x1="' + F(cx - rx) + '" y1="0" x2="' + F(cx + rx) + '" y2="0">' + (function () { var e = up ? ff : f != null && f > 1 ? 1.2 : -0.2; return '<stop offset="' + Math.max(0, e - 0.12).toFixed(3) + '" stop-color="#fff"/><stop offset="' + Math.min(1, Math.max(0, e + 0.04)).toFixed(3) + '" stop-color="#fff" stop-opacity="0"/>'; })() + '</linearGradient>' +
+      '<mask id="' + id + 'c" maskUnits="userSpaceOnUse" x="0" y="0" width="' + W + '" height="' + H + '"><rect width="' + W + '" height="' + H + '" fill="url(#' + id + 'f)"/></mask></defs>' +
+      '<path d="' + dome + '" fill="rgba(255,255,255,.05)"/>' +                       // the whole day, faint
+      '<path d="' + dome + '" fill="url(#' + id + 'g)" mask="url(#' + id + 'c)"/>' + // the part of the day that has gone by
+      '<path d="' + seg(0, 1) + '" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="3" stroke-dasharray="2 9" stroke-linecap="round"/>' +
+      (up || (f != null && f > 1) ? '<path d="' + seg(0, up ? ff : 1) + '" fill="none" stroke="#ffe08a" stroke-width="4" stroke-linecap="round"/>' : '') +
+      '<path d="' + seg(0, g) + '" fill="none" stroke="#ff9f43" stroke-width="7" stroke-linecap="round" opacity=".9"/><path d="' + seg(1 - g, 1) + '" fill="none" stroke="#ff9f43" stroke-width="7" stroke-linecap="round" opacity=".9"/>' +
+      // twilight: first light before sunrise, dark after sunset, as glowing strips along the horizon
+      '<rect x="' + F(cx - rx - tx) + '" y="' + (cy - 3) + '" width="' + F(tx) + '" height="6" rx="3" fill="url(#' + id + 't)"/>' +
+      '<rect x="' + F(cx + rx) + '" y="' + (cy - 3) + '" width="' + F(tx) + '" height="6" rx="3" fill="url(#' + id + 't)" transform="translate(' + F(2 * (cx + rx) + tx) + ',0) scale(-1,1)"/>' +
+      '<line x1="10" y1="' + cy + '" x2="' + (W - 10) + '" y2="' + cy + '" stroke="rgba(255,255,255,.3)" stroke-width="2"/>' +
+      // noon tick at the top of the dome
+      '<line x1="' + cx + '" y1="' + F(cy - ry - 8) + '" x2="' + cx + '" y2="' + F(cy - ry + 8) + '" stroke="rgba(255,255,255,.45)" stroke-width="2"/>' +
+      '<circle cx="' + F(cx - rx) + '" cy="' + cy + '" r="5" fill="#ffb46b"/><circle cx="' + F(cx + rx) + '" cy="' + cy + '" r="5" fill="#ff8a5c"/>' +
+      '';
+    if (up) o += '<g transform="translate(' + F(sp[0]) + ',' + F(sp[1]) + ')"><circle r="40" fill="#ffc65c" opacity=".16"/><circle r="28" fill="#ffc65c" opacity=".22"/>' +
+      '<g class="a-spin" style="animation-duration:60s;transform-box:fill-box;transform-origin:center">' + [0, 1, 2, 3, 4, 5, 6, 7].map(function (k) { var a = k * Math.PI / 4; return '<line x1="' + F(Math.cos(a) * 24) + '" y1="' + F(Math.sin(a) * 24) + '" x2="' + F(Math.cos(a) * 32) + '" y2="' + F(Math.sin(a) * 32) + '" stroke="#ffd27a" stroke-width="3" stroke-linecap="round"/>'; }).join('') + '</g>' +
+      '<circle r="17" fill="url(#' + id + 's)"/></g>';
+    else o += '<g transform="translate(' + cx + ',' + F(cy - ry * 0.45) + ')" opacity=".9"><circle r="16" fill="#e9e4d2"/><circle r="16" cx="7" cy="-4" fill="#1a2244"/></g>' +
+      lab(cx, cy - ry * 0.45 + 46, f != null && f > 1 ? 'Sun has set' : 'Before sunrise', 'middle', .7);
+    return o + '</svg>';
+  }
+  sunArc.k = 0;
   // ------------------------------------------------------------ full-screen ("bleed") pages: photos, news, your team's games, weather
   function isBleed(p) { return S.screen !== 'family' && S.screen !== 'plays' || (S.screen === 'family' && p !== 'main'); }
   function btag(txt) { return '<div class="btag">' + txt + '</div>'; }
@@ -1372,7 +1453,7 @@
       '<div style="position:absolute;left:36px;right:36px;top:92px;bottom:30px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(3,minmax(0,1fr));gap:14px">' + cards.join('') + '</div>';
   }
   function weatherBleed(p, top) {
-    var w = S.wx, names = { now: 'Right now', hours: 'Next 12 hours', week: 'The week ahead', sky: 'Sun & moon', radar: 'Live radar' };
+    var w = S.wx, names = { now: 'Right now', details: "Today's details", hours: 'Next 12 hours', week: 'The week ahead', sky: 'Sun & moon', radar: 'Live radar' };
     var tag = btag('Weather · ' + (names[p] || '')) + top;
     if (!w) return '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">' + note(esc(S.wxErr || 'Loading weather…')) + '</div>';
     if (p === 'radar') return '<div id="radar" style="position:absolute;inset:0;background:#0b0f17"></div>' + tag +
@@ -1389,7 +1470,7 @@
         '<div style="display:flex;flex-direction:column;gap:6px;padding-top:14px">' + wxIcon(n.icon || 'cloud', 92) + '<div style="font-size:26px;font-weight:700">' + esc(n.text || '') + '</div><div style="font-size:20px;color:rgba(255,255,255,.8)">Feels like ' + d(n.feels) + '</div></div></div>' +
         '<div class="head" style="font-size:52px;line-height:1.05;margin-top:16px">' + esc(v.head) + '</div>' +
         '<div style="font-size:21px;line-height:1.45;color:rgba(255,255,255,.85);max-width:720px">' + esc(v.sub) + '</div>' +
-        (bits ? '<div style="font-size:17px;font-weight:600;color:rgba(255,255,255,.7);margin-top:4px">' + esc(bits) + '</div>' : '') + '</div>' +
+        '</div>' +
         '<div class="glass" style="position:absolute;left:40px;right:40px;bottom:36px;height:128px;display:grid;grid-template-columns:repeat(8,minmax(0,1fr));align-items:center;text-align:center;padding:0 14px">' +
         hrs.map(function (h) { return '<div style="display:flex;flex-direction:column;align-items:center;gap:4px"><div style="font-size:15px;font-weight:700;color:rgba(255,255,255,.75)">' + esc(h.t) + '</div><div style="color:var(--accent)">' + icon(h.icon, 32, 1.5) + '</div><div style="font-size:24px;font-weight:800">' + d(h.temp) + '</div></div>'; }).join('') +
         '<div style="border-left:1px solid rgba(255,255,255,.2)"><div style="font-size:14px;font-weight:800;letter-spacing:.08em;color:rgba(255,255,255,.75)">HIGH</div><div style="font-size:36px;font-weight:800">' + d(w.hi) + '</div></div>' +
