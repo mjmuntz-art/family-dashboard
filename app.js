@@ -1999,7 +1999,7 @@
       if (list.length) { S.hist = list; save('hist2:' + day, list); refresh(['news']); }
     }).catch(function () { /* try again later */ });
     // NASA astronomy picture of the day (a video day uses its thumbnail; before it's posted, yesterday's)
-    S.apodInfo = load('apodinfo:' + day, 86400000) || S.apodInfo;
+    S.apodInfo = load('apodinfo2:' + day, 86400000) || S.apodInfo;
     var a = load('apod4:' + day, 86400000);
     if (a) S.apod = a; else {
       var since = new Date(n.getTime() - 8 * 86400000), ymd = function (d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); };
@@ -2007,7 +2007,7 @@
         list = Array.isArray(list) ? list : [list];
         var real = function (j) { var u = j.url || j.hdurl || ''; return j.media_type === 'image' && u && !/logo|meatball|wp-content\/themes/i.test(u) && !/^nasa science$/i.test(j.title || ''); }; // real APOD photos live under apod.nasa.gov/apod/image
         var pics = list.filter(real), j2 = pics[pics.length - 1], today = list[list.length - 1] || {};
-        if (today.explanation) { S.apodInfo = { title: today.title, text: today.explanation, credit: today.copyright }; save('apodinfo:' + day, S.apodInfo); refresh(['weather']); } // NASA's words for today, even when its picture link is bad
+        if (today.explanation) { S.apodInfo = { title: today.title, text: today.explanation, credit: today.copyright, kind: today.media_type, date: today.date }; save('apodinfo2:' + day, S.apodInfo); refresh(['weather']); } // NASA's words for today, even when its picture link is bad
         var vid = today.media_type === 'video' ? videoEmbed(today.url) : null;
         if (!j2 && !vid) return;
         var src = vid ? today : j2;
@@ -2075,8 +2075,10 @@
   function apodNow() { // your Apps Script's copy first; NASA's own words fill in a missing title or caption
     var b = S.back && S.back.apod, x = S.apodInfo || S.apod, generic = /^(apod|nasa science|nasa|astronomy picture of the day)?$/i;
     if (!b || b.error || !(b.image || b.video)) return x;
+    var noVideo = x && x.kind && x.kind !== 'video'; // NASA says today is a picture: ignore any other video the page links to
+    if (noVideo && !b.image) return x;
     var text = b.text || (x && x.text) || '', title = x && x.title && !generic.test(x.title) ? x.title : ((text.match(/^[^.!?]{8,90}[.!?]/) || [''])[0] || b.title || 'Space'); // NASA's own title, else its first sentence, else the file name
-    return { title: title, text: text, image: b.image, video: b.video ? videoEmbed(b.video) : null, credit: (x && x.credit ? String(x.credit).replace(/\s+/g, ' ').trim() : '') || b.credit || 'NASA', date: b.date };
+    return { title: title, text: text, image: b.image, video: b.video && !noVideo ? videoEmbed(b.video) : null, credit: (x && x.credit ? String(x.credit).replace(/\s+/g, ' ').trim() : '') || b.credit || 'NASA', date: b.date };
   }
   function apodBleed(top) {
     var a = apodNow(); if (!a) return emptyBleed('Loading…');
