@@ -626,7 +626,8 @@
     };
     var apAll = src['AP'] || [], apPics = apAll.filter(function (x) { return x.image; }), apList = apPics.length >= 3 ? apPics : apAll, apShift = apList.length > 3 ? Math.floor(Date.now() / 7200000) * 3 % apList.length : 0; // walk through AP's list three stories at a time, every 2 hours
     var ap = function (k) { var s = apList.length ? apList[(apShift + k) % apList.length] : null; return s ? Object.assign({ src: 'AP' }, s) : null; };
-    var sl = function (k) { var s = take('Shaw Local', k); return s ? Object.assign({ src: 'Shaw Local' }, s) : null; };
+    var slAll = src['Shaw Local'] || [], slShift = slAll.length > 3 ? Math.floor(Date.now() / 3600000) * 3 % slAll.length : 0; // newest local story always leads; the rest take turns every hour
+    var sl = function (k) { var s = slAll.length <= 3 ? slAll[k] : k === 0 ? slAll[0] : slAll[1 + (slShift + k - 1) % (slAll.length - 1)]; return s ? Object.assign({ src: 'Shaw Local' }, s) : null; };
     var list = [ap(0), pickChicago(), sl(0), ap(1), pickChicago(), sl(1), ap(2), pickChicago(), sl(2)].map(function (x) { return x || pickChicago(); });
     return list.filter(Boolean);
   }
