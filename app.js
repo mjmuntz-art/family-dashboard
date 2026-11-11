@@ -908,13 +908,33 @@
   // ---- live stat lines for today's NBA plays (NBA.com live box scores, same source as the model pages)
   var NBA_TRI = { GS: 'GSW', NY: 'NYK', SA: 'SAS', NO: 'NOP', UTAH: 'UTA', WSH: 'WAS', PHO: 'PHX', BRK: 'BKN' };
   function nbaTri(a) { a = String(a || '').toUpperCase(); return NBA_TRI[a] || a; }
-  function pickParse(pick) { // "Over 26.5 pts" / "5+ threes" → what to count and the target
+  function nflKey(t) {
+    t = String(t || '').toLowerCase();
+    if (/anytime/.test(t)) return 'anyTD';
+    if (/(rush|rushing).*(rec|receiving)|(rec|receiving).*(rush|rushing)|scrimmage/.test(t)) return 'rrYds';
+    if (/pass(ing)?\s*(td|touchdown)/.test(t)) return 'passTD';
+    if (/pass(ing)?\s*(yd|yard)/.test(t)) return 'passYds';
+    if (/pass(ing)?\s*att/.test(t)) return 'passAtt';
+    if (/complet/.test(t)) return 'comp';
+    if (/intercept|\bints?\b/.test(t)) return 'ints';
+    if (/rush(ing)?\s*(yd|yard)/.test(t)) return 'rushYds';
+    if (/rush(ing)?\s*att|carr/.test(t)) return 'rushAtt';
+    if (/rec(eiving)?\s*(yd|yard)/.test(t)) return 'recYds';
+    if (/reception|\brec\b/.test(t)) return 'rec';
+    return '';
+  }
+  function pickParse(pick, lg) { // "Over 26.5 pts" / "5+ threes" / "Anytime TD" → what to count and the target
+    if (lg === 'nfl') {
+      var q = String(pick || '').toLowerCase(), mm = /(over|under)\s+([\d.]+)\s+(.+)/.exec(q);
+      if (/anytime/.test(q) && !mm) return { dir: 'over', line: 0.5, need: 1, stat: 'anyTD' };
+      return mm ? { dir: mm[1], line: +mm[2], stat: nflKey(mm[3]) } : null;
+    }
     var s = String(pick || '').toLowerCase(), m = /(over|under)\s+([\d.]+)\s+(.+)/.exec(s), k = function (t) { return /pra|pts\s*\+\s*reb\s*\+\s*ast/.test(t) ? 'pra' : /three|3pt|3pm/.test(t) ? 'threes' : /reb/.test(t) ? 'reb' : /ast/.test(t) ? 'ast' : /stl|steal/.test(t) ? 'stl' : /blk|block/.test(t) ? 'blk' : /pts|point/.test(t) ? 'pts' : ''; };
     if (m) return { dir: m[1], line: +m[2], stat: k(m[3]) };
     m = /(\d+)\+\s*(.+)/.exec(s); if (m) return { dir: 'over', line: +m[1] - 0.5, need: +m[1], stat: k(m[2]) };
     return null;
   }
-  var STAT_LABEL = { pts: 'PTS', reb: 'REB', ast: 'AST', threes: '3PM', pra: 'PRA', stl: 'STL', blk: 'BLK' };
+  var STAT_LABEL = { pts: 'PTS', reb: 'REB', ast: 'AST', threes: '3PM', pra: 'PRA', stl: 'STL', blk: 'BLK', anyTD: 'TD', rrYds: 'YDS', passTD: 'PASS TD', passYds: 'PASS YDS', passAtt: 'ATT', comp: 'CMP', ints: 'INT', rushYds: 'RUSH YDS', rushAtt: 'CAR', recYds: 'REC YDS', rec: 'REC' };
   function loadLiveProps() {
     if (DEMO && window.__NBALIVE) { S.nbaLive = __NBALIVE; refresh(['plays']); return; }
     var md = models(); if (!md) return;
@@ -941,11 +961,42 @@
       refresh(['plays']);
     }).catch(function () { /* try next minute */ });
   }
+  function loadLiveNFL() { // ESPN live box scores for the NFL picks' games
+    if (DEMO && window.__NFLLIVE) { S.nflLive = __NFLLIVE; refresh(['plays']); return; }
+    var md = models(); if (!md) return;
+    var teams = {};
+    md.forEach(function (m) { (m.plays || []).forEach(function (p) { var x = playInfo(Object.assign({ model: m.name }, p)); if (x.league === 'nfl') (x.teams || [x.team]).forEach(function (t) { if (t) teams[espnAbbr('nfl', t)] = 1; }); }); });
+    if (!Object.keys(teams).length) return;
+    getJSON('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard', 15000).then(function (j) {
+      S.nflLive = S.nflLive || {};
+      (j.events || []).forEach(function (ev) {
+        var comp = ev.competitions && ev.competitions[0]; if (!comp) return;
+        var abbrs = comp.competitors.map(function (c) { return c.team.abbreviation; }); if (!abbrs.some(function (a) { return teams[a]; })) return;
+        var stt = ev.status && ev.status.type || {}, old = S.nflLive[ev.id], info = { status: stt.state === 'in' ? 2 : stt.state === 'post' ? 3 : 1, text: stt.shortDetail || '', teams: abbrs, players: old ? old.players : null };
+        S.nflLive[ev.id] = info;
+        if (info.status === 1 || (info.status === 3 && old && old.status === 3 && old.players)) return;
+        getJSON('https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=' + ev.id, 15000).then(function (sm) {
+          var pl = {}, get = function (a) { var k = 'n:' + pnorm(a.athlete.displayName); return (pl[k] = pl[k] || { passYds: 0, passTD: 0, passAtt: 0, comp: 0, ints: 0, rushYds: 0, rushAtt: 0, rushTD: 0, rec: 0, recYds: 0, recTD: 0 }); };
+          ((sm.boxscore && sm.boxscore.players) || []).forEach(function (tm) { (tm.statistics || []).forEach(function (cat) {
+            var keys = cat.keys || [], at = function (row, k) { var i = keys.indexOf(k); return i >= 0 ? row[i] : null; }, num = function (v) { var n = parseFloat(String(v || '').replace(/,/g, '')); return isNaN(n) ? 0 : n; };
+            (cat.athletes || []).forEach(function (a) { var r = get(a), st = a.stats || [];
+              if (cat.name === 'passing') { var ca = String(at(st, 'completions/passingAttempts') || '').split('/'); r.comp = num(ca[0]); r.passAtt = num(ca[1]); r.passYds = num(at(st, 'passingYards')); r.passTD = num(at(st, 'passingTouchdowns')); r.ints = num(at(st, 'interceptions')); }
+              if (cat.name === 'rushing') { r.rushAtt = num(at(st, 'rushingAttempts')); r.rushYds = num(at(st, 'rushingYards')); r.rushTD = num(at(st, 'rushingTouchdowns')); }
+              if (cat.name === 'receiving') { r.rec = num(at(st, 'receptions')); r.recYds = num(at(st, 'receivingYards')); r.recTD = num(at(st, 'receivingTouchdowns')); }
+            });
+          }); });
+          Object.keys(pl).forEach(function (k) { var r = pl[k]; r.anyTD = r.rushTD + r.recTD; r.rrYds = r.rushYds + r.recYds; });
+          info.players = pl; refresh(['plays']);
+        }).catch(function () { /* try next minute */ });
+      });
+      refresh(['plays']);
+    }).catch(function () { /* try next minute */ });
+  }
   function liveFor(x) { // the live (or final) number for one play
-    if (x.league !== 'nba' || !S.nbaLive) return null;
-    var pp = pickParse(x.pick); if (!pp || !pp.stat) return null;
-    var tm = (x.teams || [x.team]).map(nbaTri), g = null;
-    Object.keys(S.nbaLive).forEach(function (id) { var v = S.nbaLive[id]; if (tm.some(function (t) { return v.teams.indexOf(t) >= 0; })) g = v; });
+    var src = x.league === 'nfl' ? S.nflLive : S.nbaLive; if (!src) return null;
+    var pp = pickParse(x.pick, x.league); if (!pp || !pp.stat) return null;
+    var tm = (x.teams || [x.team]).map(function (t) { return x.league === 'nfl' ? espnAbbr('nfl', t) : nbaTri(t); }), g = null;
+    Object.keys(src).forEach(function (id) { var v = src[id]; if (tm.some(function (t) { return v.teams.indexOf(t) >= 0; })) g = v; });
     if (!g || g.status === 1) return null;
     var row = g.players && ((x.pid && g.players['id:' + x.pid]) || g.players['n:' + pnorm(x.player)]); if (!row) return { g: g, pp: pp, val: null };
     var v = row[pp.stat], hit = pp.dir === 'over' ? v > pp.line : v < pp.line;
@@ -959,15 +1010,16 @@
     if (lv && lv.val != null) {
       var tgt = lv.pp.need || lv.pp.line, pct = Math.max(0, Math.min(1, lv.val / Math.max(1, tgt))), good = lv.pp.dir === 'over' ? lv.hit : lv.val < lv.pp.line, colr = lv.final ? (lv.hit ? '#3DBB86' : '#F06A57') : good && lv.pp.dir === 'over' ? '#3DBB86' : L.acc;
       liveRow = '<div style="flex-shrink:0;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.06)">' +
-        '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px"><span style="font-family:' + L.num + ';font-size:' + (n5 ? 24 : 28) + 'px;font-weight:800;line-height:1;color:' + colr + '">' + lv.val + '<span style="font-size:15px;opacity:.7;color:#fff"> / ' + tgt + ' ' + STAT_LABEL[lv.pp.stat] + '</span></span>' +
-        '<span style="font-size:12px;font-weight:900;letter-spacing:.06em;' + (lv.final ? 'opacity:.7' : 'color:#ff5d5d') + '" class="ellip">' + (lv.final ? 'FINAL' : '● ' + esc(lv.g.text.toUpperCase())) + '</span></div>' +
+        '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px"><span style="font-family:' + L.num + ';font-size:' + (n5 ? 24 : 28) + 'px;font-weight:800;line-height:1;color:' + colr + '">' + lv.val + '<span style="font-size:' + (n5 ? 13 : 15) + 'px;opacity:.7;color:#fff;white-space:nowrap"> / ' + tgt + ' ' + STAT_LABEL[lv.pp.stat] + '</span></span>' +
+        (n5 ? '' : '<span style="font-size:12px;font-weight:900;letter-spacing:.06em;' + (lv.final ? 'opacity:.7' : 'color:#ff5d5d') + '" class="ellip">' + (lv.final ? 'FINAL' : '● ' + esc(lv.g.text.toUpperCase())) + '</span>') + '</div>' +
+        (n5 ? '<div style="font-size:12px;font-weight:900;letter-spacing:.06em;margin-top:3px;' + (lv.final ? 'opacity:.7' : 'color:#ff5d5d') + '" class="ellip">' + (lv.final ? 'FINAL' : '● ' + esc(lv.g.text.toUpperCase())) + '</div>' : '') +
         '<div style="height:6px;border-radius:3px;background:rgba(255,255,255,.12);margin-top:6px;overflow:hidden"><div style="height:100%;width:' + (pct * 100).toFixed(0) + '%;background:' + colr + ';border-radius:3px"></div></div></div>';
     } else if (lv && !lv.final) liveRow = '<div style="flex-shrink:0;font-size:13px;font-weight:800;color:#ff5d5d">● LIVE · ' + esc(lv.g.text) + '</div>';
     var chip = res ? '<span style="padding:4px 12px;border-radius:999px;font-size:13px;font-weight:900;letter-spacing:.08em;background:' + (res === 'h' ? '#1f6b47' : res === 'm' ? '#7a2b22' : '#5a5a5a') + ';color:#fff">' + esc(st.split(' ')[0].toUpperCase()) + '</span>'
       : '<span style="padding:4px 12px;border-radius:999px;font-size:13px;font-weight:800;letter-spacing:.06em;border:1px solid ' + L.line + ';color:rgba(255,255,255,.75)">' + esc(/BET|LEAN/.test(st) ? st.split(' · ')[0] : 'PENDING') + '</span>';
     var ini = String(x.player || '?').split(' ').map(function (w) { return w.charAt(0); }).slice(0, 2).join('');
     var stats = (p.stats || []).slice(0, big ? 6 : 2).map(function (s2) { return '<div style="min-width:0"><div style="font-size:11px;font-weight:800;letter-spacing:.08em;color:rgba(255,255,255,.55);text-transform:uppercase" class="ellip">' + esc(s2.label) + '</div><div style="font-family:' + L.num + ';font-size:20px;font-weight:700" class="ellip">' + esc(s2.value) + '</div></div>'; }).join('');
-    var hsH = big ? 280 : n5 ? 110 : 128;
+    var hsH = big ? 280 : n5 ? 92 : 128;
     return '<button type="button" class="tap" data-open="play:' + mi + ':' + ri + '" style="display:flex;flex-direction:column;align-items:stretch;padding:0;border-radius:16px;overflow:hidden;background:' + L.panel + ';border:1px solid ' + L.line + ';min-height:0;min-width:0;text-align:left;font-family:' + L.text + ';color:#fff' + (res ? ';box-shadow:inset 0 -4px 0 ' + (res === 'h' ? '#3DBB86' : res === 'm' ? '#F06A57' : '#888') : '') + '">' +
       '<div style="position:relative;height:' + hsH + 'px;flex-shrink:0;background:linear-gradient(160deg,' + c.col.c1 + ' 0%,' + c.col.c1 + 'cc 45%,' + L.panel + ' 100%);overflow:hidden">' +
       (c.logo ? '<img src="' + esc(c.logo) + '" alt="" style="position:absolute;right:-18px;top:-14px;width:' + (hsH * 0.9) + 'px;height:' + (hsH * 0.9) + 'px;object-fit:contain;opacity:.22" onerror="this.remove()">' : '') +
@@ -2314,9 +2366,10 @@
     var n = norm(ing), alts = [n].concat((SAME[ing.toLowerCase()] || []).map(norm)), key = n.split(' ').pop();
     return list.some(function (g) { var gn = norm(g); return alts.some(function (a) { return a && (gn.indexOf(a) >= 0 || a.indexOf(gn) >= 0); }) || (key.length > 3 && gn.split(' ').indexOf(key) >= 0); });
   }
-  function dinnersAhead() { // the next 7 days of the Dinners calendar
-    var ev = events() || [], n = now(), out = [];
-    for (var i = 0; i < 7; i++) { var d = new Date(n.getFullYear(), n.getMonth(), n.getDate() + i), e = ev.filter(function (x) { return /dinner/i.test(x.who || '') && onDay(x, d); })[0]; if (e) out.push({ d: d, e: e }); }
+  function nextWeekStart() { var n = now(), add = ((8 - n.getDay()) % 7) || 7; return new Date(n.getFullYear(), n.getMonth(), n.getDate() + add); } // next Monday
+  function dinnersAhead() { // next week (Monday to Sunday) on the Dinners calendar: what the shopping is for
+    var ev = events() || [], st = nextWeekStart(), out = [];
+    for (var i = 0; i < 7; i++) { var d = new Date(st.getFullYear(), st.getMonth(), st.getDate() + i), e = ev.filter(function (x) { return /dinner/i.test(x.who || '') && onDay(x, d); })[0]; if (e) out.push({ d: d, e: e }); }
     return out;
   }
   function dinnerIngredients(e) { // the cook's own notes first, else a typical recipe for that dish
@@ -2356,12 +2409,12 @@
       '<div style="column-count:' + (items.length > 30 ? 3 : 2) + ';column-gap:34px;margin-top:8px">' + secs + '</div></div>';
     // next week's dinners and what's still missing
     var dins = dinnersAhead(), dinRows = dins.length ? dins.map(function (x) {
-      var ing = dinnerIngredients(x.e), day = sameDay(x.d, now()) ? 'Tonight' : DOW[x.d.getDay()], body;
+      var ing = dinnerIngredients(x.e), day = DOW[x.d.getDay()] + ' ' + x.d.getDate(), body;
       if (!ing) body = '<span style="opacity:.55">Add ingredients to the event notes</span>';
       else { var miss = ing.list.filter(function (i) { return !onList(i, items); }); body = miss.length ? '<span style="color:#f5c66b;font-weight:700">Need:</span> ' + esc(miss.slice(0, 5).join(', ')) + (miss.length > 5 ? ' +' + (miss.length - 5) : '') + (ing.own ? '' : ' <span style="opacity:.5">(typical)</span>') : '<span style="color:#7fdc9a;font-weight:700">✓ All on the list</span>'; }
       return '<div style="padding:7px 0;border-bottom:1px solid rgba(255,255,255,.08);min-width:0"><div style="display:flex;gap:10px;align-items:baseline"><span style="font-size:14px;font-weight:800;opacity:.7;width:66px;flex-shrink:0">' + day + '</span><span class="ellip" style="font-size:19px;font-weight:800">' + esc(x.e.title) + '</span></div><div class="clamp2" style="font-size:15px;line-height:1.35;margin-left:76px;opacity:.9">' + body + '</div></div>';
-    }).join('') : '<div style="font-size:18px;opacity:.7;margin-top:8px">No dinners on the calendar for the next week yet</div>';
-    var dinCard = '<div class="glass" style="padding:16px 20px;display:flex;flex-direction:column;min-height:0;overflow:hidden"><div class="lbl">Next week\'s dinners · still need</div><div style="overflow:hidden;min-height:0">' + dinRows + '</div></div>';
+    }).join('') : '<div style="font-size:18px;opacity:.7;margin-top:8px">No dinners planned for next week yet. Add them to the Dinners calendar and this will check the list for you.</div>';
+    var dinCard = '<div class="glass" style="padding:16px 20px;display:flex;flex-direction:column;min-height:0;overflow:hidden"><div class="lbl">Next week\'s dinners · ' + (function () { var a = nextWeekStart(), b = new Date(a.getFullYear(), a.getMonth(), a.getDate() + 6); return MON[a.getMonth()] + ' ' + a.getDate() + '–' + (b.getMonth() !== a.getMonth() ? MON[b.getMonth()] + ' ' : '') + b.getDate(); })() + ' · still need</div><div style="overflow:hidden;min-height:0">' + dinRows + '</div></div>';
     // gas for the trip
     var gs = gasOK(), lo = gs && gs.local && gs.local.stations && gs.local.stations[0], gasCard = '<div class="glass" style="padding:16px 20px;display:flex;flex-direction:column;justify-content:center;min-height:0">' +
       (lo ? '<div class="lbl">Cheapest gas on the way</div><div style="font-size:40px;font-weight:800;line-height:1.1">$' + lo.regular.toFixed(2) + '</div><div class="ellip" style="font-size:16px;opacity:.8">' + esc(lo.name) + (lo.addr ? ' · ' + esc(lo.addr.split(',')[0]) : '') + (lo.miles != null ? ' · ' + lo.miles + ' mi' : '') + '</div>'
@@ -2767,7 +2820,7 @@
   every(loadAlerts, 5 * 60000);
   every(loadExtras, 60 * 60000);
   every(loadDinnerIdeas, 30 * 60000);
-  setInterval(loadLiveProps, 60000); setTimeout(loadLiveProps, 8000); // live stat lines, every minute
+  setInterval(function () { loadLiveProps(); loadLiveNFL(); }, 60000); setTimeout(function () { loadLiveProps(); loadLiveNFL(); }, 8000); // live stat lines, every minute
   loadBackend().then(function () { every(loadScores, 2 * 60000); });
   setInterval(loadBackend, 10 * 60000);
   setInterval(function () { if (S.screen === 'home' && !S.detail) { S.photoIdx++; showPhoto('homephoto'); } }, 15000);
