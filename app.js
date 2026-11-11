@@ -551,7 +551,7 @@
   // If one part of the Apps Script reply failed this time (a calendar, a news feed, the photo folder), keep the last good copy of that part
   function keepGood(j, old) {
     if (!old) return j;
-    ['calendar', 'photos', 'news', 'plays', 'morris', 'reminders', 'gas', 'tle', 'commute', 'apod'].forEach(function (k) { if ((!j[k] || j[k].error) && old[k] && !old[k].error) j[k] = old[k]; });
+    ['calendar', 'photos', 'news', 'plays', 'morris', 'reminders', 'gas', 'tle', 'commute', 'apod', 'recipes'].forEach(function (k) { if ((!j[k] || j[k].error) && old[k] && !old[k].error) j[k] = old[k]; });
     if (j.news && j.news.sources && old.news && old.news.sources) Object.keys(old.news.sources).forEach(function (name) {
       if (!(j.news.sources[name] || []).length && (old.news.sources[name] || []).length) j.news.sources[name] = old.news.sources[name];
     });
@@ -669,7 +669,7 @@
     if (S.screen === 'weather' && p === 'radar') startRadar();
     if (S.screen === 'news' && p && p.indexOf('s:') === 0) drawQR((newsStories() || [])[+p.slice(2)]);
     if (S.screen === 'news' && p === 'hist' && histPick()) drawQR(histPick());
-    if (S.screen === 'family' && p === 'idea' && S.meals) S.meals.forEach(function (m, i) { drawQR(m, 'qr' + i); });
+    if (S.screen === 'family' && p === 'idea') mealPair().forEach(function (m, i) { drawQR(m, 'qr' + i); });
   }
   // A background reload only redraws the screen it affects, and never restarts a playing radar loop
   function refresh(screens) {
@@ -769,7 +769,7 @@
       (today.length ? today.length + ' thing' + (today.length === 1 ? '' : 's') + ' today' : 'Nothing scheduled') + '</div></div>' +
       (weeklyTags().length ? '<div style="margin-left:auto">' + tagChip(weeklyTags()[0], true) + '</div>' : '') + '</div>' +
       (rows || '<div class="head" style="font-size:30px;line-height:1.15;flex-shrink:0">' + left + '</div>' + nextCard) +
-      (dinner ? '<div style="margin-top:auto;display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:12px;background:rgba(255,255,255,.08);flex-shrink:0"><span style="font-size:24px">🍽️</span><div style="min-width:0"><div class="lbl">Tonight’s dinner</div><div class="ellip" style="font-size:19px;font-weight:700">' + esc(dinner.title) + '</div></div></div>' : S.meal ? '<div style="margin-top:auto;display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:12px;background:rgba(255,255,255,.08);flex-shrink:0"><span style="font-size:24px">💡</span><div style="min-width:0"><div class="lbl">Dinner idea</div><div class="ellip" style="font-size:19px;font-weight:700">' + esc(S.meal.name) + '</div></div></div>' : '') + '</div>';
+      (dinner ? '<div style="margin-top:auto;display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:12px;background:rgba(255,255,255,.08);flex-shrink:0"><span style="font-size:24px">🍽️</span><div style="min-width:0"><div class="lbl">Tonight’s dinner</div><div class="ellip" style="font-size:19px;font-weight:700">' + esc(dinner.title) + '</div></div></div>' : mealPair()[0] ? '<div style="margin-top:auto;display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:12px;background:rgba(255,255,255,.08);flex-shrink:0"><span style="font-size:24px">💡</span><div style="min-width:0"><div class="lbl">Dinner idea</div><div class="ellip" style="font-size:19px;font-weight:700">' + esc(mealPair()[0].name) + '</div></div></div>' : '') + '</div>';
     // ---- coming up, grouped by day
     var groups = [];
     for (var gd = 1; gd <= 6; gd++) {
@@ -1113,7 +1113,7 @@
     if (screen === 'news') { var nw = newsStories(), np = nw && nw.length ? nw.map(function (s, i) { return 's:' + i; }) : ['empty']; if (S.hist && S.hist.length) np.push('hist'); if (gasOK()) np.push('gas'); return np; }
     if (screen === 'weather') return S.alerts.map(function (a, i) { return 'al:' + i; }).concat(S.wx ? ['now', 'details', 'hours', 'week', 'sky'].concat(window.Astronomy && S.wx.setD ? ['tonight'] : [], apodNow() ? ['apod'] : [], ['radar']) : S.alerts.length ? [] : ['empty']);
     if (screen === 'photos') { var pgN = Math.min(3, photoGroups().length) + otdGroups().length; var out = []; for (var q = 0; q < Math.max(1, pgN); q++) out.push('c:' + q); return out; }
-    if (screen === 'family') { var fp = ['main']; if (events()) fp.push('week', 'who'); if (S.meals && S.meals.length) fp.push('idea'); if (boardLists().grocery || boardLists().notes.length) fp.push('board'); if (countdownItems().length) fp.push('cd'); return fp; }
+    if (screen === 'family') { var fp = ['main']; if (events()) fp.push('week', 'who'); if (mealPair().length) fp.push('idea'); if (boardLists().grocery || boardLists().notes.length) fp.push('board'); if (countdownItems().length) fp.push('cd'); return fp; }
     if (screen === 'live') { var lv = liveList(); return lv.length ? lv.map(function (g) { return 'g:' + g.id; }) : ['none']; }
     if (screen === 'alert') { var ua = S.alerts.filter(isUrgent); return ua.length ? ua.map(function (a, i) { return 'al:' + S.alerts.indexOf(a); }) : ['none']; }
     if (screen === 'night') return ['main'];
@@ -2269,19 +2269,38 @@
       '<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;height:180px">' + tiles.join('') + '</div>' +
       '<div style="font-size:14px;opacity:.55;text-align:right">Station prices from ' + esc(lo.source || 'Google Maps') + ' · state averages from AAA</div></div>';
   }
-  function mealBleed(top) { // recipes of the day: a seasonal dinner and a seasonal snack or treat
-    var ms = S.meals || []; if (!ms.length) return emptyBleed('Loading…');
-    var labels = ['Dinner idea', 'Snack or treat'];
+  // Recipes of the day come from the Apps Script (the family's list + new ideas, 3–5 of each); they take turns every 10 minutes.
+  // If that isn't there yet, the older one-dinner-one-treat ideas from TheMealDB fill in.
+  function mealSlot() { return Math.floor(Date.now() / 600000); }
+  function mealPair() {
+    var r = S.back && S.back.recipes, slot = mealSlot(), out = [];
+    var take = function (list, off, dinner) {
+      list = (list || []).filter(function (x) { return x && x.name && x.image; });
+      if (!list.length) return;
+      var i = (slot + off) % list.length, m = list[i], kind = dinner ? 'dinner' : (m.kind && m.kind !== 'New idea' ? m.kind.toLowerCase() : 'treat');
+      out.push({ name: m.name, image: m.image, ing: m.ing || [], link: m.link, source: m.source, mins: m.mins, rating: m.rating, fresh: m.fresh,
+        label: m.fresh ? 'New ' + kind + ' idea' : dinner ? 'Dinner idea' : m.kind || 'Treat', pos: (i + 1) + ' of ' + list.length });
+    };
+    if (r && !r.error) { take(r.dinners, 0, true); take(r.treats, 1, false); }
+    if (out.length) return out;
+    return (S.meals || []).map(function (m, i) { return { name: m.name, image: m.image, ing: m.ing || [], link: m.link, label: i ? 'Snack or treat' : 'Dinner idea', tags: [m.cat, m.area] }; });
+  }
+  function mealBleed(top) {
+    var ms = mealPair(); if (!ms.length) return emptyBleed('Loading…');
+    var chip = function (t) { return '<span style="padding:3px 10px;border-radius:999px;background:rgba(255,255,255,.14);font-size:13px;font-weight:700">' + esc(t) + '</span>'; };
     var card = function (m, i) {
-      var ing = m.ing.slice(0, 8);
+      var ing = m.ing.slice(0, 8), mins = m.mins ? (m.mins >= 60 ? Math.floor(m.mins / 60) + ' hr' + (m.mins % 60 ? ' ' + m.mins % 60 + ' min' : '') : m.mins + ' min') : '';
+      var tags = (m.tags || []).filter(function (x) { return x && x !== 'Unknown'; });
+      if (mins) tags.push('⏱ ' + mins); if (m.rating) tags.push('★ ' + m.rating); if (m.source) tags.push(m.source);
       return '<div class="glass" style="display:flex;flex-direction:column;overflow:hidden;min-height:0;min-width:0;padding:0">' +
         '<div style="position:relative;height:350px;flex-shrink:0;background:#111"><img src="' + esc(m.image) + '" alt="" style="width:100%;height:100%;object-fit:cover">' +
-        '<div style="position:absolute;left:16px;top:16px;padding:6px 14px;border-radius:999px;background:var(--accent);color:var(--ink);font-size:14px;font-weight:900;letter-spacing:.08em;text-transform:uppercase">' + labels[i] + '</div></div>' +
+        '<div style="position:absolute;left:16px;top:16px;padding:6px 14px;border-radius:999px;background:' + (m.fresh ? '#fff' : 'var(--accent)') + ';color:var(--ink);font-size:14px;font-weight:900;letter-spacing:.08em;text-transform:uppercase">' + (m.fresh ? '✨ ' : '') + esc(m.label) + '</div>' +
+        (m.pos ? '<div style="position:absolute;right:16px;top:16px;padding:5px 12px;border-radius:999px;background:rgba(0,0,0,.55);font-size:13px;font-weight:800">' + m.pos + '</div>' : '') + '</div>' +
         '<div style="display:flex;gap:16px;padding:16px 20px;flex:1;min-height:0"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:8px">' +
         '<div class="head clamp2" style="font-size:' + (m.name.length > 30 ? 28 : 34) + 'px;line-height:1.08">' + esc(m.name) + '</div>' +
-        '<div style="display:flex;gap:6px;flex-wrap:wrap">' + [m.cat, m.area].filter(function (x) { return x && x !== 'Unknown'; }).map(function (t) { return '<span style="padding:3px 10px;border-radius:999px;background:rgba(255,255,255,.14);font-size:13px;font-weight:700">' + esc(t) + '</span>'; }).join('') + '</div>' +
+        '<div style="display:flex;gap:6px;flex-wrap:wrap">' + tags.map(chip).join('') + '</div>' +
         '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 14px;font-size:15px;line-height:1.35;opacity:.9">' + ing.map(function (x) { return '<div class="ellip">• ' + esc(x) + '</div>'; }).join('') + '</div></div>' +
-        '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex-shrink:0;justify-content:flex-end"><div id="qr' + i + '" style="width:100px;height:100px;padding:5px;box-sizing:border-box;border-radius:10px;background:#fff;overflow:hidden"></div><div style="font-size:12px;opacity:.7">Full recipe</div></div></div></div>';
+        (m.link ? '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex-shrink:0;justify-content:flex-end"><div id="qr' + i + '" style="width:100px;height:100px;padding:5px;box-sizing:border-box;border-radius:10px;background:#fff;overflow:hidden"></div><div style="font-size:12px;opacity:.7">Full recipe</div></div>' : '') + '</div></div>';
     };
     return '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,6,18,.55),rgba(10,6,18,.75))"></div>' + btag('Family · Recipes of the day') + top +
       '<div style="position:absolute;left:40px;right:40px;top:92px;bottom:36px;display:grid;grid-template-columns:repeat(' + ms.length + ',minmax(0,1fr));gap:16px">' + ms.map(card).join('') + '</div>';
@@ -2852,7 +2871,7 @@
   every(loadAlerts, 5 * 60000);
   every(loadExtras, 60 * 60000);
   every(loadDinnerIdeas, 30 * 60000);
-  setInterval(function () { loadLiveProps(); loadLiveNBAespn(); loadLiveNFL(); }, 60000); setTimeout(function () { loadLiveProps(); loadLiveNBAespn(); loadLiveNFL(); }, 8000); // live stat lines, every minute
+  setInterval(function () { loadLiveProps(); loadLiveNBAespn(); loadLiveNFL(); }, 60000); setInterval(function () { if (mealSlot() !== S.mealSlot) { S.mealSlot = mealSlot(); refresh(['family', 'home']); } }, 30000); setTimeout(function () { loadLiveProps(); loadLiveNBAespn(); loadLiveNFL(); }, 8000); // live stat lines, every minute
   loadBackend().then(function () { every(loadScores, 2 * 60000); });
   setInterval(loadBackend, 10 * 60000);
   setInterval(function () { if (S.screen === 'home' && !S.detail) { S.photoIdx++; showPhoto('homephoto'); } }, 15000);
