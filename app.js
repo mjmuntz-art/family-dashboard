@@ -2155,8 +2155,87 @@
     return out;
   }
   function ago(iso) { var m = Math.round((Date.now() - new Date(iso)) / 60000); return !iso || isNaN(m) ? '' : m < 2 ? 'just now' : m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + 'h ago' : Math.round(m / 1440) + 'd ago'; }
+  // ---- grocery page: the list sorted by aisle, next week's dinners with what's still missing, cheapest gas
+  var AISLES = [ // checked in this order; first match wins
+    ['Baby', '🍼', ['baby', 'diaper', 'wipes', 'formula', 'pouch']],
+    ['Household', '🧻', ['paper towel', 'toilet paper', 'tissue', 'napkin', 'soap', 'detergent', 'dish', 'trash bag', 'garbage bag', 'foil', 'plastic wrap', 'ziploc', 'sponge', 'cleaner', 'bleach', 'shampoo', 'toothpaste', 'battery', 'batteries', 'light bulb']],
+    ['Frozen', '🧊', ['frozen', 'ice cream', 'popsicle', 'waffles']],
+    ['Snacks', '🍿', ['chip', 'cracker', 'cookie', 'pretzel', 'popcorn', 'granola', 'snack', 'candy', 'nuts', 'goldfish', 'fruit snack']],
+    ['Meat & Deli', '🥩', ['deli', 'chicken', 'beef', 'steak', 'pork', 'turkey', 'bacon', 'sausage', 'ham', 'hot dog', 'brat', 'fish', 'salmon', 'shrimp', 'tilapia', 'meatball', 'ribs', 'salami', 'pepperoni', 'roast']],
+    ['Dairy & Eggs', '🥛', ['milk', 'egg', 'cheese', 'yogurt', 'butter', 'cream', 'sour cream', 'cottage', 'creamer']],
+    ['Produce', '🥬', ['spinach', 'lettuce', 'banana', 'apple', 'onion', 'potato', 'tomato', 'carrot', 'berr', 'grape', 'lemon', 'lime', 'avocado', 'pepper', 'broccoli', 'celery', 'cucumber', 'garlic', 'mushroom', 'corn', 'zucchini', 'squash', 'pumpkin', 'orange', 'pear', 'peach', 'melon', 'kale', 'cilantro', 'parsley', 'herb', 'salad', 'fruit', 'veggie', 'vegetable', 'green bean', 'cabbage', 'jalapeno', 'ginger']],
+    ['Bakery', '🍞', ['bread', 'bagel', 'bun', 'roll', 'tortilla', 'muffin', 'croissant', 'pita', 'naan']],
+    ['Drinks', '🥤', ['juice', 'soda', 'water', 'pop', 'gatorade', 'beer', 'wine', 'seltzer', 'lemonade', 'tea']],
+    ['Pantry', '🥫', ['pasta', 'spaghetti', 'noodle', 'rice', 'cereal', 'oat', 'coffee', 'sauce', 'soup', 'broth', 'stock', 'flour', 'sugar', 'oil', 'bean', 'can', 'peanut butter', 'jelly', 'honey', 'syrup', 'spice', 'seasoning', 'salt', 'ketchup', 'mustard', 'mayo', 'dressing', 'vinegar', 'taco']]
+  ];
+  function aisleOf(item) { var l = ' ' + item.toLowerCase() + ' '; for (var i = 0; i < AISLES.length; i++) for (var j = 0; j < AISLES[i][2].length; j++) if (l.indexOf(AISLES[i][2][j]) >= 0) return i; return AISLES.length; }
+  var STAPLES = /^(salt|pepper|black pepper|water|olive oil|vegetable oil|oil|sugar|flour|plain flour|butter|ice)$/i;
+  var SAME = { 'ground beef': ['hamburger', 'beef mince', 'minced beef'], 'minced beef': ['ground beef', 'hamburger'], 'chicken breast': ['chicken'], 'chicken breasts': ['chicken'], 'spaghetti': ['pasta'], 'penne': ['pasta'], 'macaroni': ['pasta'], 'cheddar cheese': ['cheese', 'shredded cheese'], 'parmesan': ['parmesan cheese', 'parm'], 'scallions': ['green onion'], 'coriander': ['cilantro'] };
+  function norm(x) { return String(x || '').toLowerCase().replace(/[^a-z ]/g, ' ').replace(/\b(fresh|large|small|medium|chopped|diced|sliced|minced|ground|can|cans|of|the|a|organic)\b/g, function (w) { return w === 'ground' ? 'ground' : ''; }).replace(/\s+/g, ' ').trim().replace(/(es|s)$/, ''); }
+  function onList(ing, list) { // is this ingredient (or something like it) already on the grocery list?
+    var n = norm(ing), alts = [n].concat((SAME[ing.toLowerCase()] || []).map(norm)), key = n.split(' ').pop();
+    return list.some(function (g) { var gn = norm(g); return alts.some(function (a) { return a && (gn.indexOf(a) >= 0 || a.indexOf(gn) >= 0); }) || (key.length > 3 && gn.split(' ').indexOf(key) >= 0); });
+  }
+  function dinnersAhead() { // the next 7 days of the Dinners calendar
+    var ev = events() || [], n = now(), out = [];
+    for (var i = 0; i < 7; i++) { var d = new Date(n.getFullYear(), n.getMonth(), n.getDate() + i), e = ev.filter(function (x) { return /dinner/i.test(x.who || '') && onDay(x, d); })[0]; if (e) out.push({ d: d, e: e }); }
+    return out;
+  }
+  function dinnerIngredients(e) { // the cook's own notes first, else a typical recipe for that dish
+    var desc = String(e.description || '').replace(/^\s*(ingredients?|need|shopping)\s*:/i, '');
+    var own = desc.split(/[\n,;•]+/).map(function (x) { return x.replace(/^[-*\s\d.)]+/, '').trim(); }).filter(function (x) { return x && x.length < 40; });
+    if (own.length >= 2) return { list: own, own: true };
+    var t = S.dinIng && S.dinIng[e.title.toLowerCase()];
+    return t && t.list ? { list: t.list, own: false, name: t.name } : null;
+  }
+  function loadDinnerIdeas() { // look up typical ingredients for dinners that have no notes (cached a month per dish)
+    if (DEMO && window.__DINING) { S.dinIng = __DINING; return; }
+    S.dinIng = S.dinIng || load('dining', 30 * 86400000) || {};
+    dinnersAhead().forEach(function (x) {
+      var k = x.e.title.toLowerCase(); if (k in S.dinIng || dinnerIngredients(x.e)) return;
+      var q = x.e.title.replace(/night|dinner|homemade|leftovers?/ig, '').trim(); if (q.length < 3) { S.dinIng[k] = null; return; }
+      S.dinIng[k] = null;
+      getJSON('https://www.themealdb.com/api/json/v1/1/search.php?s=' + encodeURIComponent(q), 20000).then(function (j) {
+        var m = (j.meals || [])[0]; if (!m) return;
+        var ing = []; for (var i = 1; i <= 20; i++) { var a = (m['strIngredient' + i] || '').trim(); if (a && !STAPLES.test(a)) ing.push(a); }
+        S.dinIng[k] = { list: ing.slice(0, 10), name: m.strMeal }; save('dining', S.dinIng); refresh(['family']);
+      }).catch(function () { /* no match */ });
+    });
+  }
+  function groceryBleed(top, g) {
+    if (!DEMO) setTimeout(loadDinnerIdeas, 0); // look up any new dinners right away
+    var items = g.items, groups = {};
+    items.forEach(function (x) { var a = aisleOf(x); (groups[a] = groups[a] || []).push(x); });
+    var keys = Object.keys(groups).map(Number).sort(function (a, b) { return a - b; }), many = items.length > 22, rowH = many ? 32 : 38, fs = many ? 18 : 21;
+    var secs = keys.map(function (k) {
+      var nm = k < AISLES.length ? AISLES[k][1] + ' ' + AISLES[k][0] : '🛒 Other';
+      return '<div style="break-inside:avoid;-webkit-column-break-inside:avoid;margin-bottom:10px"><div style="font-size:14px;font-weight:900;letter-spacing:.1em;color:#a0703c;text-transform:uppercase;margin:4px 0 2px">' + nm + '</div>' +
+        groups[k].map(function (x) { return '<div style="display:flex;align-items:center;gap:12px;height:' + rowH + 'px;border-bottom:1px solid rgba(80,60,40,.16);font-size:' + fs + 'px;font-weight:600;min-width:0"><span style="width:18px;height:18px;border:2.5px solid #b08b5c;border-radius:50%;flex-shrink:0"></span><span class="ellip">' + esc(x) + '</span></div>'; }).join('') + '</div>';
+    }).join('');
+    var ago = g.at ? Math.max(0, Math.round((Date.now() - new Date(g.at)) / 60000)) : null;
+    var pad = '<div style="background:#fbf4e6;color:#2a2018;border-radius:18px;padding:20px 30px 18px 60px;position:relative;box-shadow:0 14px 40px rgba(0,0,0,.45);overflow:hidden;min-height:0"><div style="position:absolute;left:40px;top:0;bottom:0;width:2px;background:#e8a0a0"></div>' +
+      '<div style="display:flex;align-items:baseline;justify-content:space-between"><div style="font-size:40px;font-family:var(--head);font-weight:700">🛒 Groceries</div><div style="font-size:16px;color:#7a6a58">' + items.length + ' item' + (items.length === 1 ? '' : 's') + (ago != null ? ' · ' + (ago < 60 ? ago + ' min ago' : Math.round(ago / 60) + 'h ago') : '') + '</div></div>' +
+      '<div style="column-count:' + (items.length > 30 ? 3 : 2) + ';column-gap:34px;margin-top:8px">' + secs + '</div></div>';
+    // next week's dinners and what's still missing
+    var dins = dinnersAhead(), dinRows = dins.length ? dins.map(function (x) {
+      var ing = dinnerIngredients(x.e), day = sameDay(x.d, now()) ? 'Tonight' : DOW[x.d.getDay()], body;
+      if (!ing) body = '<span style="opacity:.55">Add ingredients to the event notes</span>';
+      else { var miss = ing.list.filter(function (i) { return !onList(i, items); }); body = miss.length ? '<span style="color:#f5c66b;font-weight:700">Need:</span> ' + esc(miss.slice(0, 5).join(', ')) + (miss.length > 5 ? ' +' + (miss.length - 5) : '') + (ing.own ? '' : ' <span style="opacity:.5">(typical)</span>') : '<span style="color:#7fdc9a;font-weight:700">✓ All on the list</span>'; }
+      return '<div style="padding:7px 0;border-bottom:1px solid rgba(255,255,255,.08);min-width:0"><div style="display:flex;gap:10px;align-items:baseline"><span style="font-size:14px;font-weight:800;opacity:.7;width:66px;flex-shrink:0">' + day + '</span><span class="ellip" style="font-size:19px;font-weight:800">' + esc(x.e.title) + '</span></div><div class="clamp2" style="font-size:15px;line-height:1.35;margin-left:76px;opacity:.9">' + body + '</div></div>';
+    }).join('') : '<div style="font-size:18px;opacity:.7;margin-top:8px">No dinners on the calendar for the next week yet</div>';
+    var dinCard = '<div class="glass" style="padding:16px 20px;display:flex;flex-direction:column;min-height:0;overflow:hidden"><div class="lbl">Next week\'s dinners · still need</div><div style="overflow:hidden;min-height:0">' + dinRows + '</div></div>';
+    // gas for the trip
+    var gs = gasOK(), lo = gs && gs.local && gs.local.stations && gs.local.stations[0], gasCard = '<div class="glass" style="padding:16px 20px;display:flex;flex-direction:column;justify-content:center;min-height:0">' +
+      (lo ? '<div class="lbl">Cheapest gas on the way</div><div style="font-size:40px;font-weight:800;line-height:1.1">$' + lo.regular.toFixed(2) + '</div><div class="ellip" style="font-size:16px;opacity:.8">' + esc(lo.name) + (lo.addr ? ' · ' + esc(lo.addr.split(',')[0]) : '') + (lo.miles != null ? ' · ' + lo.miles + ' mi' : '') + '</div>'
+        : gs ? '<div class="lbl">Gas today</div><div style="font-size:40px;font-weight:800;line-height:1.1">$' + (gs.metro && gs.metro.now ? gs.metro.now[0] : gs.prices.now[0]).toFixed(2) + '</div><div style="font-size:16px;opacity:.8">' + (gs.metro && gs.metro.now ? 'Chicago-area' : 'Illinois') + ' average, regular</div>'
+        : (function () { var t = tonightDinner(); return '<div class="lbl">Tonight\'s dinner</div><div style="font-size:30px;font-weight:800">' + (t ? '🍽️ ' + esc(t.title) : '🍽️ Not planned yet') + '</div>'; })()) + '</div>';
+    return '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,6,18,.5),rgba(10,6,18,.7))"></div>' + btag('Grocery list') + top +
+      '<div style="position:absolute;left:40px;right:40px;top:88px;bottom:32px;display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:16px">' + pad +
+      '<div style="display:grid;grid-template-rows:minmax(0,2.2fr) minmax(0,1fr);gap:12px;min-height:0">' + dinCard + gasCard + '</div></div>';
+  }
   function boardBleed(top) {
     var b = boardLists(), both = b.grocery && b.notes.length;
+    if (b.grocery && !b.notes.length) return groceryBleed(top, b.grocery);
     var groc = '';
     if (b.grocery) {
       var it = b.grocery.items.slice(0, both ? 20 : 30), gc = both ? (it.length > 10 ? 2 : 1) : (it.length > 20 ? 3 : it.length > 10 ? 2 : 1);
@@ -2549,6 +2628,7 @@
   every(loadWeather, 10 * 60000);
   every(loadAlerts, 5 * 60000);
   every(loadExtras, 60 * 60000);
+  every(loadDinnerIdeas, 30 * 60000);
   loadBackend().then(function () { every(loadScores, 2 * 60000); });
   setInterval(loadBackend, 10 * 60000);
   setInterval(function () { if (S.screen === 'home' && !S.detail) { S.photoIdx++; showPhoto('homephoto'); } }, 15000);
