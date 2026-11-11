@@ -905,8 +905,64 @@
     var col = knownColor(x.league, team) || { c1: '#2a3b55', c2: '#5d6f88' };
     return { x: x, team: team, img: img, alt: who && who.img && img !== who.img ? who.img : '', col: col, jersey: who && who.jersey, pos: who && who.pos, logo: team ? 'https://a.espncdn.com/i/teamlogos/' + x.league + '/500/' + team.toLowerCase() + '.png' : '' };
   }
+  // ---- live stat lines for today's NBA plays (NBA.com live box scores, same source as the model pages)
+  var NBA_TRI = { GS: 'GSW', NY: 'NYK', SA: 'SAS', NO: 'NOP', UTAH: 'UTA', WSH: 'WAS', PHO: 'PHX', BRK: 'BKN' };
+  function nbaTri(a) { a = String(a || '').toUpperCase(); return NBA_TRI[a] || a; }
+  function pickParse(pick) { // "Over 26.5 pts" / "5+ threes" → what to count and the target
+    var s = String(pick || '').toLowerCase(), m = /(over|under)\s+([\d.]+)\s+(.+)/.exec(s), k = function (t) { return /pra|pts\s*\+\s*reb\s*\+\s*ast/.test(t) ? 'pra' : /three|3pt|3pm/.test(t) ? 'threes' : /reb/.test(t) ? 'reb' : /ast/.test(t) ? 'ast' : /stl|steal/.test(t) ? 'stl' : /blk|block/.test(t) ? 'blk' : /pts|point/.test(t) ? 'pts' : ''; };
+    if (m) return { dir: m[1], line: +m[2], stat: k(m[3]) };
+    m = /(\d+)\+\s*(.+)/.exec(s); if (m) return { dir: 'over', line: +m[1] - 0.5, need: +m[1], stat: k(m[2]) };
+    return null;
+  }
+  var STAT_LABEL = { pts: 'PTS', reb: 'REB', ast: 'AST', threes: '3PM', pra: 'PRA', stl: 'STL', blk: 'BLK' };
+  function loadLiveProps() {
+    if (DEMO && window.__NBALIVE) { S.nbaLive = __NBALIVE; refresh(['plays']); return; }
+    var md = models(); if (!md) return;
+    var teams = {};
+    md.forEach(function (m) { (m.plays || []).forEach(function (p) { var x = playInfo(Object.assign({ model: m.name }, p)); if (x.league === 'nba') (x.teams || [x.team]).forEach(function (t) { if (t) teams[nbaTri(t)] = 1; }); }); });
+    if (!Object.keys(teams).length) return;
+    getJSON('https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json', 15000).then(function (j) {
+      var games = (j.scoreboard && j.scoreboard.games) || [];
+      S.nbaLive = S.nbaLive || {};
+      games.forEach(function (g) {
+        var h = g.homeTeam.teamTricode, a = g.awayTeam.teamTricode; if (!teams[h] && !teams[a]) return;
+        var old = S.nbaLive[g.gameId], info = { status: g.gameStatus, text: String(g.gameStatusText || '').trim(), period: g.period, teams: [h, a], players: old ? old.players : null };
+        S.nbaLive[g.gameId] = info;
+        if (g.gameStatus === 1 || (g.gameStatus === 3 && old && old.status === 3 && old.players)) return; // not started, or final already read
+        getJSON('https://cdn.nba.com/static/json/liveData/boxscore/boxscore_' + g.gameId + '.json', 15000).then(function (b) {
+          var pl = {};
+          [b.game.homeTeam, b.game.awayTeam].forEach(function (t) { (t.players || []).forEach(function (p) {
+            var st = p.statistics || {}, row = { pts: +st.points || 0, reb: +st.reboundsTotal || 0, ast: +st.assists || 0, threes: +st.threePointersMade || 0, stl: +st.steals || 0, blk: +st.blocks || 0, played: String(p.played) === '1', on: String(p.oncourt) === '1' };
+            row.pra = row.pts + row.reb + row.ast; pl['id:' + p.personId] = row; pl['n:' + pnorm(p.name || (p.firstName + ' ' + p.familyName))] = row;
+          }); });
+          info.players = pl; refresh(['plays']);
+        }).catch(function () { /* try next minute */ });
+      });
+      refresh(['plays']);
+    }).catch(function () { /* try next minute */ });
+  }
+  function liveFor(x) { // the live (or final) number for one play
+    if (x.league !== 'nba' || !S.nbaLive) return null;
+    var pp = pickParse(x.pick); if (!pp || !pp.stat) return null;
+    var tm = (x.teams || [x.team]).map(nbaTri), g = null;
+    Object.keys(S.nbaLive).forEach(function (id) { var v = S.nbaLive[id]; if (tm.some(function (t) { return v.teams.indexOf(t) >= 0; })) g = v; });
+    if (!g || g.status === 1) return null;
+    var row = g.players && ((x.pid && g.players['id:' + x.pid]) || g.players['n:' + pnorm(x.player)]); if (!row) return { g: g, pp: pp, val: null };
+    var v = row[pp.stat], hit = pp.dir === 'over' ? v > pp.line : v < pp.line;
+    return { g: g, pp: pp, val: v, hit: hit, final: g.status === 3, on: row.on };
+  }
   function playCard(m, L, p, mi, ri, big, n5) {
     var c = cardData(m, p), x = c.x, st = String(p.status || ''), res = /^HIT/i.test(st) ? 'h' : /^MISS/i.test(st) ? 'm' : /^PUSH/i.test(st) ? 'p' : '';
+    var lv = liveFor(x), liveRow = '';
+    if (lv && !res && lv.final && lv.val != null) { res = lv.hit ? 'h' : 'm'; st = (lv.hit ? 'HIT' : 'MISS') + ' (' + lv.val + ')'; } // game over: graded right away
+    else if (lv && !res && lv.val != null && (lv.pp.dir === 'over' ? lv.val > lv.pp.line : lv.val > lv.pp.line)) { res = lv.pp.dir === 'over' ? 'h' : 'm'; st = res === 'h' ? 'HIT' : 'MISS'; } // an over that's cleared (or an under that's broken) can't change back
+    if (lv && lv.val != null) {
+      var tgt = lv.pp.need || lv.pp.line, pct = Math.max(0, Math.min(1, lv.val / Math.max(1, tgt))), good = lv.pp.dir === 'over' ? lv.hit : lv.val < lv.pp.line, colr = lv.final ? (lv.hit ? '#3DBB86' : '#F06A57') : good && lv.pp.dir === 'over' ? '#3DBB86' : L.acc;
+      liveRow = '<div style="flex-shrink:0;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.06)">' +
+        '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px"><span style="font-family:' + L.num + ';font-size:' + (n5 ? 24 : 28) + 'px;font-weight:800;line-height:1;color:' + colr + '">' + lv.val + '<span style="font-size:15px;opacity:.7;color:#fff"> / ' + tgt + ' ' + STAT_LABEL[lv.pp.stat] + '</span></span>' +
+        '<span style="font-size:12px;font-weight:900;letter-spacing:.06em;' + (lv.final ? 'opacity:.7' : 'color:#ff5d5d') + '" class="ellip">' + (lv.final ? 'FINAL' : '● ' + esc(lv.g.text.toUpperCase())) + '</span></div>' +
+        '<div style="height:6px;border-radius:3px;background:rgba(255,255,255,.12);margin-top:6px;overflow:hidden"><div style="height:100%;width:' + (pct * 100).toFixed(0) + '%;background:' + colr + ';border-radius:3px"></div></div></div>';
+    } else if (lv && !lv.final) liveRow = '<div style="flex-shrink:0;font-size:13px;font-weight:800;color:#ff5d5d">● LIVE · ' + esc(lv.g.text) + '</div>';
     var chip = res ? '<span style="padding:4px 12px;border-radius:999px;font-size:13px;font-weight:900;letter-spacing:.08em;background:' + (res === 'h' ? '#1f6b47' : res === 'm' ? '#7a2b22' : '#5a5a5a') + ';color:#fff">' + esc(st.split(' ')[0].toUpperCase()) + '</span>'
       : '<span style="padding:4px 12px;border-radius:999px;font-size:13px;font-weight:800;letter-spacing:.06em;border:1px solid ' + L.line + ';color:rgba(255,255,255,.75)">' + esc(/BET|LEAN/.test(st) ? st.split(' · ')[0] : 'PENDING') + '</span>';
     var ini = String(x.player || '?').split(' ').map(function (w) { return w.charAt(0); }).slice(0, 2).join('');
@@ -924,7 +980,7 @@
       '<span style="font-size:13px;font-weight:700;opacity:.6;flex-shrink:0">' + esc([c.team, c.pos].filter(Boolean).join(' · ')) + '</span></div>' +
       '<div style="font-family:' + L.head + ';font-size:' + (big ? 28 : n5 ? 19 : 24) + 'px;font-weight:800;color:' + L.acc + ';text-transform:uppercase;line-height:1.1;flex-shrink:0" class="' + (n5 ? 'clamp2' : 'ellip') + '">' + esc(x.pick || '') + '</div>' +
       '<div style="display:flex;align-items:center;gap:10px;flex-shrink:0"><span style="font-family:' + L.num + ';font-size:22px;font-weight:800">' + esc(p.odds || '') + '</span><span style="font-size:14px;opacity:.7" class="ellip">' + esc(p.book || '') + '</span><span style="margin-left:auto">' + chip + '</span></div>' +
-      (stats ? '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:auto;padding-top:8px;border-top:1px solid ' + L.line + '">' + stats + '</div>' : '') + '</div></button>';
+      liveRow + (stats && (big || !liveRow) ? '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:auto;padding-top:8px;border-top:1px solid ' + L.line + '">' + stats + '</div>' : '') + '</div></button>';
   }
   function playsBleed(p, top) {
     var md = models() || [], mi = +p.slice(2), m = md[mi]; if (!m) return emptyBleed('Loading…');
@@ -2711,6 +2767,7 @@
   every(loadAlerts, 5 * 60000);
   every(loadExtras, 60 * 60000);
   every(loadDinnerIdeas, 30 * 60000);
+  setInterval(loadLiveProps, 60000); setTimeout(loadLiveProps, 8000); // live stat lines, every minute
   loadBackend().then(function () { every(loadScores, 2 * 60000); });
   setInterval(loadBackend, 10 * 60000);
   setInterval(function () { if (S.screen === 'home' && !S.detail) { S.photoIdx++; showPhoto('homephoto'); } }, 15000);
