@@ -43,11 +43,12 @@
     try { var o = JSON.parse(localStorage.getItem('dash:' + k)); if (o && (!maxAgeMs || Date.now() - o.t < maxAgeMs)) return o.v; } catch (e) { /* ignore */ }
     return null;
   }
-  function getJSON(url, ms) {
+  function getJSON(url, ms, fresh) {
     return new Promise(function (resolve, reject) {
       var ctl = window.AbortController ? new AbortController() : null;
       var tm = setTimeout(function () { if (ctl) ctl.abort(); reject(new Error('timed out')); }, ms || 15000);
-      fetch(url, ctl ? { signal: ctl.signal } : {}).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      var opt = ctl ? { signal: ctl.signal } : {}; if (fresh) opt.cache = 'no-store';
+      fetch(url, opt).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
         .then(function (j) { clearTimeout(tm); resolve(j); }, function (e) { clearTimeout(tm); reject(e); });
     });
   }
@@ -941,7 +942,7 @@
     var teams = {};
     md.forEach(function (m) { (m.plays || []).forEach(function (p) { var x = playInfo(Object.assign({ model: m.name }, p)); if (x.league === 'nba') (x.teams || [x.team]).forEach(function (t) { if (t) teams[nbaTri(t)] = 1; }); }); });
     if (!Object.keys(teams).length) return;
-    getJSON('https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json', 15000).then(function (j) {
+    getJSON('https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json', 15000, true).then(function (j) {
       var games = (j.scoreboard && j.scoreboard.games) || [];
       S.nbaLive = S.nbaLive || {};
       games.forEach(function (g) {
@@ -949,7 +950,7 @@
         var old = S.nbaLive[g.gameId], info = { status: g.gameStatus, text: String(g.gameStatusText || '').trim(), period: g.period, teams: [h, a], players: old ? old.players : null };
         S.nbaLive[g.gameId] = info;
         if (g.gameStatus === 1 || (g.gameStatus === 3 && old && old.status === 3 && old.players)) return; // not started, or final already read
-        getJSON('https://cdn.nba.com/static/json/liveData/boxscore/boxscore_' + g.gameId + '.json', 15000).then(function (b) {
+        getJSON('https://cdn.nba.com/static/json/liveData/boxscore/boxscore_' + g.gameId + '.json', 15000, true).then(function (b) {
           var pl = {};
           [b.game.homeTeam, b.game.awayTeam].forEach(function (t) { (t.players || []).forEach(function (p) {
             var st = p.statistics || {}, row = { pts: +st.points || 0, reb: +st.reboundsTotal || 0, ast: +st.assists || 0, threes: +st.threePointersMade || 0, stl: +st.steals || 0, blk: +st.blocks || 0, played: String(p.played) === '1', on: String(p.oncourt) === '1' };
@@ -967,7 +968,7 @@
     var teams = {};
     md.forEach(function (m) { (m.plays || []).forEach(function (p) { var x = playInfo(Object.assign({ model: m.name }, p)); if (x.league === 'nfl') (x.teams || [x.team]).forEach(function (t) { if (t) teams[espnAbbr('nfl', t)] = 1; }); }); });
     if (!Object.keys(teams).length) return;
-    getJSON('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard', 15000).then(function (j) {
+    getJSON('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard', 15000, true).then(function (j) {
       S.nflLive = S.nflLive || {};
       (j.events || []).forEach(function (ev) {
         var comp = ev.competitions && ev.competitions[0]; if (!comp) return;
@@ -975,7 +976,7 @@
         var stt = ev.status && ev.status.type || {}, old = S.nflLive[ev.id], info = { status: stt.state === 'in' ? 2 : stt.state === 'post' ? 3 : 1, text: stt.shortDetail || '', teams: abbrs, players: old ? old.players : null };
         S.nflLive[ev.id] = info;
         if (info.status === 1 || (info.status === 3 && old && old.status === 3 && old.players)) return;
-        getJSON('https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=' + ev.id, 15000).then(function (sm) {
+        getJSON('https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=' + ev.id, 15000, true).then(function (sm) {
           var pl = {}, get = function (a) { var k = 'n:' + pnorm(a.athlete.displayName); return (pl[k] = pl[k] || { passYds: 0, passTD: 0, passAtt: 0, comp: 0, ints: 0, rushYds: 0, rushAtt: 0, rushTD: 0, rec: 0, recYds: 0, recTD: 0 }); };
           ((sm.boxscore && sm.boxscore.players) || []).forEach(function (tm) { (tm.statistics || []).forEach(function (cat) {
             var keys = cat.keys || [], at = function (row, k) { var i = keys.indexOf(k); return i >= 0 ? row[i] : null; }, num = function (v) { var n = parseFloat(String(v || '').replace(/,/g, '')); return isNaN(n) ? 0 : n; };
@@ -992,8 +993,39 @@
       refresh(['plays']);
     }).catch(function () { /* try next minute */ });
   }
+  function loadLiveNBAespn() { // backup NBA source: ESPN live box scores (same as the NFL one)
+    var md = models(); if (!md) return;
+    var teams = {};
+    md.forEach(function (m) { (m.plays || []).forEach(function (p) { var x = playInfo(Object.assign({ model: m.name }, p)); if (x.league === 'nba') (x.teams || [x.team]).forEach(function (t) { if (t) teams[espnAbbr('nba', t)] = 1; }); }); });
+    if (!Object.keys(teams).length) return;
+    getJSON('https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard', 15000, true).then(function (j) {
+      S.nbaEspn = S.nbaEspn || {};
+      (j.events || []).forEach(function (ev) {
+        var comp = ev.competitions && ev.competitions[0]; if (!comp) return;
+        var abbrs = comp.competitors.map(function (c) { return c.team.abbreviation; }); if (!abbrs.some(function (a) { return teams[a]; })) return;
+        var stt = ev.status && ev.status.type || {}, old = S.nbaEspn[ev.id], info = { status: stt.state === 'in' ? 2 : stt.state === 'post' ? 3 : 1, text: stt.shortDetail || '', teams: abbrs.map(nbaTri), players: old ? old.players : null };
+        S.nbaEspn[ev.id] = info;
+        if (info.status === 1 || (info.status === 3 && old && old.status === 3 && old.players)) return;
+        getJSON('https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=' + ev.id, 15000, true).then(function (sm) {
+          var pl = {};
+          ((sm.boxscore && sm.boxscore.players) || []).forEach(function (tm) { (tm.statistics || []).forEach(function (cat) {
+            var lab = (cat.labels || []).map(function (x) { return String(x).toUpperCase(); }), at = function (row, k) { var i = lab.indexOf(k); return i >= 0 ? row[i] : null; }, num = function (v) { var n = parseFloat(String(v == null ? '' : v).split('-')[0]); return isNaN(n) ? 0 : n; };
+            (cat.athletes || []).forEach(function (a) { var st = a.stats || []; if (!st.length) return;
+              var r = { pts: num(at(st, 'PTS')), reb: num(at(st, 'REB')), ast: num(at(st, 'AST')), threes: num(at(st, '3PT')), stl: num(at(st, 'STL')), blk: num(at(st, 'BLK')) }; r.pra = r.pts + r.reb + r.ast;
+              pl['n:' + pnorm(a.athlete.displayName)] = r; });
+          }); });
+          info.players = pl; refresh(['plays']);
+        }).catch(function () { /* try next minute */ });
+      });
+      refresh(['plays']);
+    }).catch(function () { /* try next minute */ });
+  }
   function liveFor(x) { // the live (or final) number for one play
-    var src = x.league === 'nfl' ? S.nflLive : S.nbaLive; if (!src) return null;
+    if (x.league === 'nba') { var a1 = liveFrom(x, S.nbaLive); if (a1 && a1.val != null) return a1; var a2 = liveFrom(x, S.nbaEspn); return a2 && (a2.val != null || !a1) ? a2 : a1; }
+    return liveFrom(x, S.nflLive);
+  }
+  function liveFrom(x, src) {
+    if (!src) return null;
     var pp = pickParse(x.pick, x.league); if (!pp || !pp.stat) return null;
     var tm = (x.teams || [x.team]).map(function (t) { return x.league === 'nfl' ? espnAbbr('nfl', t) : nbaTri(t); }), g = null;
     Object.keys(src).forEach(function (id) { var v = src[id]; if (tm.some(function (t) { return v.teams.indexOf(t) >= 0; })) g = v; });
@@ -2820,7 +2852,7 @@
   every(loadAlerts, 5 * 60000);
   every(loadExtras, 60 * 60000);
   every(loadDinnerIdeas, 30 * 60000);
-  setInterval(function () { loadLiveProps(); loadLiveNFL(); }, 60000); setTimeout(function () { loadLiveProps(); loadLiveNFL(); }, 8000); // live stat lines, every minute
+  setInterval(function () { loadLiveProps(); loadLiveNBAespn(); loadLiveNFL(); }, 60000); setTimeout(function () { loadLiveProps(); loadLiveNBAespn(); loadLiveNFL(); }, 8000); // live stat lines, every minute
   loadBackend().then(function () { every(loadScores, 2 * 60000); });
   setInterval(loadBackend, 10 * 60000);
   setInterval(function () { if (S.screen === 'home' && !S.detail) { S.photoIdx++; showPhoto('homephoto'); } }, 15000);
