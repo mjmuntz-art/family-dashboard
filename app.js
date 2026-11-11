@@ -905,13 +905,13 @@
     var col = knownColor(x.league, team) || { c1: '#2a3b55', c2: '#5d6f88' };
     return { x: x, team: team, img: img, alt: who && who.img && img !== who.img ? who.img : '', col: col, jersey: who && who.jersey, pos: who && who.pos, logo: team ? 'https://a.espncdn.com/i/teamlogos/' + x.league + '/500/' + team.toLowerCase() + '.png' : '' };
   }
-  function playCard(m, L, p, mi, ri, big) {
+  function playCard(m, L, p, mi, ri, big, n5) {
     var c = cardData(m, p), x = c.x, st = String(p.status || ''), res = /^HIT/i.test(st) ? 'h' : /^MISS/i.test(st) ? 'm' : /^PUSH/i.test(st) ? 'p' : '';
     var chip = res ? '<span style="padding:4px 12px;border-radius:999px;font-size:13px;font-weight:900;letter-spacing:.08em;background:' + (res === 'h' ? '#1f6b47' : res === 'm' ? '#7a2b22' : '#5a5a5a') + ';color:#fff">' + esc(st.split(' ')[0].toUpperCase()) + '</span>'
       : '<span style="padding:4px 12px;border-radius:999px;font-size:13px;font-weight:800;letter-spacing:.06em;border:1px solid ' + L.line + ';color:rgba(255,255,255,.75)">' + esc(/BET|LEAN/.test(st) ? st.split(' · ')[0] : 'PENDING') + '</span>';
     var ini = String(x.player || '?').split(' ').map(function (w) { return w.charAt(0); }).slice(0, 2).join('');
     var stats = (p.stats || []).slice(0, big ? 6 : 2).map(function (s2) { return '<div style="min-width:0"><div style="font-size:11px;font-weight:800;letter-spacing:.08em;color:rgba(255,255,255,.55);text-transform:uppercase" class="ellip">' + esc(s2.label) + '</div><div style="font-family:' + L.num + ';font-size:20px;font-weight:700" class="ellip">' + esc(s2.value) + '</div></div>'; }).join('');
-    var hsH = big ? 280 : 128;
+    var hsH = big ? 280 : n5 ? 110 : 128;
     return '<button type="button" class="tap" data-open="play:' + mi + ':' + ri + '" style="display:flex;flex-direction:column;align-items:stretch;padding:0;border-radius:16px;overflow:hidden;background:' + L.panel + ';border:1px solid ' + L.line + ';min-height:0;min-width:0;text-align:left;font-family:' + L.text + ';color:#fff' + (res ? ';box-shadow:inset 0 -4px 0 ' + (res === 'h' ? '#3DBB86' : res === 'm' ? '#F06A57' : '#888') : '') + '">' +
       '<div style="position:relative;height:' + hsH + 'px;flex-shrink:0;background:linear-gradient(160deg,' + c.col.c1 + ' 0%,' + c.col.c1 + 'cc 45%,' + L.panel + ' 100%);overflow:hidden">' +
       (c.logo ? '<img src="' + esc(c.logo) + '" alt="" style="position:absolute;right:-18px;top:-14px;width:' + (hsH * 0.9) + 'px;height:' + (hsH * 0.9) + 'px;object-fit:contain;opacity:.22" onerror="this.remove()">' : '') +
@@ -920,9 +920,9 @@
       (c.logo ? '<img src="' + esc(c.logo) + '" alt="" style="position:absolute;left:12px;top:12px;width:40px;height:40px;object-fit:contain;filter:drop-shadow(0 2px 4px rgba(0,0,0,.5))" onerror="this.remove()">' : '') +
       (x.rank ? '<span style="position:absolute;right:12px;top:12px;padding:3px 10px;border-radius:8px;background:rgba(0,0,0,.45);font-family:' + L.num + ';font-size:16px;font-weight:800">#' + esc(String(x.rank)) + '</span>' : '') + '</div>' +
       '<div style="display:flex;flex-direction:column;gap:5px;padding:10px 16px 12px;flex:1;min-height:0">' +
-      '<div style="display:flex;align-items:baseline;gap:8px;min-width:0;flex-shrink:0"><span class="ellip" style="font-family:' + L.head + ';font-size:' + (big ? 30 : 26) + 'px;font-weight:800;text-transform:uppercase;letter-spacing:.01em;line-height:1">' + esc(x.player || '') + '</span>' +
+      '<div style="display:flex;align-items:baseline;gap:8px;min-width:0;flex-shrink:0' + (n5 ? ';flex-direction:column;gap:2px' : '') + '"><span class="' + (n5 ? 'clamp2' : 'ellip') + '" style="font-family:' + L.head + ';font-size:' + (big ? 30 : n5 ? 21 : 26) + 'px;font-weight:800;text-transform:uppercase;letter-spacing:.01em;line-height:1">' + esc(x.player || '') + '</span>' +
       '<span style="font-size:13px;font-weight:700;opacity:.6;flex-shrink:0">' + esc([c.team, c.pos].filter(Boolean).join(' · ')) + '</span></div>' +
-      '<div style="font-family:' + L.head + ';font-size:' + (big ? 28 : 24) + 'px;font-weight:800;color:' + L.acc + ';text-transform:uppercase;line-height:1.1;flex-shrink:0" class="ellip">' + esc(x.pick || '') + '</div>' +
+      '<div style="font-family:' + L.head + ';font-size:' + (big ? 28 : n5 ? 19 : 24) + 'px;font-weight:800;color:' + L.acc + ';text-transform:uppercase;line-height:1.1;flex-shrink:0" class="' + (n5 ? 'clamp2' : 'ellip') + '">' + esc(x.pick || '') + '</div>' +
       '<div style="display:flex;align-items:center;gap:10px;flex-shrink:0"><span style="font-family:' + L.num + ';font-size:22px;font-weight:800">' + esc(p.odds || '') + '</span><span style="font-size:14px;opacity:.7" class="ellip">' + esc(p.book || '') + '</span><span style="margin-left:auto">' + chip + '</span></div>' +
       (stats ? '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:auto;padding-top:8px;border-top:1px solid ' + L.line + '">' + stats + '</div>' : '') + '</div></button>';
   }
@@ -930,8 +930,8 @@
     var md = models() || [], mi = +p.slice(2), m = md[mi]; if (!m) return emptyBleed('Loading…');
     setTimeout(loadRosters, 0);
     var L = MODEL_LOOK[m.name] || { bg: '#10141c', panel: '#1a2030', line: '#2a3446', acc: m.acc || '#fff', head: 'inherit', text: 'inherit', num: 'inherit', tag: '' };
-    var ps = (m.plays || []).slice(0, 8), n = ps.length, cols = n <= 3 ? Math.max(1, n) : n === 4 ? 2 : n <= 6 ? 3 : 4, rows = Math.ceil(n / cols) || 1, big = rows === 1;
-    var grid = n ? '<div style="display:grid;grid-template-columns:repeat(' + cols + ',minmax(0,1fr));grid-template-rows:repeat(' + rows + ',minmax(0,1fr));gap:14px;flex:1;min-height:0' + (n <= 2 ? ';max-width:' + (n * 360) + 'px;margin:0 auto;width:100%' : '') + '">' + ps.map(function (pp, ri) { return playCard(m, L, pp, mi, ri, big); }).join('') + '</div>'
+    var ps = (m.plays || []).slice(0, 10), n = ps.length, cols = n <= 3 ? Math.max(1, n) : n === 4 ? 2 : n <= 6 ? 3 : n <= 8 ? 4 : 5, rows = Math.ceil(n / cols) || 1, big = rows === 1;
+    var grid = n ? '<div style="display:grid;grid-template-columns:repeat(' + cols + ',minmax(0,1fr));grid-template-rows:repeat(' + rows + ',minmax(0,1fr));gap:14px;flex:1;min-height:0' + (n <= 2 ? ';max-width:' + (n * 360) + 'px;margin:0 auto;width:100%' : '') + '">' + ps.map(function (pp, ri) { return playCard(m, L, pp, mi, ri, big, cols === 5); }).join('') + '</div>'
       : '<div style="flex:1;display:flex;align-items:center;justify-content:center;font-family:' + L.head + ';font-size:34px;opacity:.75">' + esc(m.note || 'No plays yet today') + '</div>';
     return '<div style="position:absolute;inset:0;background:radial-gradient(ellipse at 80% -10%,' + L.panel + ' 0%,' + L.bg + ' 60%)"></div>' + btag('Plays · ' + m.name) + top +
       '<div style="position:absolute;left:40px;right:40px;top:84px;bottom:30px;display:flex;flex-direction:column;gap:14px;font-family:' + L.text + '">' +
