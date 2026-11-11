@@ -159,16 +159,17 @@
     $('btitle').textContent = t.title; $('bsub').textContent = t.sub;
     fitTitle(); if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitTitle);
   }
-  // Time of day for the backgrounds, from today's real sunrise and sunset
-  function timeOfDay() {
+
+  function timeOfDay() { // follows the real sunrise and sunset, so it shifts through the year (winter example in brackets)
     if (Q.get('tod')) return Q.get('tod');
-    var n = now(), w = S.wx, at = function (h, m) { return new Date(n.getFullYear(), n.getMonth(), n.getDate(), h, m || 0); };
-    var rise = w && w.riseD ? at(w.riseD.getHours(), w.riseD.getMinutes()) : at(7), set = w && w.setD ? at(w.setD.getHours(), w.setD.getMinutes()) : at(17), M = 60000;
-    if (n < rise - 30 * M || n >= set + 45 * M) return 'night';
-    if (n < Math.min(rise.getTime() + 210 * M, at(10, 30).getTime())) return 'morning';
-    if (n < Math.min(at(14).getTime(), set - 90 * M)) return 'midday';
-    if (n < set - 40 * M) return 'afternoon';
-    return n < set.getTime() + 5 * M ? 'evening' : 'dusk'; // dusk: just after sunset (uses the evening image if a month has no dusk one)
+    var n = now().getTime(), w = S.wx, d = now(), at = function (h, m) { return new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m || 0).getTime(); };
+    var R = w && w.riseD ? at(w.riseD.getHours(), w.riseD.getMinutes()) : at(7), SS = w && w.setD ? at(w.setD.getHours(), w.setD.getMinutes()) : at(17), noon = (R + SS) / 2, M = 60000;
+    if (n < R - 60 * M || n >= SS + 80 * M) return 'night';   // night [6 PM – 5:30 AM]
+    if (n < R + 60 * M) return 'morning';                      // dawn: the sunrise picture [5:30 – 7:30]
+    if (n < noon - 40 * M) return 'midday';                    // morning: bright day [7:30 – 11]
+    if (n < SS - 125 * M) return 'afternoon';                  // midday [11 – 2:30]
+    if (n < SS) return 'evening';                              // late afternoon into sunset [2:30 – sunset]
+    return 'dusk';                                             // after sunset until dark [sunset – 6] (uses the evening picture if a month has no dusk one)
   }
   function swapScene(id, tod, instant) { // the new background fades in over the old one (after its image has loaded)
     var html = buildScene(id, C.lowPower, tod, now()), url = window.sceneImage && sceneImage(id, tod), el = $('scene');
