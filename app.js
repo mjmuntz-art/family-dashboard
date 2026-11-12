@@ -1118,7 +1118,7 @@
     if (screen === 'scores') { var gp = []; for (var i = 0; i < Math.max(1, Math.ceil(S.games.length / 6)); i++) gp.push('grid:' + i); return gp.concat(featureGames().map(function (g) { return 'g:' + g.id; }), standingsLeagues().map(function (l) { return 'st:' + l; })); }
     if (screen === 'plays') { var pm = models(); return pm && pm.length ? pm.map(function (m, i) { return 'm:' + i; }) : ['main']; }
     if (screen === 'news') { var nw = newsStories(), np = nw && nw.length ? nw.map(function (s, i) { return 's:' + i; }) : ['empty']; if (S.hist && S.hist.length) np.push('hist'); if (gasOK()) np.push('gas'); return np; }
-    if (screen === 'weather') return S.alerts.map(function (a, i) { return 'al:' + i; }).concat(S.wx ? ['now', 'details', 'hours', 'week', 'sky'].concat(window.Astronomy && S.wx.setD ? ['tonight'] : [], apodNow() ? ['apod'] : [], ['radar']) : S.alerts.length ? [] : ['empty']);
+    if (screen === 'weather') return S.alerts.map(function (a, i) { return 'al:' + i; }).concat(S.wx ? ['now', 'details', 'hours', 'week', 'sky'].concat(window.Astronomy && S.wx.setD ? ['tonight'] : [], ['radar']) : S.alerts.length ? [] : ['empty']);
     if (screen === 'photos') { var pgN = Math.min(3, photoGroups().length) + otdGroups().length; var out = []; for (var q = 0; q < Math.max(1, pgN); q++) out.push('c:' + q); return out; }
     if (screen === 'family') { var fp = ['main']; if (events()) fp.push('week'); if (mealPair().length) fp.push('idea'); if (boardLists().grocery || boardLists().notes.length) fp.push('board'); if (countdownItems().length) fp.push('cd'); return fp; }
     if (screen === 'live') { var lv = liveList(); return lv.length ? lv.map(function (g) { return 'g:' + g.id; }) : ['none']; }
