@@ -639,7 +639,13 @@
   };
   function models() {
     var b = S.back; if (!b || !b.plays) return null;
-    return (b.plays.models || []).map(function (m) { return Object.assign({}, MODEL_STYLE[m.name] || { bg: 'rgba(30,30,40,0.94)', edge: '#666', acc: '#ffffff', font: 'inherit' }, m); });
+    return (b.plays.models || []).filter(modelShows).map(function (m) { return Object.assign({}, MODEL_STYLE[m.name] || { bg: 'rgba(30,30,40,0.94)', edge: '#666', acc: '#ffffff', font: 'inherit' }, m); });
+  }
+  // a model's page only shows when it has plays; NFL Props also sits out from Tuesday until Thursday noon (between game weeks)
+  function modelShows(m) {
+    if (!m || !(m.plays || []).length) return false;
+    if (/nfl/i.test(m.name || '')) { var d = new Date(now()), wd = d.getDay(); if (wd === 2 || wd === 3 || (wd === 4 && d.getHours() < 12)) return false; }
+    return true;
   }
 
   // ------------------------------------------------------------ screens
@@ -2750,9 +2756,11 @@
     if (S.screen !== 'home' && S.page < pg.length - 1) { S.page++; render(); schedule(); return; }
     if (S.screen === 'alert') { var back = S.resume; S.resume = null; return setScreen(isNight() ? 'night' : back && back !== 'alert' && back !== 'night' ? back : 'home'); }
     if (isNight()) return setScreen('night');
-    if (S.screen === 'live') { if (liveList().some(inCrunch)) { S.page = 0; S.lastPage = null; render(); schedule(); return; } return setScreen(ORDER[1]); } // close finish: stay on it
+    if (S.screen === 'live') { if (liveList().some(inCrunch)) { S.page = 0; S.lastPage = null; render(); schedule(); return; } return setScreen(ORDER[1] === 'plays' && !(models() || []).length ? ORDER[2] : ORDER[1]); } // close finish: stay on it
     if (S.screen === 'home' && liveList().length) return setScreen('live');
-    setScreen(ORDER[(ORDER.indexOf(S.screen) + 1) % ORDER.length]);
+    var nx = (ORDER.indexOf(S.screen) + 1) % ORDER.length;
+    if (ORDER[nx] === 'plays' && !(models() || []).length) nx = (nx + 1) % ORDER.length; // no plays right now: skip that screen
+    setScreen(ORDER[nx]);
   }
   var peekT = null;
   document.addEventListener('click', function (e) {
