@@ -2412,13 +2412,23 @@
     ['Frozen', '🧊', ['frozen', 'ice cream', 'popsicle', 'waffles']],
     ['Snacks', '🍿', ['chip', 'cracker', 'cookie', 'pretzel', 'popcorn', 'granola', 'snack', 'candy', 'nuts', 'goldfish', 'fruit snack']],
     ['Meat & Deli', '🥩', ['deli', 'chicken', 'beef', 'steak', 'pork', 'turkey', 'bacon', 'sausage', 'ham', 'hot dog', 'brat', 'fish', 'salmon', 'shrimp', 'tilapia', 'meatball', 'ribs', 'salami', 'pepperoni', 'roast']],
-    ['Dairy & Eggs', '🥛', ['milk', 'egg', 'cheese', 'yogurt', 'butter', 'cream', 'sour cream', 'cottage', 'creamer']],
-    ['Produce', '🥬', ['spinach', 'lettuce', 'banana', 'apple', 'onion', 'potato', 'tomato', 'carrot', 'berr', 'grape', 'lemon', 'lime', 'avocado', 'pepper', 'broccoli', 'celery', 'cucumber', 'garlic', 'mushroom', 'corn', 'zucchini', 'squash', 'pumpkin', 'orange', 'pear', 'peach', 'melon', 'kale', 'cilantro', 'parsley', 'herb', 'salad', 'fruit', 'veggie', 'vegetable', 'green bean', 'cabbage', 'jalapeno', 'ginger']],
+    ['Dairy & Eggs', '🥛', ['milk', 'egg', 'cheese', 'yogurt', 'butter', 'cream', 'sour cream', 'cottage', 'creamer', 'crescent roll', 'cookie dough', 'pie crust']],
+    ['Produce', '🥬', ['spinach', 'lettuce', 'banana', 'apple', 'onion', 'potato', 'tomato', 'carrot', 'berr', 'grape', 'lemon', 'lime', 'avocado', 'pepper', 'broccoli', 'celery', 'cucumber', 'garlic', 'mushroom', 'corn', 'zucchini', 'squash', 'pumpkin', 'orange', 'pear', 'peach', 'melon', 'kale', 'cilantro', 'parsley', 'herb', 'thyme', 'rosemary', 'basil', 'dill', 'mint', 'ginger', 'jalape', 'salad', 'fruit', 'veggie', 'vegetable', 'green bean', 'cabbage', 'jalapeno', 'ginger']],
     ['Bakery', '🍞', ['bread', 'bagel', 'bun', 'roll', 'tortilla', 'muffin', 'croissant', 'pita', 'naan']],
     ['Drinks', '🥤', ['juice', 'soda', 'water', 'pop', 'gatorade', 'beer', 'wine', 'seltzer', 'lemonade', 'tea']],
-    ['Pantry', '🥫', ['pasta', 'spaghetti', 'noodle', 'rice', 'cereal', 'oat', 'coffee', 'sauce', 'soup', 'broth', 'stock', 'flour', 'sugar', 'oil', 'bean', 'can', 'peanut butter', 'jelly', 'honey', 'syrup', 'spice', 'seasoning', 'salt', 'ketchup', 'mustard', 'mayo', 'dressing', 'vinegar', 'taco']]
+    ['Pantry', '🥫', ['pasta', 'spaghetti', 'noodle', 'rice', 'cereal', 'oat', 'coffee', 'sauce', 'soup', 'broth', 'stock', 'flour', 'sugar', 'oil', 'bean', 'can', 'peanut butter', 'jelly', 'honey', 'syrup', 'spice', 'seasoning', 'salt', 'ketchup', 'mustard', 'mayo', 'dressing', 'vinegar', 'taco', 'orzo', 'macaroni', 'penne', 'lasagna noodle', 'pesto', 'marinara', 'salsa', 'stevia', 'vanilla', 'yeast', 'baking soda', 'baking powder', 'chocolate chip', 'cocoa', 'tuna', 'olive', 'pickle', 'crouton', 'breadcrumb', 'bread crumb', 'tomato paste', 'diced tomato', 'canned', 'evaporated milk', 'condensed milk', 'cornstarch', 'quinoa', 'lentil']]
   ];
-  function aisleOf(item) { var l = ' ' + item.toLowerCase() + ' '; for (var i = 0; i < AISLES.length; i++) for (var j = 0; j < AISLES[i][2].length; j++) if (l.indexOf(AISLES[i][2][j]) >= 0) return i; return AISLES.length; }
+  // The item is usually its last keyword ("hamburger BUNS", "chicken BROTH", "peanut BUTTER" → the longer match wins a tie).
+  function aisleOf(item) {
+    var l = ' ' + item.toLowerCase().replace(/[^a-z' ]/g, ' ') + ' ', best = -1, bestEnd = -1, bestLen = 0;
+    if (/\bfrozen\b/.test(l)) return 2; // frozen anything is in the freezer aisle
+    for (var i = 0; i < AISLES.length; i++) for (var j = 0; j < AISLES[i][2].length; j++) {
+      var k = AISLES[i][2][j], at = l.lastIndexOf(k); if (at < 0) continue;
+      var end = l.slice(at + k.length).search(/[ ]/) + at + k.length; // end of the word the match sits in
+      if (end > bestEnd || (end === bestEnd && k.length > bestLen)) { best = i; bestEnd = end; bestLen = k.length; }
+    }
+    return best < 0 ? AISLES.length : best;
+  }
   var STAPLES = /^(salt|pepper|black pepper|water|olive oil|vegetable oil|oil|sugar|flour|plain flour|butter|ice)$/i;
   var SAME = { 'ground beef': ['hamburger', 'beef mince', 'minced beef'], 'minced beef': ['ground beef', 'hamburger'], 'chicken breast': ['chicken'], 'chicken breasts': ['chicken'], 'spaghetti': ['pasta'], 'penne': ['pasta'], 'macaroni': ['pasta'], 'cheddar cheese': ['cheese', 'shredded cheese'], 'parmesan': ['parmesan cheese', 'parm'], 'scallions': ['green onion'], 'coriander': ['cilantro'] };
   function norm(x) { return String(x || '').toLowerCase().replace(/[^a-z ]/g, ' ').replace(/\b(fresh|large|small|medium|chopped|diced|sliced|minced|ground|can|cans|of|the|a|organic)\b/g, function (w) { return w === 'ground' ? 'ground' : ''; }).replace(/\s+/g, ' ').trim().replace(/(es|s)$/, ''); }
