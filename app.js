@@ -641,10 +641,17 @@
     var b = S.back; if (!b || !b.plays) return null;
     return (b.plays.models || []).filter(modelShows).map(function (m) { return Object.assign({}, MODEL_STYLE[m.name] || { bg: 'rgba(30,30,40,0.94)', edge: '#666', acc: '#ffffff', font: 'inherit' }, m); });
   }
-  // a model's page only shows when it has plays; NFL Props also sits out from Tuesday until Thursday noon (between game weeks)
+  // a model's page only shows when it has plays. NFL Props sits out Tuesday and Wednesday, and on Thursday until the new week's picks are posted;
+  // from then on the week's picks (and their results) stay up through Monday night.
+  function nflWeekStart() { var d = new Date(now()); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - (d.getDay() + 5) % 7); return d; } // this game week's Tuesday
+  function nflDay(s) { var m = /^(\d{4})-(\d\d)-(\d\d)/.exec(s || ''); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; }
   function modelShows(m) {
     if (!m || !(m.plays || []).length) return false;
-    if (/nfl/i.test(m.name || '')) { var d = new Date(now()), wd = d.getDay(); if (wd === 2 || wd === 3 || (wd === 4 && d.getHours() < 12)) return false; }
+    if (/nfl/i.test(m.name || '')) {
+      var wd = new Date(now()).getDay(); if (wd === 2 || wd === 3) return false;
+      var days = m.plays.map(function (p) { return nflDay(p.date); }).filter(Boolean);
+      if (days.length && !days.some(function (d) { return d >= nflWeekStart(); })) return false; // still last week's picks
+    }
     return true;
   }
 
@@ -975,12 +982,16 @@
     var teams = {};
     md.forEach(function (m) { (m.plays || []).forEach(function (p) { var x = playInfo(Object.assign({ model: m.name }, p)); if (x.league === 'nfl') (x.teams || [x.team]).forEach(function (t) { if (t) teams[espnAbbr('nfl', t)] = 1; }); }); });
     if (!Object.keys(teams).length) return;
-    getJSON('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard', 15000, true).then(function (j) {
-      S.nflLive = S.nflLive || {};
+    var wk0 = nflWeekStart(), wk1 = new Date(wk0.getTime() + 6 * 86400000), ymd = function (d) { return d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2); };
+    if (!S.nflLive) { // finals saved earlier this week (so a reload doesn't lose Thursday night's results)
+      var kept = load('nflfinals', 8 * 86400000) || {}; S.nflLive = {};
+      Object.keys(kept).forEach(function (id) { if (kept[id].day >= ymd(wk0)) S.nflLive[id] = kept[id]; });
+    }
+    getJSON('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=' + ymd(wk0) + '-' + ymd(wk1), 15000, true).then(function (j) {
       (j.events || []).forEach(function (ev) {
         var comp = ev.competitions && ev.competitions[0]; if (!comp) return;
         var abbrs = comp.competitors.map(function (c) { return c.team.abbreviation; }); if (!abbrs.some(function (a) { return teams[a]; })) return;
-        var stt = ev.status && ev.status.type || {}, old = S.nflLive[ev.id], info = { status: stt.state === 'in' ? 2 : stt.state === 'post' ? 3 : 1, text: stt.shortDetail || '', teams: abbrs, players: old ? old.players : null };
+        var stt = ev.status && ev.status.type || {}, old = S.nflLive[ev.id], info = { status: stt.state === 'in' ? 2 : stt.state === 'post' ? 3 : 1, text: stt.shortDetail || '', teams: abbrs, players: old ? old.players : null, day: ymd(new Date(ev.date)) };
         S.nflLive[ev.id] = info;
         if (info.status === 1 || (info.status === 3 && old && old.status === 3 && old.players)) return;
         getJSON('https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=' + ev.id, 15000, true).then(function (sm) {
@@ -995,6 +1006,7 @@
           }); });
           Object.keys(pl).forEach(function (k) { var r = pl[k]; r.anyTD = r.rushTD + r.recTD; r.rrYds = r.rushYds + r.recYds; });
           info.players = pl; refresh(['plays']);
+          if (info.status === 3) { var fin = {}; Object.keys(S.nflLive).forEach(function (id) { var v = S.nflLive[id]; if (v.status === 3 && v.players && v.day >= ymd(wk0)) fin[id] = v; }); save('nflfinals', fin); }
         }).catch(function () { /* try next minute */ });
       });
       refresh(['plays']);
