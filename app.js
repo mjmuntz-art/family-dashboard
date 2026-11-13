@@ -223,7 +223,7 @@
     var tz = encodeURIComponent(L.timezone), ll = 'latitude=' + L.lat + '&longitude=' + L.lon;
     var om = getJSON('https://api.open-meteo.com/v1/forecast?' + ll + '&timezone=' + tz + '&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&forecast_days=8' +
       '&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m,weather_code,is_day,dew_point_2m,pressure_msl,visibility' +
-      '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset,uv_index_max,precipitation_sum' +
+      '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset,uv_index_max,precipitation_sum,snowfall_sum' +
       '&hourly=temperature_2m,precipitation_probability,weather_code,is_day,wind_speed_10m,pressure_msl');
     var aq = getJSON('https://air-quality-api.open-meteo.com/v1/air-quality?' + ll + '&current=us_aqi&timezone=' + tz);
     var pt = load('nwsPoint:' + L.lat.toFixed(3) + ',' + L.lon.toFixed(3), 7 * 86400000);
@@ -250,6 +250,7 @@
         wind: Math.round(cu.wind_speed_10m), gust: Math.round(cu.wind_gusts_10m), dir: compass(cu.wind_direction_10m), deg: cu.wind_direction_10m, text: cond.text, icon: cond.icon,
         dew: num(cu.dew_point_2m) ? Math.round(cu.dew_point_2m) : null, press: num(cu.pressure_msl) ? Math.round(cu.pressure_msl * 0.02953 * 100) / 100 : null, vis: num(cu.visibility) ? Math.round(cu.visibility / 1609) : null };
       if (dl0(om, 'precipitation_sum')) wx.rainIn = Math.round(om.daily.precipitation_sum[0] * 100) / 100;
+      if (dl0(om, 'snowfall_sum')) wx.snowIn = Math.round(om.daily.snowfall_sum[0] * 10) / 10;
       var dl = om.daily;
       wx.hi = Math.round(dl.temperature_2m_max[0]); wx.lo = Math.round(dl.temperature_2m_min[0]); wx.uv = Math.round(dl.uv_index_max[0]);
       var rise = parseLocal(dl.sunrise[0]), set = parseLocal(dl.sunset[0]);
@@ -1437,6 +1438,12 @@
         ['N', 'E', 'S', 'W'].map(function (k, i) { var a = i * Math.PI / 2; return '<text x="' + (Math.sin(a) * 25).toFixed(1) + '" y="' + (-Math.cos(a) * 25 + 4).toFixed(1) + '" text-anchor="middle" font-size="10" font-weight="800" fill="rgba(255,255,255,.6)">' + k + '</text>'; }).join('') +
         '<g transform="rotate(' + ((n.deg || 0) + 180) + ')"><path d="M0,-30 L9,-8 L0,-13 L-9,-8 Z" fill="var(--accent)"/><line x1="0" y1="-12" x2="0" y2="22" stroke="var(--accent)" stroke-width="4" stroke-linecap="round"/></g></svg>';
       var hrs2 = w.hours || [], wet2 = hrs2.filter(function (h) { return num(h.pop) && h.pop >= 40; })[0], today2 = (w.days || [])[0] || {};
+      // rain, snow or both today: the tile says which, with the expected inches
+      var wetIcons = hrs2.filter(function (h) { return num(h.pop) && h.pop >= 30; }).map(function (h) { return h.icon; }).concat(today2.icon ? [today2.icon] : []);
+      var sn = wetIcons.indexOf('snow') >= 0 || (num(w.snowIn) && w.snowIn >= 0.1), rn = wetIcons.some(function (i) { return i === 'rain' || i === 'storm'; }), ice = wetIcons.indexOf('sleet') >= 0;
+      var pk = { label: sn && rn ? 'Rain & snow today' : sn ? 'Snow today' : ice ? 'Icy mix today' : 'Rain today', amt: '' };
+      if (sn && num(w.snowIn) && w.snowIn >= 0.1) pk.amt = ' · ' + w.snowIn + '" snow';
+      else if (num(w.rainIn) && w.rainIn >= 0.01) pk.amt = ' · ' + w.rainIn + '"';
       var uvL = !num(w.uv) ? '' : w.uv <= 2 ? 'Low · no sunscreen needed' : w.uv <= 5 ? 'Moderate · sunscreen if outside long' : w.uv <= 7 ? 'High · sunscreen & shade' : 'Very high · limit midday sun';
       var dewL = !num(n.dew) ? '' : 'Dew point ' + n.dew + '° · ' + (n.dew < 50 ? 'comfortable' : n.dew < 60 ? 'a little sticky' : n.dew < 65 ? 'muggy' : 'oppressive');
       var trend = { Rising: '↗', Falling: '↘', Steady: '→' }[w.pressTrend] || '';
@@ -1444,7 +1451,7 @@
       return '<div style="display:flex;flex-direction:column;gap:14px;flex:1;min-height:0">' +
         '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));gap:14px;flex:1;min-height:0">' +
         tile('Wind', num(n.wind) ? n.wind : '—', 'mph ' + esc(n.dir || ''), (num(n.wind) ? (n.wind < 8 ? 'Calm' : n.wind < 15 ? 'Breezy' : n.wind < 25 ? 'Windy' : 'Very windy') : '') + (num(n.gust) ? ' · gusts to ' + n.gust + ' mph' : ''), { side: arrow }) +
-        tile('Rain today', num(today2.pop) ? today2.pop : '—', '%', wet2 ? 'Most likely around ' + esc(wet2.t) + (num(w.rainIn) && w.rainIn >= 0.01 ? ' · ' + w.rainIn + '"' : '') : 'Staying dry', { bottom: scale(today2.pop, 100, '#2b4b6b,#6fb7ff,#2f7de1') }) +
+        tile(pk.label, num(today2.pop) ? today2.pop : '—', '%', wet2 ? 'Most likely around ' + esc(wet2.t) + pk.amt : 'Staying dry', { bottom: scale(today2.pop, 100, '#2b4b6b,#6fb7ff,#2f7de1') }) +
         tile('Humidity', num(n.hum) ? n.hum : '—', '%', esc(dewL), { bottom: scale(n.hum, 100, '#c9a26b,#7fc4a0,#4f8fd8') }) +
         tile('UV index', num(w.uv) ? w.uv : '—', '', esc(uvL), { bottom: scale(w.uv, 11, '#5cc46b,#e8d24a,#f08a3c,#e0453a,#9b4fd0') }) +
         tile('Air quality', num(w.aqi) ? w.aqi : '—', esc(aqiLabel(w.aqi)), num(w.aqi) ? (w.aqi <= 50 ? 'Great for being outside' : w.aqi <= 100 ? 'Fine for most people' : 'Sensitive groups take it easy') : '', { bottom: scale(w.aqi, 200, '#5cc46b,#e8d24a,#f08a3c,#e0453a,#9b4fd0') }) +
