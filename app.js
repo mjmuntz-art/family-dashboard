@@ -538,12 +538,13 @@
 
   // ------------------------------------------------------------ backend (Apps Script)
   function loadBackend() {
-    if (DEMO) { S.back = demoBack(); render(); return Promise.resolve(); }
+    if (DEMO) { S.back = demoBack(); render(); setTimeout(function () { loadLiveProps(); loadLiveNBAespn(); loadLiveNFL(); }, 500); return Promise.resolve(); }
     if (!C.appsScriptUrl) { S.backErr = 'setup'; render(); return Promise.resolve(); }
     return getJSON(C.appsScriptUrl + '?action=all&key=' + encodeURIComponent(C.appsScriptKey || ''), 45000).then(function (j) {
       if (j.error) throw new Error(j.error === 'bad key' ? 'the key in config.js doesn’t match KEY in Code.gs' : j.error);
       S.back = keepGood(j, S.back); S.backErr = null; save('back', S.back); refresh(['home', 'family', 'photos', 'news', 'plays']);
       if (j.photos && j.photos.more && (!S.photosAt || Date.now() - S.photosAt > 3600000)) loadAllPhotos();
+      if (!S.liveStarted) { S.liveStarted = 1; setTimeout(function () { loadLiveProps(); loadLiveNBAespn(); loadLiveNFL(); }, 1500); } // stat lines right away, not a minute later
     }).catch(function (e) {
       var why = /JSON|Unexpected token/i.test(e.message) ? 'the Apps Script sent a sign-in page — set its deployment to “Anyone”' : e.message;
       S.backErr = 'Couldn’t reach your Google data (' + why + ') — retrying';
@@ -1025,7 +1026,11 @@
       var kept = load('nflfinals', 8 * 86400000) || {}; S.nflLive = {};
       Object.keys(kept).forEach(function (id) { if (kept[id].day >= ymd(wk0)) S.nflLive[id] = kept[id]; });
     }
-    getJSON('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=' + ymd(wk0) + '-' + ymd(wk1), 15000, true).then(function (j) {
+    var dayUrls = [], today = new Date(now()); // one scoreboard per game day this week, Thursday through today (Thursday night's final stays all week)
+    for (var dd = new Date(wk0.getTime() + 2 * 86400000); dd <= today && dd <= wk1; dd = new Date(dd.getTime() + 86400000)) dayUrls.push('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=' + ymd(dd));
+    if (!dayUrls.length) dayUrls.push('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard');
+    Promise.all(dayUrls.map(function (u) { return getJSON(u, 15000, true).catch(function () { return { events: [] }; }); })).then(function (all) {
+      var j = { events: [] }; all.forEach(function (x) { j.events = j.events.concat((x && x.events) || []); });
       (j.events || []).forEach(function (ev) {
         var comp = ev.competitions && ev.competitions[0]; if (!comp) return;
         var abbrs = comp.competitors.map(function (c) { return c.team.abbreviation; }); if (!abbrs.some(function (a) { return teams[a]; })) return;
@@ -1087,8 +1092,10 @@
     var tm = (x.teams || [x.team]).map(function (t) { return x.league === 'nfl' ? espnAbbr('nfl', t) : nbaTri(t); }), g = null;
     Object.keys(src).forEach(function (id) { var v = src[id]; if (tm.some(function (t) { return v.teams.indexOf(t) >= 0; })) g = v; });
     if (!g || g.status === 1) return null;
-    var row = g.players && ((x.pid && g.players['id:' + x.pid]) || g.players['n:' + pnorm(x.player)]); if (!row) return { g: g, pp: pp, val: null };
-    var v = row[pp.stat], hit = pp.dir === 'over' ? v > pp.line : v < pp.line;
+    var row = g.players && ((x.pid && g.players['id:' + x.pid]) || g.players['n:' + pnorm(x.player)]);
+    if (!row && x.league === 'nfl' && g.status === 3 && g.players && Object.keys(g.players).length) row = {}; // final and not in the box score: he finished with none
+    if (!row) return { g: g, pp: pp, val: null };
+    var v = row[pp.stat] || 0, hit = pp.dir === 'over' ? v > pp.line : v < pp.line;
     return { g: g, pp: pp, val: v, hit: hit, final: g.status === 3, on: row.on };
   }
   function playCard(m, L, p, mi, ri, big, n5) {
