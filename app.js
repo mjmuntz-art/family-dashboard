@@ -11,7 +11,7 @@
   var ORDER = ['home', 'family', 'photos', 'scores', 'plays', 'news', 'weather'];
   var LABELS = { home: 'Home', family: 'Family', photos: 'Photos', scores: 'Scores', plays: 'Plays', news: 'News', weather: 'Weather' };
   var S = { screen: ORDER.concat(['live', 'alert', 'night']).indexOf(Q.get('screen')) >= 0 ? Q.get('screen') : 'home', detail: null, theme: null, lastScreen: null,
-    wx: null, alerts: [], games: [], back: null, backErr: null, wxErr: null, scoresErr: null, photoIdx: 0, timer: null, page: +(Q.get('page') || 0), lastPage: null, sum: {}, homePhase: 'scene',
+    wx: null, alerts: [], games: [], back: null, backErr: null, wxErr: null, scoresErr: null, photoIdx: 0, decks: {}, homePhoto: null, groups: null, timer: null, page: +(Q.get('page') || 0), lastPage: null, sum: {}, homePhase: 'scene',
     alShown: {}, wasLive: {}, finalShown: load('finalShown', 3 * 86400000) || {}, resume: null, wakeUntil: 0, standings: {}, standAt: {} };
   var $ = function (id) { return document.getElementById(id); };
 
@@ -543,24 +543,28 @@
     return getJSON(C.appsScriptUrl + '?action=all&key=' + encodeURIComponent(C.appsScriptKey || ''), 45000).then(function (j) {
       if (j.error) throw new Error(j.error === 'bad key' ? 'the key in config.js doesn’t match KEY in Code.gs' : j.error);
       S.back = keepGood(j, S.back); S.backErr = null; save('back', S.back); refresh(['home', 'family', 'photos', 'news', 'plays']);
+      if (j.photos && j.photos.more && (!S.photosAt || Date.now() - S.photosAt > 3600000)) loadAllPhotos();
     }).catch(function (e) {
       var why = /JSON|Unexpected token/i.test(e.message) ? 'the Apps Script sent a sign-in page — set its deployment to “Anyone”' : e.message;
       S.backErr = 'Couldn’t reach your Google data (' + why + ') — retrying';
       if (!S.back) { S.back = load('back'); if (S.back) render(); }
     });
   }
+  function loadAllPhotos() { // a big photo folder comes separately (and once an hour)
+    S.photosAt = Date.now();
+    return getJSON(C.appsScriptUrl + '?action=photos&key=' + encodeURIComponent(C.appsScriptKey || ''), 60000).then(function (r) {
+      if (!r || r.error || !(r.items || []).length || !S.back) return;
+      S.back.photos = r; save('back', S.back); refresh(['home', 'photos']);
+    }).catch(function () { S.photosAt = 0; });
+  }
   // If one part of the Apps Script reply failed this time (a calendar, a news feed, the photo folder), keep the last good copy of that part
   function keepGood(j, old) {
     if (!old) return j;
+    if (j.photos && j.photos.more && old.photos && (old.photos.items || []).length) j.photos = old.photos; // the full list arrives on its own
     ['calendar', 'photos', 'news', 'plays', 'morris', 'reminders', 'gas', 'tle', 'commute', 'apod', 'recipes'].forEach(function (k) { if ((!j[k] || j[k].error) && old[k] && !old[k].error) j[k] = old[k]; });
     if (j.news && j.news.sources && old.news && old.news.sources) Object.keys(old.news.sources).forEach(function (name) {
       if (!(j.news.sources[name] || []).length && (old.news.sources[name] || []).length) j.news.sources[name] = old.news.sources[name];
     });
-    if (j.photos && j.photos.items && old.photos && old.photos.items) { // the server shuffles photos every time; keep our order so the screen doesn't jump
-      var byId = {}; j.photos.items.forEach(function (p) { byId[p.id] = p; });
-      var kept = old.photos.items.filter(function (p) { return byId[p.id]; }).map(function (p) { var x = byId[p.id]; delete byId[p.id]; return x; });
-      j.photos.items = kept.concat(j.photos.items.filter(function (p) { return byId[p.id]; }));
-    }
     return j;
   }
   // calendar colors: Mike blue, Cate pink, Weston green, Bills red, Family orange, Dinners follow the season
@@ -582,7 +586,8 @@
   }
   function photos() {
     var b = S.back; if (!b || !b.photos) return null;
-    var all = b.photos.items || [], names = S.theme && S.theme.birthdayNames;
+    var all = b.photos.items || [], names = S.theme && S.theme.birthdayNames, alb = b.photos.album || 'Family photos';
+    all.forEach(function (p) { if (!p.album) p.album = alb; });
     if (names) { var mine = all.filter(function (p) { return p.person && names.indexOf(p.person) >= 0; }); if (mine.length) return mine; }
     return all;
   }
@@ -599,11 +604,42 @@
       cb(uri);
     }).catch(function () { /* try the next photo next time */ });
   }
+  // ---- the photo deck: every photo is shown once before any photo repeats (kept on the device, so a reload carries on)
+  function deckKey() { return 'photodeck:' + (S.theme && S.theme.birthdayNames ? 'bday' : 'all'); }
+  function deck(list) {
+    var key = deckKey(), d = S.decks[key] || load(key, 60 * 86400000) || { left: [], seen: {} }, have = {};
+    list.forEach(function (p) { have[p.id] = p; });
+    d.left = d.left.filter(function (id) { return have[id]; });
+    list.forEach(function (p) { if (!d.seen[p.id] && d.left.indexOf(p.id) < 0) d.left.splice(Math.floor(Math.random() * (d.left.length + 1)), 0, p.id); }); // new photos join the deck
+    if (!d.left.length) { // a full pass is done: shuffle everything for the next one
+      d.seen = {}; d.left = list.map(function (p) { return p.id; });
+      for (var i = d.left.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)), t = d.left[i]; d.left[i] = d.left[j]; d.left[j] = t; }
+    }
+    S.decks[key] = d; d.have = have; return d;
+  }
+  function deckTake(list, want) { // the next photo in the deck (optionally the next tall/wide one)
+    if (!list || !list.length) return null;
+    var d = deck(list), i = 0;
+    if (want) { i = -1; for (var k = 0; k < d.left.length; k++) if ((d.have[d.left[k]].o === 'p') === (want === 'p')) { i = k; break; } if (i < 0) return null; }
+    var id = d.left.splice(i, 1)[0]; d.seen[id] = 1;
+    save(deckKey(), { left: d.left, seen: d.seen });
+    return d.have[id];
+  }
+  function deckPeek(list) { if (!list || !list.length) return null; var d = deck(list); return d.have[d.left[0]] || null; }
+  function dealGroups(n) { // the photo pages for one visit: two tall photos side by side, or one wide photo
+    var ph = photos() || [], out = [];
+    for (var k = 0; k < n && ph.length; k++) {
+      var a = deckTake(ph); if (!a) break;
+      if (a.o === 'p') { var b = deckTake(ph, 'p'); out.push(b ? [a, b] : [a]); } else out.push([a]);
+    }
+    return out;
+  }
   function showPhoto(elId) {
     var ph = photos(), el = $(elId); if (!el || !ph || !ph.length) return;
-    var item = ph[S.photoIdx % ph.length];
+    var same = S.homePhoto && ph.filter(function (p) { return p.id === S.homePhoto.id; })[0]; S.homePhoto = same || deckTake(ph);
+    var item = S.homePhoto; if (!item) return;
     photoSrc(item, function (src) { var e2 = $(elId); if (e2) e2.style.backgroundImage = 'url("' + src + '")'; });
-    var nxt = ph[(S.photoIdx + 1) % ph.length]; photoSrc(nxt, function () { });
+    var nxt = deckPeek(ph); if (nxt) photoSrc(nxt, function () { });
   }
   var DEC = document.createElement('textarea');
   function unent(s) { s = String(s || ''); for (var i = 0; i < 3 && /&(#\d+|#x[0-9a-f]+|[a-z]+);/i.test(s); i++) { DEC.innerHTML = s; s = DEC.value; } return s; }
@@ -706,7 +742,7 @@
         return '<div style="display:flex;align-items:center;gap:10px"><div style="width:9px;height:9px;border-radius:50%;background:' + esc(e.color) + ';flex-shrink:0"></div>' +
           '<div style="min-width:0"><div class="ellip" style="font-size:16px;font-weight:700">' + esc(e.title) + '</div><div class="muted ellip" style="font-size:13px">' + (e.soon ? DOW[e.start.getDay()] + ' ' : '') + (e.allDay ? 'All day' : hm(e.start)) + (e.leave && !e.soon && e.start > n ? ' · Leave ' + hm(e.leave).replace(' ', '') : ' · ' + esc(e.who)) + '</div></div></div>';
       }).join(''));
-    var ph = photos(), cur = ph && ph.length ? ph[S.photoIdx % ph.length] : null;
+    var ph = photos(), cur = ph && ph.length ? S.homePhoto : null;
     var photo = cur ? '<div id="homephoto" style="flex:1;border-radius:var(--r2);background:rgba(0,0,0,0.3) center/cover no-repeat"></div>' :
       '<div class="tile" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px">' + icon('photo', 48, 1.3) + '<div style="font-size:16px;font-weight:700">Family photos</div>' + (ph ? '<div class="muted" style="font-size:13px">Album is empty</div>' : '') + '</div>';
     var games = S.games.slice(0, 3);
@@ -844,7 +880,8 @@
   }
   function curGroup() {
     var o = otdGroups(); if (S.screen === 'photos' && S.page < o.length) return o[S.page];
-    var g = photoGroups(); return g.length ? g[(S.photoIdx + S.page - (S.screen === 'photos' ? o.length : 0)) % g.length] : null;
+    if (!S.groups || !S.groups.length) S.groups = dealGroups(3);
+    return S.groups.length ? S.groups[Math.max(0, S.page - (S.screen === 'photos' ? o.length : 0)) % S.groups.length] : null;
   }
   function photosHTML() {
     var ph = photos(); if (!ph) return note(S.backErr === 'setup' ? SETUP : esc(S.backErr || 'Loading…'));
@@ -859,7 +896,7 @@
   function loadCollage() {
     var g = curGroup() || [];
     g.forEach(function (it, i) { photoSrc(it, function (src) { var el = $('pc' + i); if (el && curGroup() && curGroup()[i] === it) { el.style.backgroundImage = 'url("' + src + '")'; el.style.opacity = 1; } }); });
-    var all = photoGroups(), nx = all.length ? all[(S.photoIdx + S.page + 1) % all.length] : []; (nx || []).forEach(function (it) { photoSrc(it, function () { }); });
+    var nx = S.groups && S.groups[S.page + 1 - otdGroups().length]; (nx || []).forEach(function (it) { photoSrc(it, function () { }); });
   }
   function hookPhotos() { if (S.screen === 'home') showPhoto('homephoto'); else loadCollage(); }
 
@@ -1132,7 +1169,7 @@
     if (screen === 'plays') { var pm = models(); return pm && pm.length ? pm.map(function (m, i) { return 'm:' + i; }) : ['main']; }
     if (screen === 'news') { var nw = newsStories(), np = nw && nw.length ? nw.map(function (s, i) { return 's:' + i; }) : ['empty']; if (S.hist && S.hist.length) np.push('hist'); if (gasOK()) np.push('gas'); return np; }
     if (screen === 'weather') return S.alerts.map(function (a, i) { return 'al:' + i; }).concat(S.wx ? ['now', 'details', 'hours', 'week', 'sky'].concat(window.Astronomy && S.wx.setD ? ['tonight'] : [], ['radar']) : S.alerts.length ? [] : ['empty']);
-    if (screen === 'photos') { var pgN = Math.min(3, photoGroups().length) + otdGroups().length; var out = []; for (var q = 0; q < Math.max(1, pgN); q++) out.push('c:' + q); return out; }
+    if (screen === 'photos') { var pgN = Math.min(3, (S.groups && S.groups.length) || photoGroups().length) + otdGroups().length; var out = []; for (var q = 0; q < Math.max(1, pgN); q++) out.push('c:' + q); return out; }
     if (screen === 'family') { var fp = ['main']; if (events()) fp.push('week'); if (mealPair().length) fp.push('idea'); if (boardLists().grocery || boardLists().notes.length) fp.push('board'); if (countdownItems().length) fp.push('cd'); return fp; }
     if (screen === 'live') { var lv = liveList(); return lv.length ? lv.map(function (g) { return 'g:' + g.id; }) : ['none']; }
     if (screen === 'alert') { var ua = S.alerts.filter(isUrgent); return ua.length ? ua.map(function (a, i) { return 'al:' + S.alerts.indexOf(a); }) : ['none']; }
@@ -2762,7 +2799,7 @@
   // ------------------------------------------------------------ rotation + input
   function setScreen(name) {
     if (S.detail) { S.detail = null; $('overlay').className = ''; stopRadar(); }
-    if (name === 'photos' && S.screen !== 'photos') S.photoIdx += 3;
+    if (name === 'photos' && S.screen !== 'photos') S.groups = dealGroups(3); // a fresh hand from the deck each visit
     if (name === 'home') S.homePhase = 'scene';
     S.screen = name; S.page = 0; render(); schedule();
   }
@@ -2914,7 +2951,7 @@
   setInterval(function () { loadLiveProps(); loadLiveNBAespn(); loadLiveNFL(); }, 60000); setInterval(function () { if (mealSlot() !== S.mealSlot) { S.mealSlot = mealSlot(); refresh(['family', 'home']); } }, 30000); setTimeout(function () { loadLiveProps(); loadLiveNBAespn(); loadLiveNFL(); }, 8000); // live stat lines, every minute
   loadBackend().then(function () { every(loadScores, 2 * 60000); });
   setInterval(loadBackend, 10 * 60000);
-  setInterval(function () { if (S.screen === 'home' && !S.detail) { S.photoIdx++; showPhoto('homephoto'); } }, 15000);
+  setInterval(function () { if (S.screen === 'home' && !S.detail) { S.homePhoto = deckTake(photos()); showPhoto('homephoto'); } }, 15000);
   setInterval(function () { if (S.games.some(function (g) { return g.state === 'in'; })) loadScores(); }, 45000);
   setInterval(function () { liveList().forEach(function (g) { if (g.state === 'in') ensureSummary(g); }); }, 30000); // live game: score, last play and win chances every 30 seconds
   if (DEMO && Q.get('alerts')) S.alerts = demoAlerts(Q.get('alerts'));
