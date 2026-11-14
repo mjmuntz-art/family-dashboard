@@ -2475,7 +2475,7 @@
     ['Frozen', '🧊', ['frozen', 'ice cream', 'popsicle', 'waffles']],
     ['Snacks', '🍿', ['chip', 'cracker', 'cookie', 'pretzel', 'popcorn', 'granola', 'snack', 'candy', 'nuts', 'goldfish', 'fruit snack']],
     ['Meat & Deli', '🥩', ['deli', 'chicken', 'beef', 'steak', 'pork', 'turkey', 'bacon', 'sausage', 'ham', 'hot dog', 'brat', 'fish', 'salmon', 'shrimp', 'tilapia', 'meatball', 'ribs', 'salami', 'pepperoni', 'roast']],
-    ['Dairy & Eggs', '🥛', ['milk', 'egg', 'cheese', 'yogurt', 'butter', 'cream', 'sour cream', 'cottage', 'creamer', 'crescent roll', 'cookie dough', 'pie crust']],
+    ['Dairy & Eggs', '🥛', ['milk', 'egg', 'cheese', 'yogurt', 'butter', 'cream', 'sour cream', 'cottage', 'creamer', 'cheddar', 'mozzarella', 'parmesan', 'provolone', 'swiss', 'crescent roll', 'cookie dough', 'pie crust']],
     ['Produce', '🥬', ['spinach', 'lettuce', 'banana', 'apple', 'onion', 'potato', 'tomato', 'carrot', 'berr', 'grape', 'lemon', 'lime', 'avocado', 'pepper', 'broccoli', 'celery', 'cucumber', 'garlic', 'mushroom', 'corn', 'zucchini', 'squash', 'pumpkin', 'orange', 'pear', 'peach', 'melon', 'kale', 'cilantro', 'parsley', 'herb', 'thyme', 'rosemary', 'basil', 'dill', 'mint', 'ginger', 'jalape', 'salad', 'fruit', 'veggie', 'vegetable', 'green bean', 'cabbage', 'jalapeno', 'ginger']],
     ['Bakery', '🍞', ['bread', 'bagel', 'bun', 'roll', 'tortilla', 'muffin', 'croissant', 'pita', 'naan']],
     ['Drinks', '🥤', ['juice', 'soda', 'water', 'pop', 'gatorade', 'beer', 'wine', 'seltzer', 'lemonade', 'tea']],
@@ -2526,20 +2526,31 @@
       }).catch(function () { /* no match */ });
     });
   }
+  var GROC_SIZES = [[38, 21, 2], [34, 19, 2], [30, 17, 2], [34, 19, 3], [30, 17, 3], [27, 16, 3], [24, 14, 3], [24, 14, 4], [21, 13, 4], [18, 12, 4]];
+  function fitGrocery() {
+    var el = $('grocols'); if (!el || (S.grocFit || 0) >= GROC_SIZES.length - 1) return;
+    if (el.scrollWidth > el.clientWidth + 2 || el.scrollHeight > el.clientHeight + 2) { S.grocFit = (S.grocFit || 0) + 1; refresh(['family']); }
+  }
   function groceryBleed(top, g) {
     if (!DEMO) setTimeout(loadDinnerIdeas, 0); // look up any new dinners right away
     var items = g.items, groups = {};
     items.forEach(function (x) { var a = aisleOf(x); (groups[a] = groups[a] || []).push(x); });
-    var keys = Object.keys(groups).map(Number).sort(function (a, b) { return a - b; }), many = items.length > 22, rowH = many ? 32 : 38, fs = many ? 18 : 21;
+    var keys = Object.keys(groups).map(Number).sort(function (a, b) { return a - b; });
+    // start with the biggest text in 2 columns; after it's drawn, step down a size whenever anything spills off the notepad (4 columns = full width)
+    var sig = items.join('|'); if (S.grocSig !== sig) { S.grocSig = sig; S.grocFit = 0; }
+    var fit = GROC_SIZES[Math.min(S.grocFit || 0, GROC_SIZES.length - 1)];
+    var rowH = fit[0], fs = fit[1], cols = fit[2], wide = cols > 3;
+    setTimeout(fitGrocery, 80);
     var secs = keys.map(function (k) {
       var nm = k < AISLES.length ? AISLES[k][1] + ' ' + AISLES[k][0] : '🛒 Other';
-      return '<div style="break-inside:avoid;-webkit-column-break-inside:avoid;margin-bottom:10px"><div style="font-size:14px;font-weight:900;letter-spacing:.1em;color:#a0703c;text-transform:uppercase;margin:4px 0 2px">' + nm + '</div>' +
-        groups[k].map(function (x) { return '<div style="display:flex;align-items:center;gap:12px;height:' + rowH + 'px;border-bottom:1px solid rgba(80,60,40,.16);font-size:' + fs + 'px;font-weight:600;min-width:0"><span style="width:18px;height:18px;border:2.5px solid #b08b5c;border-radius:50%;flex-shrink:0"></span><span class="ellip">' + esc(x) + '</span></div>'; }).join('') + '</div>';
+      var row = function (x) { return '<div style="break-inside:avoid;-webkit-column-break-inside:avoid;display:flex;align-items:center;gap:12px;height:' + rowH + 'px;border-bottom:1px solid rgba(80,60,40,.16);font-size:' + fs + 'px;font-weight:600;min-width:0"><span style="width:18px;height:18px;border:2.5px solid #b08b5c;border-radius:50%;flex-shrink:0"></span><span class="ellip">' + esc(x) + '</span></div>'; };
+      var head = '<div style="font-size:14px;font-weight:900;letter-spacing:.1em;color:#a0703c;text-transform:uppercase;margin:4px 0 2px">' + nm + '</div>';
+      return '<div style="margin-bottom:10px"><div style="break-inside:avoid;-webkit-column-break-inside:avoid">' + head + row(groups[k][0]) + '</div>' + groups[k].slice(1).map(row).join('') + '</div>';
     }).join('');
     var ago = g.at ? Math.max(0, Math.round((Date.now() - new Date(g.at)) / 60000)) : null;
-    var pad = '<div style="background:#fbf4e6;color:#2a2018;border-radius:18px;padding:20px 30px 18px 60px;position:relative;box-shadow:0 14px 40px rgba(0,0,0,.45);overflow:hidden;min-height:0"><div style="position:absolute;left:40px;top:0;bottom:0;width:2px;background:#e8a0a0"></div>' +
+    var pad = '<div style="background:#fbf4e6;color:#2a2018;border-radius:18px;padding:20px 30px 18px 60px;position:relative;box-shadow:0 14px 40px rgba(0,0,0,.45);overflow:hidden;min-height:0;display:flex;flex-direction:column"><div style="position:absolute;left:40px;top:0;bottom:0;width:2px;background:#e8a0a0"></div>' +
       '<div style="display:flex;align-items:baseline;justify-content:space-between"><div style="font-size:40px;font-family:var(--head);font-weight:700">🛒 Groceries</div><div style="font-size:16px;color:#7a6a58">' + items.length + ' item' + (items.length === 1 ? '' : 's') + (ago != null ? ' · ' + (ago < 60 ? ago + ' min ago' : Math.round(ago / 60) + 'h ago') : '') + '</div></div>' +
-      '<div style="column-count:' + (items.length > 30 ? 3 : 2) + ';column-gap:34px;margin-top:8px">' + secs + '</div></div>';
+      '<div id="grocols" style="flex:1;min-height:0;column-count:' + cols + ';column-fill:auto;column-gap:' + (cols > 2 ? 26 : 34) + 'px;margin-top:8px;overflow:hidden">' + secs + '</div></div>';
     // next week's dinners and what's still missing
     var dins = dinnersAhead(), dinRows = dins.length ? dins.map(function (x) {
       var ing = dinnerIngredients(x.e), day = DOW[x.d.getDay()] + ' ' + x.d.getDate(), body;
@@ -2554,8 +2565,8 @@
         : gs ? '<div class="lbl">Gas today</div><div style="font-size:40px;font-weight:800;line-height:1.1">$' + (gs.metro && gs.metro.now ? gs.metro.now[0] : gs.prices.now[0]).toFixed(2) + '</div><div style="font-size:16px;opacity:.8">' + (gs.metro && gs.metro.now ? 'Chicago-area' : 'Illinois') + ' average, regular</div>'
         : (function () { var t = tonightDinner(); return '<div class="lbl">Tonight\'s dinner</div><div style="font-size:30px;font-weight:800">' + (t ? '🍽️ ' + esc(t.title) : '🍽️ Not planned yet') + '</div>'; })()) + '</div>';
     return '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,6,18,.5),rgba(10,6,18,.7))"></div>' + btag('Grocery list') + top +
-      '<div style="position:absolute;left:40px;right:40px;top:88px;bottom:32px;display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:16px">' + pad +
-      '<div style="display:grid;grid-template-rows:minmax(0,2.2fr) minmax(0,1fr);gap:12px;min-height:0">' + dinCard + gasCard + '</div></div>';
+      '<div style="position:absolute;left:40px;right:40px;top:88px;bottom:32px;display:grid;grid-template-columns:' + (wide ? 'minmax(0,1fr)' : 'minmax(0,1.7fr) minmax(0,1fr)') + ';gap:16px">' + pad +
+      (wide ? '' : '<div style="display:grid;grid-template-rows:minmax(0,2.2fr) minmax(0,1fr);gap:12px;min-height:0">' + dinCard + gasCard + '</div>') + '</div>';
   }
   function boardBleed(top) {
     var b = boardLists(), both = b.grocery && b.notes.length;
