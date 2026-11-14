@@ -429,7 +429,7 @@
       var t = c.team || {}, ref = (dir && dir[t.id]) || {};
       var c1 = t.color ? '#' + t.color : ref.color, c2 = t.alternateColor ? '#' + t.alternateColor : ref.alt;
       return { abbr: t.abbreviation || '', name: t.shortDisplayName || t.name || t.displayName || '', logo: t.logo || (t.logos && t.logos[0] && t.logos[0].href) || ref.logo || '',
-        c1: c1 || NEUTRAL.c1, c2: c2 || NEUTRAL.c2, score: st.state === 'pre' ? '' : scoreVal(c.score), winner: !!c.winner, home: c.homeAway === 'home', rec: recOf(c), id: t.id,
+        c1: c1 || NEUTRAL.c1, c2: c2 || NEUTRAL.c2, score: st.state === 'pre' ? '' : scoreVal(c.score), winner: !!c.winner, home: c.homeAway === 'home', rec: recOf(c), id: t.id, rank: c.curatedRank && c.curatedRank.current >= 1 && c.curatedRank.current <= 25 ? c.curatedRank.current : 0,
         full: t.displayName || '', nick: t.name || t.nickname || '', loc: t.location || '' };
     });
     var status = st.state === 'pre' ? whenLabel(d) : (st.shortDetail || st.detail || '');
@@ -526,7 +526,7 @@
       var dim = g.state === 'post' && !t.winner ? 'opacity:.6;' : '';
       return '<div style="' + dim + 'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:' + Math.round(z.gap / 2) + 'px;min-width:0">' + logoHTML(t, z.logo) +
         '<div style="display:flex;flex-direction:column;align-items:center;min-width:0;max-width:100%">' +
-        '<div class="ellip" style="max-width:100%;font-size:' + z.name + 'px;font-weight:800;line-height:1.15">' + esc(size === 'mini' ? t.abbr : t.name) + '</div>' +
+        '<div class="ellip" style="max-width:100%;font-size:' + z.name + 'px;font-weight:800;line-height:1.15">' + rankTag(t, g.league) + esc(size === 'mini' ? t.abbr : t.name) + '</div>' +
         (t.rec ? '<div class="muted" style="font-size:' + z.rec + 'px;font-weight:600;line-height:1.2;font-variant-numeric:tabular-nums">' + esc(t.rec) + '</div>' : '') + '</div></div>';
     };
     var a = g.teams[0], b = g.teams[1], sc = function (t) { return '<span style="' + (g.state === 'post' && !t.winner ? 'opacity:.5;' : '') + '">' + esc(t.score) + '</span>'; };
@@ -1172,7 +1172,7 @@
     return list.sort(function (a, b) { return rank(a) - rank(b) || (rank(a) === 1 ? b.date - a.date : a.date - b.date); }).slice(0, 8);
   }
   function pageList(screen) {
-    if (screen === 'scores') { var gp = []; for (var i = 0; i < Math.max(1, Math.ceil(S.games.length / 6)); i++) gp.push('grid:' + i); return gp.concat(featureGames().map(function (g) { return 'g:' + g.id; }), standingsLeagues().map(function (l) { return 'st:' + l; })); }
+    if (screen === 'scores') { var gp = []; for (var i = 0; i < Math.max(1, Math.ceil(S.games.length / 6)); i++) gp.push('grid:' + i); return gp.concat(featureGames().map(function (g) { return 'g:' + g.id; }), standingsLeagues().map(function (l) { return 'st:' + l; }), rankingsLeagues().map(function (l) { return 'rk:' + l; })); }
     if (screen === 'plays') { var pm = models(); return pm && pm.length ? pm.map(function (m, i) { return 'm:' + i; }) : ['main']; }
     if (screen === 'news') { var nw = newsStories(), np = nw && nw.length ? nw.map(function (s, i) { return 's:' + i; }) : ['empty']; if (S.hist && S.hist.length) np.push('hist'); if (gasOK()) np.push('gas'); return np; }
     if (screen === 'weather') return S.alerts.map(function (a, i) { return 'al:' + i; }).concat(S.wx ? ['now', 'details', 'hours', 'week', 'sky'].concat(window.Astronomy && S.wx.setD ? ['tonight'] : [], ['radar']) : S.alerts.length ? [] : ['empty']);
@@ -1195,6 +1195,7 @@
     if (S.screen === 'alert') return Math.max(DEMO ? 2 : 30, Math.round(((C.alerts && C.alerts.takeoverSec) || 150) / Math.max(1, pageList('alert').length)));
     if (S.screen === 'live') return t.live || 40;
     if (cp.indexOf('st:') === 0) return t.standings || 15;
+    if (cp.indexOf('rk:') === 0) return t.rankings || 18;
     if (cp.indexOf('al:') === 0) return t.alert || 15;
     if (S.screen === 'family' && cp !== 'main') return t.board || 20;
     if (S.screen === 'news') return t.story || 10;
@@ -1617,6 +1618,7 @@
     if (S.screen === 'alert') return emptyBleed('Warning has ended');
     if (S.screen === 'family') return p === 'idea' ? mealBleed(top) : p === 'week' ? weekBleed(top) : p === 'who' ? whoBleed(top) : p === 'board' ? boardBleed(top) : countdownBleed(top);
     if (String(p).indexOf('st:') === 0) return standingsBleed(p.slice(3), top);
+    if (String(p).indexOf('rk:') === 0) return rankingsBleed(p.slice(3), top);
     if (S.screen === 'plays') return playsBleed(p, top);
     if (S.screen === 'news') return p === 'hist' ? histBleed(top) : p === 'gas' ? gasBleed(top) : newsBleed(p, top);
     if (S.screen === 'scores') return String(p).indexOf('grid') === 0 ? scoreboardBleed(+p.split(':')[1] || 0, top) : gameBleed(findGame(p.slice(2)), top);
@@ -1682,7 +1684,7 @@
       var nick = t.full && t.loc ? t.full.replace(t.loc, '').trim() : '', sub = [nick && nick !== t.name ? nick : '', g.state !== 'pre' ? t.rec : ''].filter(Boolean).join(' · ');
       return '<div style="display:flex;align-items:center;height:196px;border-radius:22px;overflow:hidden;background:linear-gradient(90deg,' + col + ',' + col + 'd9);box-shadow:0 12px 30px rgba(0,0,0,.4);' + (lose ? 'opacity:.7;' : '') + '">' +
         '<div style="width:16px;align-self:stretch;background:' + (t.c2 || '#fff') + '"></div><div style="margin:0 32px">' + logoDisc(t, 152) + '</div>' +
-        '<div style="flex:1;min-width:0"><div class="ellip" style="font-size:74px;font-weight:900;line-height:1.05;color:' + teamInk(col) + '">' + esc(t.name) + (t.poss ? ' <span style="font-size:40px;vertical-align:middle">' + (g.sport === 'football' ? '🏈' : '●') + '</span>' : '') +
+        '<div style="flex:1;min-width:0"><div class="ellip" style="font-size:74px;font-weight:900;line-height:1.05;color:' + teamInk(col) + '">' + rankTag(t, g.league) + esc(t.name) + (t.poss ? ' <span style="font-size:40px;vertical-align:middle">' + (g.sport === 'football' ? '🏈' : '●') + '</span>' : '') +
         (g.state === 'post' && t.winner ? ' <span style="font-size:24px;padding:4px 12px;border-radius:9px;background:var(--accent);color:var(--ink);vertical-align:middle">W</span>' : '') + '</div>' +
         (sub ? '<div style="font-size:26px;font-weight:700;opacity:.85;color:' + teamInk(col) + '">' + esc(sub) + '</div>' : '') + '</div>' +
         '<div style="width:290px;align-self:stretch;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,.28);color:#fff">' + right + '</div></div>';
@@ -1743,7 +1745,7 @@
       var side = function (t, right) {
         var lose = g.state === 'post' && !t.winner;
         return '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;min-width:0;text-align:center;' + (lose ? 'opacity:.62' : '') + '">' + logoDisc(t, 80) +
-          '<div class="ellip" style="max-width:100%;font-size:' + (t.name.length > 11 ? 20 : 24) + 'px;font-weight:900;line-height:1.1;text-shadow:0 2px 8px rgba(0,0,0,.35)">' + esc(t.name) + '</div><div style="font-size:16px;font-weight:700;opacity:.85;line-height:1">' + esc(t.rec || '') + '</div></div>';
+          '<div class="ellip" style="max-width:100%;font-size:' + (t.name.length > 11 ? 20 : 24) + 'px;font-weight:900;line-height:1.1;text-shadow:0 2px 8px rgba(0,0,0,.35)">' + rankTag(t, g.league) + esc(t.name) + '</div><div style="font-size:16px;font-weight:700;opacity:.85;line-height:1">' + esc(t.rec || '') + '</div></div>';
       };
       var mid = g.state === 'pre' ? '<div style="font-size:24px;font-weight:900;opacity:.9">VS</div>'
         : '<div style="font-size:66px;font-weight:900;line-height:1;white-space:nowrap;font-variant-numeric:tabular-nums;text-shadow:0 2px 12px rgba(0,0,0,.45)"><span style="' + (g.state === 'post' && !a.winner ? 'opacity:.55' : '') + '">' + esc(a.score) + '</span><span style="opacity:.45;font-weight:300"> – </span><span style="' + (g.state === 'post' && !b.winner ? 'opacity:.55' : '') + '">' + esc(b.score) + '</span></div>';
@@ -2677,6 +2679,61 @@
     return '<div style="position:absolute;inset:0;background:radial-gradient(ellipse 70% 80% at 0% 0%,' + ga + '66,transparent 70%),radial-gradient(ellipse 70% 80% at 100% 100%,' + gb + '66,transparent 70%),radial-gradient(ellipse at 50% 50%,#151a20,#07090c 80%)"></div>' +
       btag('Standings · ' + PRO[league]) + top +
       '<div style="position:absolute;left:36px;right:36px;top:88px;bottom:28px;display:grid;grid-template-columns:repeat(' + pick.length + ',minmax(0,1fr));gap:18px">' + html + '</div>';
+  }
+
+  // ------------------------------------------------------------ college rankings (Scores pages, after the standings)
+  // Football: the College Football Playoff rankings once they're out (AP Top 25 before that). Basketball: the AP Top 25.
+  var RANK_LG = { 'college-football': { sport: 'football', name: 'College Football', want: /cfp|playoff/i }, 'mens-college-basketball': { sport: 'basketball', name: 'College Basketball', want: /^ap|associated/i } };
+  function loadRankings(lg) {
+    S.ranks = S.ranks || {}; S.rankAt = S.rankAt || {};
+    if (window.__RANKS) { S.ranks[lg] = window.__RANKS[lg]; return; }
+    if (S.rankAt[lg] && Date.now() - S.rankAt[lg] < 3 * 3600000) return;
+    S.rankAt[lg] = Date.now();
+    var c = load('rank:' + lg, 3 * 3600000); if (c) { S.ranks[lg] = c; return; }
+    getJSON(ESPN + RANK_LG[lg].sport + '/' + lg + '/rankings', 15000).then(function (j) {
+      var polls = j.rankings || [], cfg = RANK_LG[lg];
+      var p = polls.filter(function (x) { return cfg.want.test(x.type || '') || cfg.want.test(x.name || '') || cfg.want.test(x.shortName || ''); })[0] || polls.filter(function (x) { return /^ap/i.test(x.type || x.shortName || ''); })[0] || polls[0];
+      if (!p) return;
+      var out = { title: p.name || p.shortName || 'Top 25', short: p.shortName || '', date: p.date || '', head: p.headline || p.shortHeadline || '',
+        teams: (p.ranks || []).slice(0, 25).map(function (r) { var t = r.team || {}; return { rank: r.current, prev: r.previous, id: String(t.id || ''), name: t.location || t.nickname || t.name || '', nick: t.name || '', abbr: t.abbreviation || '', logo: t.logo || (t.logos && t.logos[0] && t.logos[0].href) || '', rec: r.recordSummary || '', c1: t.color ? '#' + t.color : '', fpv: r.firstPlaceVotes || 0 }; }) };
+      if (out.teams.length) { S.ranks[lg] = out; save('rank:' + lg, out); if (S.screen === 'scores') render(); }
+    }).catch(function () { S.rankAt[lg] = Date.now() - 2.5 * 3600000; }); // try again in half an hour
+  }
+  function rankingsLeagues() { // only while the poll is current (in season)
+    if (C.rankings === false) return [];
+    return Object.keys(RANK_LG).filter(function (lg) {
+      loadRankings(lg);
+      var r = S.ranks && S.ranks[lg]; if (!r || !r.teams.length) return false;
+      return !r.date || Date.now() - new Date(r.date).getTime() < 21 * 86400000;
+    });
+  }
+  function rankOf(t, league) { // a game's team → its ranking (from the scoreboard, or the poll)
+    if (!t || !RANK_LG[league]) return 0;
+    if (t.rank) return t.rank;
+    var r = S.ranks && S.ranks[league], hit = r && r.teams.filter(function (x) { return x.id && x.id === String(t.id); })[0];
+    return hit ? hit.rank : 0;
+  }
+  function rankTag(t, league, px) { var n = rankOf(t, league); return n ? '<span style="font-size:' + (px ? px + 'px' : '.72em') + ';font-weight:800;opacity:.75;margin-right:.3em">' + n + '</span>' : ''; }
+  function rankingsBleed(lg, top) {
+    var r = S.ranks && S.ranks[lg]; if (!r) return emptyBleed('Loading rankings…');
+    var mine = function (x) { return C.teams.some(function (tm) { return tm.league === lg && ((tm.id && String(tm.id) === x.id) || (tm.name && (x.name + ' ' + x.nick).toLowerCase().indexOf(String(tm.name).toLowerCase()) >= 0)); }); };
+    var when = r.date ? new Date(r.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+    var tile = function (x) {
+      var mv = x.prev && x.prev !== x.rank && x.prev < 99 ? x.prev - x.rank : null, me = mine(x), col = x.c1 && lum(x.c1) > 0.03 ? x.c1 : '#556070';
+      var arrow = x.prev >= 99 || !x.prev ? '<span style="color:#ffd27a">NEW</span>' : mv > 0 ? '<span style="color:#5be38a">▲' + mv + '</span>' : mv < 0 ? '<span style="color:#ff7b7b">▼' + (-mv) + '</span>' : '<span style="opacity:.45">–</span>';
+      return '<div style="position:relative;display:flex;align-items:center;gap:10px;padding:0 12px 0 0;border-radius:14px;overflow:hidden;min-width:0;background:linear-gradient(90deg,' + col + '55,rgba(16,18,26,.88) 62%);box-shadow:inset 4px 0 0 ' + col + (me ? ',0 0 0 2px var(--accent)' : '') + '">' +
+        '<div style="width:46px;flex-shrink:0;text-align:center;font-size:30px;font-weight:900;font-variant-numeric:tabular-nums">' + x.rank + '</div>' +
+        (x.logo ? '<img src="' + esc(darkLogo(x.logo)) + '" alt="" style="width:50px;height:50px;object-fit:contain;flex-shrink:0" onerror="this.onerror=null;this.src=\'' + esc(x.logo) + '\'">' : '') +
+        '<div style="min-width:0;flex:1"><div class="ellip" style="font-size:' + (x.name.length > 13 ? 17 : 20) + 'px;font-weight:900;line-height:1.1">' + esc(x.name) + '</div>' +
+        '<div style="display:flex;gap:8px;font-size:14px;font-weight:700;opacity:.9;font-variant-numeric:tabular-nums"><span style="opacity:.75">' + esc(x.rec) + '</span>' + arrow + '</div></div></div>';
+    };
+    var cfp = /playoff|cfp/i.test(r.title);
+    return '<div style="position:absolute;inset:0;background:radial-gradient(ellipse at 15% -10%,rgba(90,110,170,.35),transparent 60%),linear-gradient(180deg,rgba(8,10,18,.82),rgba(8,10,18,.94))"></div>' + btag('Rankings · ' + RANK_LG[lg].name) + top +
+      '<div style="position:absolute;left:36px;right:36px;top:84px;display:flex;align-items:baseline;justify-content:space-between;gap:16px">' +
+      '<div style="display:flex;align-items:center;gap:14px"><img src="https://a.espncdn.com/i/teamlogos/leagues/500/ncaa.png" alt="" style="width:40px;height:40px;object-fit:contain" onerror="this.remove()"><div class="head" style="font-size:32px">' + esc(cfp ? 'College Football Playoff Rankings' : r.title) + '</div></div>' +
+      '<div style="font-size:16px;font-weight:700;opacity:.7">' + (when ? 'Released ' + esc(when) : '') + '</div></div>' +
+      '<div style="position:absolute;left:36px;right:36px;top:136px;bottom:28px;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));grid-template-rows:repeat(5,minmax(0,1fr));grid-auto-flow:column;gap:10px">' +
+      r.teams.map(tile).join('') + '</div>';
   }
 
   // ------------------------------------------------------------ details
