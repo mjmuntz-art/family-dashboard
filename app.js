@@ -184,9 +184,16 @@
     if (url && !instant) { var im = new Image(); im.onload = im.onerror = put; im.src = url; } else put();
   }
   function fitTitle() { // as big as the space between the clock and the weather allows
-    var el = $('btitle'), bar = $('topbar'), room = bar.clientWidth - bar.children[0].offsetWidth - bar.children[2].offsetWidth - 2 * 16 - 72, size = Math.round((S.theme.titleSize || 34) * 1.5);
+    var el = $('btitle'), bar = $('topbar'); if (!el || !bar) return;
+    var room = (bar.clientWidth - bar.children[0].offsetWidth - bar.children[2].offsetWidth - 2 * 16 - 72) * 0.94, size = Math.round((S.theme.titleSize || 34) * 1.5);
+    el.style.display = 'inline-block'; el.style.maxWidth = 'none'; // measure the text itself, not the box it's squeezed into
     el.style.fontSize = size + 'px';
-    while (el.scrollWidth > room && size > 26) { size -= 2; el.style.fontSize = size + 'px'; }
+    while (el.offsetWidth > room && size > 24) { size -= 1; el.style.fontSize = size + 'px'; }
+    if (!fitTitle.hooked) { // the heading font arrives a moment later and is wider: measure again then, and if the screen changes size
+      fitTitle.hooked = 1;
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { fitTitle(); });
+      setTimeout(fitTitle, 2000); window.addEventListener('resize', function () { fitTitle(); });
+    }
   }
   function corner() { // small time + temperature pill shown on the full screens
     var el = $('corner'); if (!el) return;
