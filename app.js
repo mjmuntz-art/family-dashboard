@@ -821,7 +821,7 @@
       (today.length ? today.length + ' thing' + (today.length === 1 ? '' : 's') + ' today' : 'Nothing scheduled') + '</div></div>' +
       (weeklyTags().length ? '<div style="margin-left:auto">' + tagChip(weeklyTags()[0], true) + '</div>' : '') + '</div>' +
       (rows || '<div class="head" style="font-size:30px;line-height:1.15;flex-shrink:0">' + left + '</div>' + nextCard) +
-      (dinner ? '<div style="margin-top:auto;display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:12px;background:rgba(255,255,255,.08);flex-shrink:0"><span style="font-size:24px">🍽️</span><div style="min-width:0"><div class="lbl">Tonight’s dinner</div><div class="ellip" style="font-size:19px;font-weight:700">' + esc(dinner.title) + '</div></div></div>' : mealPair()[0] ? '<div style="margin-top:auto;display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:12px;background:rgba(255,255,255,.08);flex-shrink:0"><span style="font-size:24px">💡</span><div style="min-width:0"><div class="lbl">Dinner idea</div><div class="ellip" style="font-size:19px;font-weight:700">' + esc(mealPair()[0].name) + '</div></div></div>' : '') + '</div>';
+      (dinner ? '<div style="margin-top:auto;display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:12px;background:rgba(255,255,255,.08);flex-shrink:0"><span style="font-size:24px">🍽️</span><div style="min-width:0"><div class="lbl">Tonight’s dinner</div><div class="ellip" style="font-size:19px;font-weight:700">' + esc(dinner.title) + '</div></div></div>' : dinnerIdea() ? '<div style="margin-top:auto;display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:12px;background:rgba(255,255,255,.08);flex-shrink:0"><span style="font-size:24px">💡</span><div style="min-width:0"><div class="lbl">Dinner idea</div><div class="ellip" style="font-size:19px;font-weight:700">' + esc(dinnerIdea().name) + '</div></div></div>' : '') + '</div>';
     // ---- coming up, grouped by day
     var groups = [];
     for (var gd = 1; gd <= 6; gd++) {
@@ -2344,18 +2344,20 @@
   // Recipes of the day come from the Apps Script (the family's list + new ideas, 3–5 of each); they take turns every 10 minutes.
   // If that isn't there yet, the older one-dinner-one-treat ideas from TheMealDB fill in.
   function mealSlot() { return Math.floor(Date.now() / 600000); }
-  function mealPair() {
+  function dinnerIdea() { // the main page's idea when no dinner is planned: one of the day's dinners from the family's list
+    var r = S.back && S.back.recipes, d = r && !r.error ? (r.dinners || []).filter(function (x) { return x && x.name && !x.fresh; }) : [];
+    return d.length ? d[mealSlot() % d.length] : (S.meals && S.meals[0]) || null;
+  }
+  function mealPair() { // two recipes at a time from the day's whole set, no matter what kind they are
     var r = S.back && S.back.recipes, slot = mealSlot(), out = [];
-    var take = function (list, off, dinner) {
-      list = (list || []).filter(function (x) { return x && x.name && x.image; });
-      if (!list.length) return;
-      var i = (slot + off) % list.length, m = list[i], kind = dinner ? 'dinner' : (m.kind && m.kind !== 'New idea' ? m.kind.toLowerCase() : 'treat');
-      out.push({ name: m.name, image: m.image, ing: m.ing || [], link: m.link, source: m.source, mins: m.mins, rating: m.rating, fresh: m.fresh,
-        label: m.fresh ? 'New ' + kind + ' idea' : dinner ? 'Dinner idea' : m.kind || 'Treat', pos: (i + 1) + ' of ' + list.length });
-    };
-    if (r && !r.error) { take(r.dinners, 0, true); take(r.treats, 1, false); }
-    if (out.length) return out;
-    return (S.meals || []).map(function (m, i) { return { name: m.name, image: m.image, ing: m.ing || [], link: m.link, label: i ? 'Snack or treat' : 'Dinner idea', tags: [m.cat, m.area] }; });
+    var pool = r && !r.error ? (r.dinners || []).concat(r.treats || []).filter(function (x) { return x && x.name && x.image; }) : [];
+    var label = function (m) { var c = String(m.cat || '').split(',')[0].trim(); return c && c.length < 22 ? c.replace(/\b\w/g, function (x) { return x.toUpperCase(); }) : m.fresh ? 'New idea' : 'Recipe idea'; };
+    if (pool.length) {
+      var picks = pool.length === 1 ? [0] : [(slot * 2) % pool.length, (slot * 2 + 1) % pool.length];
+      picks.forEach(function (i) { var m = pool[i]; out.push({ name: m.name, image: m.image, ing: m.ing || [], link: m.link, source: m.source, mins: m.mins, rating: m.rating, fresh: m.fresh, label: label(m), pos: (i + 1) + ' of ' + pool.length }); });
+      return out;
+    }
+    return (S.meals || []).map(function (m) { return { name: m.name, image: m.image, ing: m.ing || [], link: m.link, label: m.cat || 'Recipe idea', tags: [m.area] }; });
   }
   function mealBleed(top) {
     var ms = mealPair(); if (!ms.length) return emptyBleed('Loading…');
