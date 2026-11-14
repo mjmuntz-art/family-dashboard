@@ -1172,7 +1172,7 @@
     return list.sort(function (a, b) { return rank(a) - rank(b) || (rank(a) === 1 ? b.date - a.date : a.date - b.date); }).slice(0, 8);
   }
   function pageList(screen) {
-    if (screen === 'scores') { var gp = []; for (var i = 0; i < Math.max(1, Math.ceil(S.games.length / 6)); i++) gp.push('grid:' + i); return gp.concat(featureGames().map(function (g) { return 'g:' + g.id; }), standingsLeagues().map(function (l) { return 'st:' + l; }), rankingsLeagues().map(function (l) { return 'rk:' + l; })); }
+    if (screen === 'scores') { var gp = []; for (var i = 0; i < Math.max(1, Math.ceil(S.games.length / 6)); i++) gp.push('grid:' + i); return gp.concat(featureGames().map(function (g) { return 'g:' + g.id; }), standingsLeagues().map(function (l) { return 'st:' + l; }), collegePages()); }
     if (screen === 'plays') { var pm = models(); return pm && pm.length ? pm.map(function (m, i) { return 'm:' + i; }) : ['main']; }
     if (screen === 'news') { var nw = newsStories(), np = nw && nw.length ? nw.map(function (s, i) { return 's:' + i; }) : ['empty']; if (S.hist && S.hist.length) np.push('hist'); if (gasOK()) np.push('gas'); return np; }
     if (screen === 'weather') return S.alerts.map(function (a, i) { return 'al:' + i; }).concat(S.wx ? ['now', 'details', 'hours', 'week', 'sky'].concat(window.Astronomy && S.wx.setD ? ['tonight'] : [], ['radar']) : S.alerts.length ? [] : ['empty']);
@@ -1196,6 +1196,7 @@
     if (S.screen === 'live') return t.live || 40;
     if (cp.indexOf('st:') === 0) return t.standings || 15;
     if (cp.indexOf('rk:') === 0) return t.rankings || 18;
+    if (cp.indexOf('bk:') === 0) return t.bracket || 20;
     if (cp.indexOf('al:') === 0) return t.alert || 15;
     if (S.screen === 'family' && cp !== 'main') return t.board || 20;
     if (S.screen === 'news') return t.story || 10;
@@ -1619,6 +1620,7 @@
     if (S.screen === 'family') return p === 'idea' ? mealBleed(top) : p === 'week' ? weekBleed(top) : p === 'who' ? whoBleed(top) : p === 'board' ? boardBleed(top) : countdownBleed(top);
     if (String(p).indexOf('st:') === 0) return standingsBleed(p.slice(3), top);
     if (String(p).indexOf('rk:') === 0) return rankingsBleed(p.slice(3), top);
+    if (String(p).indexOf('bk:') === 0) return bracketBleed(top);
     if (S.screen === 'plays') return playsBleed(p, top);
     if (S.screen === 'news') return p === 'hist' ? histBleed(top) : p === 'gas' ? gasBleed(top) : newsBleed(p, top);
     if (S.screen === 'scores') return String(p).indexOf('grid') === 0 ? scoreboardBleed(+p.split(':')[1] || 0, top) : gameBleed(findGame(p.slice(2)), top);
@@ -2714,26 +2716,117 @@
     return hit ? hit.rank : 0;
   }
   function rankTag(t, league, px) { var n = rankOf(t, league); return n ? '<span style="font-size:' + (px ? px + 'px' : '.72em') + ';font-weight:800;opacity:.75;margin-right:.3em">' + n + '</span>' : ''; }
-  function rankingsBleed(lg, top) {
-    var r = S.ranks && S.ranks[lg]; if (!r) return emptyBleed('Loading rankings…');
-    var mine = function (x) { return C.teams.some(function (tm) { return tm.league === lg && ((tm.id && String(tm.id) === x.id) || (tm.name && (x.name + ' ' + x.nick).toLowerCase().indexOf(String(tm.name).toLowerCase()) >= 0)); }); };
+  function rankArrow(x) { var mv = x.prev && x.prev < 99 && x.prev !== x.rank ? x.prev - x.rank : 0; return !x.prev || x.prev >= 99 ? '<span style="color:#ffd27a">NEW</span>' : mv > 0 ? '<span style="color:#5be38a">▲' + mv + '</span>' : mv < 0 ? '<span style="color:#ff7b7b">▼' + (-mv) + '</span>' : '<span style="opacity:.4">–</span>'; }
+  function rankMine(lg, x) { return C.teams.some(function (tm) { return tm.league === lg && ((tm.id && String(tm.id) === x.id) || (tm.name && (x.name + ' ' + x.nick).toLowerCase().indexOf(String(tm.name).toLowerCase()) >= 0)); }); }
+  function rankCol(x) { return x.c1 && lum(x.c1) > 0.02 ? x.c1 : '#3a4252'; }
+  function rankLogo(x, px) { return x.logo ? '<img src="' + esc(darkLogo(x.logo)) + '" alt="" style="width:' + px + 'px;height:' + px + 'px;object-fit:contain;flex-shrink:0;filter:drop-shadow(0 3px 8px rgba(0,0,0,.45))" onerror="this.onerror=null;this.src=\'' + esc(x.logo) + '\'">' : '<span style="width:' + px + 'px;height:' + px + 'px;border-radius:50%;background:rgba(255,255,255,.85);color:#111;display:flex;align-items:center;justify-content:center;font-size:' + Math.round(px * .3) + 'px;font-weight:900;flex-shrink:0">' + esc(x.abbr) + '</span>'; }
+  function rankRow(lg, x, fs) { // a compact list row: rank, logo, name, record, movement
+    var me = rankMine(lg, x);
+    return '<div style="display:grid;grid-template-columns:34px 40px minmax(0,1fr) auto 44px;align-items:center;gap:8px;flex:1;min-height:0;padding:0 10px;border-radius:10px;box-shadow:inset 4px 0 0 ' + rankCol(x) + ';' + (me ? 'background:rgba(255,255,255,.12);outline:2px solid var(--accent);' : 'background:rgba(255,255,255,.04);') + 'font-size:' + fs + 'px">' +
+      '<span style="font-weight:900;text-align:right;font-variant-numeric:tabular-nums">' + x.rank + '</span>' + rankLogo(x, 34) +
+      '<span class="ellip" style="font-weight:800">' + esc(x.name) + '</span><span style="opacity:.7;font-size:.8em;font-weight:700;font-variant-numeric:tabular-nums">' + esc(x.rec) + '</span><span style="font-size:.72em;font-weight:800;text-align:right">' + rankArrow(x) + '</span></div>';
+  }
+  function rankHead(lg, r, title) {
     var when = r.date ? new Date(r.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
-    var tile = function (x) {
-      var mv = x.prev && x.prev !== x.rank && x.prev < 99 ? x.prev - x.rank : null, me = mine(x), col = x.c1 && lum(x.c1) > 0.03 ? x.c1 : '#556070';
-      var arrow = x.prev >= 99 || !x.prev ? '<span style="color:#ffd27a">NEW</span>' : mv > 0 ? '<span style="color:#5be38a">▲' + mv + '</span>' : mv < 0 ? '<span style="color:#ff7b7b">▼' + (-mv) + '</span>' : '<span style="opacity:.45">–</span>';
-      return '<div style="position:relative;display:flex;align-items:center;gap:10px;padding:0 12px 0 0;border-radius:14px;overflow:hidden;min-width:0;background:linear-gradient(90deg,' + col + '55,rgba(16,18,26,.88) 62%);box-shadow:inset 4px 0 0 ' + col + (me ? ',0 0 0 2px var(--accent)' : '') + '">' +
-        '<div style="width:46px;flex-shrink:0;text-align:center;font-size:30px;font-weight:900;font-variant-numeric:tabular-nums">' + x.rank + '</div>' +
-        (x.logo ? '<img src="' + esc(darkLogo(x.logo)) + '" alt="" style="width:50px;height:50px;object-fit:contain;flex-shrink:0" onerror="this.onerror=null;this.src=\'' + esc(x.logo) + '\'">' : '') +
-        '<div style="min-width:0;flex:1"><div class="ellip" style="font-size:' + (x.name.length > 13 ? 17 : 20) + 'px;font-weight:900;line-height:1.1">' + esc(x.name) + '</div>' +
-        '<div style="display:flex;gap:8px;font-size:14px;font-weight:700;opacity:.9;font-variant-numeric:tabular-nums"><span style="opacity:.75">' + esc(x.rec) + '</span>' + arrow + '</div></div></div>';
+    return '<div style="position:absolute;left:36px;right:36px;top:84px;display:flex;align-items:center;justify-content:space-between;gap:16px">' +
+      '<div style="display:flex;align-items:center;gap:14px"><img src="https://a.espncdn.com/i/teamlogos/leagues/500/ncaa.png" alt="" style="width:40px;height:40px;object-fit:contain" onerror="this.remove()"><div class="head" style="font-size:32px">' + esc(title) + '</div></div>' +
+      '<div style="font-size:16px;font-weight:700;opacity:.7">' + (when ? 'Released ' + esc(when) : '') + '</div></div>';
+  }
+  var RANK_BG = '<div style="position:absolute;inset:0;background:radial-gradient(ellipse at 15% -10%,rgba(90,110,170,.35),transparent 60%),linear-gradient(180deg,rgba(8,10,18,.84),rgba(8,10,18,.95))"></div>';
+  function rankingsBleed(lg, top) {
+    var r = S.ranks && S.ranks[lg]; if (!r || !r.teams.length) return emptyBleed('Loading rankings…');
+    var T = r.teams, cfp = /playoff|cfp/i.test(r.title);
+    if (lg === 'college-football') { // B: the top 12 as team-colored cards, 13–25 as a logo strip
+      var big = function (x) {
+        var me = rankMine(lg, x), col = rankCol(x);
+        return '<div style="position:relative;display:flex;align-items:center;gap:12px;padding:0 14px;border-radius:16px;overflow:hidden;min-width:0;background:linear-gradient(120deg,' + col + ',' + col + 'aa 60%,rgba(10,12,20,.9));' + (me ? 'outline:3px solid var(--accent);' : '') + '">' +
+          '<span style="font-size:40px;font-weight:900;width:52px;text-align:center;font-variant-numeric:tabular-nums;text-shadow:0 2px 8px rgba(0,0,0,.4)">' + x.rank + '</span>' + rankLogo(x, 60) +
+          '<div style="min-width:0;flex:1"><div class="ellip" style="font-size:' + (x.name.length > 12 ? 20 : 24) + 'px;font-weight:900;line-height:1.1;text-shadow:0 2px 8px rgba(0,0,0,.4)">' + esc(x.name) + '</div>' +
+          '<div style="display:flex;gap:10px;font-size:15px;font-weight:800;opacity:.92"><span>' + esc(x.rec) + '</span>' + rankArrow(x) + '</div></div></div>';
+      };
+      var chip = function (x) {
+        var me = rankMine(lg, x);
+        return '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border-radius:12px;min-width:0;box-shadow:inset 0 4px 0 ' + rankCol(x) + ';background:rgba(255,255,255,' + (me ? '.14);outline:2px solid var(--accent)' : '.05)') + '">' +
+          '<span style="font-size:20px;font-weight:900">' + x.rank + '</span>' + rankLogo(x, 40) + '<span class="ellip" style="max-width:94%;font-size:13px;font-weight:800">' + esc(x.abbr || x.name) + '</span></div>';
+      };
+      return RANK_BG + btag('Rankings · College Football') + top + rankHead(lg, r, cfp ? 'College Football Playoff Rankings' : r.title) +
+        '<div style="position:absolute;left:36px;right:36px;top:138px;bottom:178px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-template-rows:repeat(3,minmax(0,1fr));gap:10px">' + T.slice(0, 12).map(big).join('') + '</div>' +
+        '<div style="position:absolute;left:36px;right:36px;bottom:28px;height:136px;display:grid;grid-template-columns:repeat(' + Math.max(1, T.length - 12) + ',minmax(0,1fr));gap:8px">' + T.slice(12).map(chip).join('') + '</div>';
+    }
+    // C (basketball): the top 5 as big tiles, 6–25 in four columns of five
+    var hero = function (x) {
+      var me = rankMine(lg, x), col = rankCol(x);
+      return '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;border-radius:18px;min-width:0;background:linear-gradient(160deg,' + col + ',' + col + '99 55%,rgba(10,12,20,.9));' + (me ? 'outline:3px solid var(--accent);' : '') + '">' +
+        '<span style="font-size:36px;font-weight:900;line-height:1;text-shadow:0 2px 8px rgba(0,0,0,.4)">' + x.rank + '</span>' + rankLogo(x, 76) +
+        '<span class="ellip" style="max-width:92%;font-size:22px;font-weight:900;text-shadow:0 2px 8px rgba(0,0,0,.4)">' + esc(x.name) + '</span><span style="display:flex;gap:10px;font-size:15px;font-weight:800;opacity:.92"><span>' + esc(x.rec) + '</span>' + rankArrow(x) + '</span></div>';
     };
-    var cfp = /playoff|cfp/i.test(r.title);
-    return '<div style="position:absolute;inset:0;background:radial-gradient(ellipse at 15% -10%,rgba(90,110,170,.35),transparent 60%),linear-gradient(180deg,rgba(8,10,18,.82),rgba(8,10,18,.94))"></div>' + btag('Rankings · ' + RANK_LG[lg].name) + top +
-      '<div style="position:absolute;left:36px;right:36px;top:84px;display:flex;align-items:baseline;justify-content:space-between;gap:16px">' +
-      '<div style="display:flex;align-items:center;gap:14px"><img src="https://a.espncdn.com/i/teamlogos/leagues/500/ncaa.png" alt="" style="width:40px;height:40px;object-fit:contain" onerror="this.remove()"><div class="head" style="font-size:32px">' + esc(cfp ? 'College Football Playoff Rankings' : r.title) + '</div></div>' +
-      '<div style="font-size:16px;font-weight:700;opacity:.7">' + (when ? 'Released ' + esc(when) : '') + '</div></div>' +
-      '<div style="position:absolute;left:36px;right:36px;top:136px;bottom:28px;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));grid-template-rows:repeat(5,minmax(0,1fr));grid-auto-flow:column;gap:10px">' +
-      r.teams.map(tile).join('') + '</div>';
+    var rest = T.slice(5), cols = [0, 1, 2, 3].map(function (k) { return '<div style="display:flex;flex-direction:column;gap:6px;min-width:0">' + rest.slice(k * 5, k * 5 + 5).map(function (x) { return rankRow(lg, x, 18); }).join('') + '</div>'; }).join('');
+    return RANK_BG + btag('Rankings · College Basketball') + top + rankHead(lg, r, r.title || 'AP Top 25') +
+      '<div style="position:absolute;left:36px;right:36px;top:138px;height:262px;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px">' + T.slice(0, 5).map(hero).join('') + '</div>' +
+      '<div style="position:absolute;left:36px;right:36px;top:414px;bottom:28px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px">' + cols + '</div>';
+  }
+
+  // ---- the College Football Playoff bracket, "if the season ended today" (2026 rules)
+  // Auto bids: Big Ten, SEC, ACC and Big 12 champions + the best Group of Six champion (champion = best-ranked team in its conference for now).
+  // Straight seeding by the ranking; an auto bid ranked outside the top 12 moves into the 12 seed. 1–4 get byes.
+  var P4 = /big ten|southeastern|\bsec\b|atlantic coast|\bacc\b|big 12/i;
+  function loadConfs() {
+    if (window.__CONFS) { S.confs = window.__CONFS; return; }
+    if (S.confs || S.confsAt && Date.now() - S.confsAt < 3600000) return;
+    S.confsAt = Date.now();
+    var c = load('cfbconfs', 7 * 86400000); if (c) { S.confs = c; return; }
+    getJSON('https://site.api.espn.com/apis/v2/sports/football/college-football/standings?group=80', 20000).then(function (j) {
+      var map = {}, leaders = {};
+      (function walk(o, conf) {
+        if (!o || typeof o !== 'object') return;
+        var nm = o.name || ''; if (/conference|big ten|big 12|sec|acc|pac-12|mountain west|sun belt|american|mid-american|independent/i.test(nm) && !/division|east|west|north|south/i.test(nm.replace(/mountain west/i, ''))) conf = nm;
+        if (o.standings && o.standings.entries) o.standings.entries.forEach(function (en, i) { var id = String((en.team || {}).id || ''); if (id) { map[id] = conf || nm; if (i === 0 && !leaders[conf || nm]) leaders[conf || nm] = id; } });
+        (o.children || []).forEach(function (k) { walk(k, conf); });
+      })(j, '');
+      if (Object.keys(map).length) { S.confs = { map: map, leaders: leaders }; save('cfbconfs', S.confs); if (S.screen === 'scores') render(); }
+    }).catch(function () { S.confsAt = Date.now() - 50 * 60000; });
+  }
+  function cfpField() {
+    var r = S.ranks && S.ranks['college-football']; if (!r || !/playoff|cfp/i.test(r.title) || r.teams.length < 12) return null;
+    loadConfs(); var cf = S.confs; if (!cf) return null;
+    var conf = function (x) { return cf.map[x.id] || ''; }, champ = {}, champs = [];
+    r.teams.forEach(function (x) { var c = conf(x); if (c && !/independent/i.test(c) && !champ[c]) { champ[c] = x; } });
+    Object.keys(champ).forEach(function (c) { if (P4.test(c)) champs.push(champ[c]); });
+    var g6 = Object.keys(champ).filter(function (c) { return !P4.test(c); }).map(function (c) { return champ[c]; }).sort(function (a, b) { return a.rank - b.rank; })[0];
+    if (g6) champs.push(g6);
+    var field = r.teams.slice(0, 12), out = champs.filter(function (x) { return field.indexOf(x) < 0; }).sort(function (a, b) { return a.rank - b.rank; });
+    out.forEach(function (x, i) { field[12 - out.length + i] = null; }); // make room at the bottom for auto bids ranked outside the top 12
+    field = field.filter(Boolean).concat(out).slice(0, 12);
+    return field.map(function (x, i) { return Object.assign({ seed: i + 1, aq: champs.indexOf(x) >= 0, conf: conf(x) }, x); });
+  }
+  function collegePages() { // CFP rankings, then the bracket, then the basketball poll
+    var out = []; rankingsLeagues().forEach(function (l) { out.push('rk:' + l); if (l === 'college-football' && bracketLeagues().length) out.push('bk:cfp'); }); return out;
+  }
+  function bracketLeagues() { return rankingsLeagues().indexOf('college-football') >= 0 && cfpField() ? ['cfp'] : []; }
+  function bracketBleed(top) {
+    var F = cfpField(); if (!F) return emptyBleed('Loading the bracket…');
+    var s = function (n) { return F[n - 1]; };
+    var H = 62;
+    var team = function (x) {
+      if (!x) return '<div style="display:flex;align-items:center;height:' + H + 'px;padding:0 12px;border-radius:10px;background:rgba(255,255,255,.05);border:1px dashed rgba(255,255,255,.22);font-size:15px;font-weight:700;opacity:.6">Winner</div>';
+      var col = rankCol(x), me = rankMine('college-football', x);
+      return '<div style="display:flex;align-items:center;gap:8px;height:' + H + 'px;padding:0 10px 0 0;border-radius:10px;overflow:hidden;background:linear-gradient(90deg,' + col + ',' + col + '99 60%,rgba(16,18,28,.92));' + (me ? 'outline:2px solid var(--accent);' : '') + '">' +
+        '<span style="width:30px;flex-shrink:0;align-self:stretch;display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:900;background:rgba(0,0,0,.28)">' + x.seed + '</span>' + rankLogo(x, 36) +
+        '<span style="flex:1;min-width:0"><span class="ellip" style="display:block;font-size:' + (x.name.length > 11 ? 15 : 17) + 'px;font-weight:900;line-height:1.15;text-shadow:0 1px 6px rgba(0,0,0,.4)">' + esc(x.name) + '</span>' +
+        '<span style="font-size:12px;font-weight:800;opacity:.85">' + esc(x.rec) + (x.aq ? ' · AQ' : '') + '</span></span></div>';
+    };
+    var lab = function (txt) { return '<div class="ellip" style="font-size:11px;font-weight:800;letter-spacing:.08em;opacity:.55;text-transform:uppercase;height:14px">' + txt + '</div>'; };
+    var game = function (a, b, label) { return '<div style="display:flex;flex-direction:column;gap:5px">' + lab(label) + team(a) + team(b) + '</div>'; };
+    var col = function (inner) { return '<div style="display:flex;flex-direction:column;justify-content:space-around;min-width:0">' + inner + '</div>'; };
+    var fr = function (hi, lo) { return game(s(hi), s(lo), 'First round · at ' + esc(s(hi).abbr || s(hi).name)); };
+    var semi = col(game(null, null, 'Semifinal'));
+    var fin = '<div style="display:flex;flex-direction:column;justify-content:center;min-width:0"><div style="text-align:center;padding:18px 6px;border-radius:16px;background:rgba(255,210,122,.1);border:1px solid rgba(255,210,122,.3)">' +
+      '<div style="font-size:40px;line-height:1">🏆</div><div style="font-size:13px;font-weight:900;letter-spacing:.1em;color:#ffd27a;margin-top:8px">NATIONAL<br>CHAMPIONSHIP</div><div style="font-size:13px;opacity:.7;margin-top:4px">Jan 19</div></div></div>';
+    var cols = [col(fr(8, 9) + fr(5, 12)), col(game(s(1), null, 'Quarterfinal') + game(s(4), null, 'Quarterfinal')), semi, fin, semi,
+      col(game(s(2), null, 'Quarterfinal') + game(s(3), null, 'Quarterfinal')), col(fr(7, 10) + fr(6, 11))];
+    return RANK_BG + btag('College Football Playoff · Bracket') + top +
+      '<div style="position:absolute;left:36px;right:36px;top:84px;display:flex;align-items:center;justify-content:space-between"><div class="head" style="font-size:32px">If the season ended today</div><div style="font-size:15px;font-weight:700;opacity:.7">AQ = automatic bid · seeds 1–4 get a bye</div></div>' +
+      '<div style="position:absolute;left:24px;right:24px;top:132px;bottom:20px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,.72fr) minmax(0,.66fr) minmax(0,.72fr) minmax(0,1fr) minmax(0,1fr);gap:10px">' + cols.join('') + '</div>';
   }
 
   // ------------------------------------------------------------ details
