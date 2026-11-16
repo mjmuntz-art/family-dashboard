@@ -2061,7 +2061,19 @@
   }
   // ------------------------------------------------------------ extras: on this day, NASA picture, tonight's sky, gas, dinner ideas
   var TODAYKEY = function () { var n = now(); return n.getFullYear() + '-' + (n.getMonth() + 1) + '-' + n.getDate(); };
+  function pruneStorage() { // things saved once a day (rosters, today in history, recipe ideas) — only today's copy is kept
+    try {
+      var day = TODAYKEY(), gone = [];
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i) || '';
+        if (/^dash:(roster:|hist\d*:|apod|meals:)/.test(k) && k.slice(-day.length) !== day) gone.push(k);
+        else if (/^dash:/.test(k)) { var o = JSON.parse(localStorage.getItem(k) || 'null'); if (o && o.t && Date.now() - o.t > 45 * 86400000 && !/photodeck/.test(k)) gone.push(k); } // anything untouched for 45 days
+      }
+      gone.forEach(function (k) { localStorage.removeItem(k); });
+    } catch (e) { /* storage unavailable */ }
+  }
   function loadExtras() {
+    pruneStorage();
     if (DEMO) { if (window.__EXTRAS) { S.hist = __EXTRAS.hist; S.apod = __EXTRAS.apod; S.meals = __EXTRAS.meals; S.meal = S.meals && S.meals[0]; } return; }
     var day = TODAYKEY(), n = now(), mm = n.getMonth() + 1, dd = n.getDate();
     // on this day (Wikipedia): only events that come with a picture
@@ -2078,24 +2090,8 @@
       }).filter(Boolean);
       if (list.length) { S.hist = list; save('hist2:' + day, list); refresh(['news']); }
     }).catch(function () { /* try again later */ });
-    // NASA astronomy picture of the day (a video day uses its thumbnail; before it's posted, yesterday's)
-    S.apodInfo = load('apodinfo2:' + day, 86400000) || S.apodInfo;
-    var a = load('apod4:' + day, 86400000);
-    if (a) S.apod = a; else {
-      var since = new Date(n.getTime() - 8 * 86400000), ymd = function (d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); };
-      getJSON('https://api.nasa.gov/planetary/apod?api_key=' + (C.nasaKey || 'DEMO_KEY') + '&start_date=' + ymd(since), 20000).then(function (list) {
-        list = Array.isArray(list) ? list : [list];
-        var real = function (j) { var u = j.url || j.hdurl || ''; return j.media_type === 'image' && u && !/logo|meatball|wp-content\/themes/i.test(u) && !/^nasa science$/i.test(j.title || ''); }; // real APOD photos live under apod.nasa.gov/apod/image
-        var pics = list.filter(real), j2 = pics[pics.length - 1], today = list[list.length - 1] || {};
-        if (today.explanation) { S.apodInfo = { title: today.title, text: today.explanation, credit: today.copyright, kind: today.media_type, date: today.date }; save('apodinfo2:' + day, S.apodInfo); refresh(['weather']); } // NASA's words for today, even when its picture link is bad
-        var vid = today.media_type === 'video' ? videoEmbed(today.url) : null;
-        if (!j2 && !vid) return;
-        var src = vid ? today : j2;
-        S.apod = { title: src.title, text: src.explanation, image: j2 ? (j2.url || j2.hdurl) : '', video: vid, credit: (src.copyright || 'NASA').replace(/\s+/g, ' ').trim(), date: src.date };
-        save('apod4:' + day, S.apod); refresh(['weather']);
-      }).catch(function () { /* skip today */ });
-    }
     // seasonal dinner idea (TheMealDB), one per day
+    if (S.back && S.back.recipes && !S.back.recipes.error && ((S.back.recipes.dinners || []).length + (S.back.recipes.treats || []).length)) return; // the daily recipe set is in: no need
     var m = load('meals:' + day, 86400000);
     if (m) { S.meals = m; S.meal = m[0]; } else Promise.all([mealIdea(n, SEASON_DISHES, MAINS), mealIdea(n, SEASON_SNACKS, TREATS)]).then(function (r) {
       var list = r.filter(Boolean); if (!list.length) return;
@@ -2308,7 +2304,7 @@
     var timeline = '<svg viewBox="0 0 ' + TW + ' ' + TH + '" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style="display:block">' + tl + '</svg>';
     return '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(6,8,22,.78),rgba(6,8,22,.9))"></div>' + btag("Weather · Tonight's sky") + top +
       '<div style="position:absolute;left:40px;right:40px;top:88px;bottom:30px;display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto;gap:12px 14px">' +
-      '<div style="grid-column:1 / span 2;display:flex;align-items:baseline;justify-content:space-between;gap:20px;min-width:0"><div class="head ellip" style="font-size:' + (k.showcase ? 32 : 34) + 'px;min-width:0">' + esc(head) + '</div><div style="font-size:16px;font-weight:700;opacity:.7" class="ellip">The sky at ' + hm(k.show) + (k.showcase ? ' (best for meteors)' : '') + ' · dark ' + hm(k.dusk) + ' to ' + hm(k.dawn) + '</div></div>' +
+      '<div style="grid-column:1 / span 2;display:flex;align-items:baseline;justify-content:space-between;gap:20px;min-width:0"><div class="head ellip" style="flex:1 1 auto;font-size:' + (head.length > 44 ? 25 : head.length > 34 ? 29 : 34) + 'px;min-width:0">' + esc(head) + '</div><div style="flex-shrink:0;white-space:nowrap;font-size:16px;font-weight:700;opacity:.7">Sky at ' + hm(k.show) + ' · dark ' + hm(k.dusk) + '–' + hm(k.dawn) + '</div></div>' +
       '<div class="glass" style="padding:10px;min-height:0;display:flex;align-items:center">' + pano + '</div>' +
       '<div style="display:grid;grid-template-rows:repeat(2,minmax(0,1fr));gap:12px;min-height:0">' + issCard + metCard + '</div>' +
       '<div class="glass" style="grid-column:1 / span 2;padding:12px 18px;height:' + (54 + rows.length * 30) + 'px"><div class="lbl" style="margin-bottom:4px">Tonight, dark to dawn</div><div style="height:calc(100% - 20px)">' + timeline + '</div></div></div>';
