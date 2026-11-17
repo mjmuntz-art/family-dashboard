@@ -962,7 +962,7 @@
   function cardData(m, p) {
     var x = playInfo(Object.assign({ model: m.name }, p)), key = pnorm(x.player), team = x.team ? espnAbbr(x.league, x.team) : '', who = null;
     (x.teams || []).some(function (t) { var r = S.rosters && S.rosters[x.league + ':' + espnAbbr(x.league, t)]; if (r && r.players[key]) { who = r.players[key]; if (!team) team = espnAbbr(x.league, t); return true; } return false; });
-    var img = x.pid && /^\d+$/.test(x.pid) && x.league === 'nba' ? 'https://cdn.nba.com/headshots/nba/latest/260x190/' + x.pid + '.png' : who && who.img ? who.img : '';
+    var img = x.headshot ? x.headshot : x.pid && /^\d+$/.test(x.pid) && x.league === 'nba' ? 'https://cdn.nba.com/headshots/nba/latest/260x190/' + x.pid + '.png' : who && who.img ? who.img : '';
     var col = knownColor(x.league, team) || { c1: '#2a3b55', c2: '#5d6f88' };
     return { x: x, team: team, img: img, alt: who && who.img && img !== who.img ? who.img : '', col: col, jersey: who && who.jersey, pos: who && who.pos, logo: team ? 'https://a.espncdn.com/i/teamlogos/' + x.league + '/500-dark/' + team.toLowerCase() + '.png' : '' };
   }
@@ -1129,7 +1129,8 @@
       '<div class="pini" style="position:absolute;left:0;right:0;bottom:0;top:0;display:' + (c.img ? 'none' : 'flex') + ';align-items:flex-end;justify-content:center"><span style="font-family:' + L.head + ';font-size:' + (hsH * 0.45) + 'px;font-weight:800;color:rgba(255,255,255,.25);margin-bottom:' + (hsH * 0.2) + 'px">' + esc(ini) + '</span></div>' +
       (c.img ? '<img src="' + esc(c.img) + '" data-alt="' + esc(c.alt) + '" alt="" style="position:absolute;left:50%;bottom:0;height:100%;transform:translateX(-50%);object-fit:contain" onerror="var a=this.getAttribute(\'data-alt\');if(a&&this.src!==a){this.src=a;this.removeAttribute(\'data-alt\');}else{var q=this.parentNode.querySelector(\'.pini\');if(q)q.style.display=\'flex\';this.remove();}">' : '') +
       (c.logo ? '<img src="' + esc(c.logo) + '" alt="" style="position:absolute;left:10px;top:10px;width:' + (n5 ? 52 : big ? 84 : 68) + 'px;height:' + (n5 ? 52 : big ? 84 : 68) + 'px;object-fit:contain;filter:drop-shadow(0 2px 6px rgba(0,0,0,.6))" onerror="this.remove()">' : '') +
-      (x.rank ? '<span style="position:absolute;right:12px;top:12px;padding:3px 10px;border-radius:8px;background:' + (p.reserve ? 'rgba(255,255,255,.88);color:#111' : 'rgba(0,0,0,.45)') + ';font-family:' + L.num + ';font-size:' + (p.reserve ? 13 : 16) + 'px;font-weight:800">' + (p.reserve ? 'RESERVE #' : '#') + esc(String(x.rank)) + '</span>' : '') + '</div>' +
+      (p.tag ? '<span style="position:absolute;right:10px;top:10px;padding:4px 10px;border-radius:8px;background:' + (p.both ? '#ffd27a;color:#2a1c00' : 'rgba(0,0,0,.55);color:#fff') + ';font-size:' + (n5 ? 11 : 13) + 'px;font-weight:900;letter-spacing:.06em">' + esc(p.tag) + (p.units > 1 ? ' · ' + p.units + 'U' : '') + '</span>' : '') +
+      (x.rank && !p.tag ? '<span style="position:absolute;right:12px;top:12px;padding:3px 10px;border-radius:8px;background:' + (p.reserve ? 'rgba(255,255,255,.88);color:#111' : 'rgba(0,0,0,.45)') + ';font-family:' + L.num + ';font-size:' + (p.reserve ? 13 : 16) + 'px;font-weight:800">' + (p.reserve ? 'RESERVE #' : '#') + esc(String(x.rank)) + '</span>' : '') + '</div>' +
       '<div style="display:flex;flex-direction:column;gap:5px;padding:10px 16px 12px;flex:1;min-height:0">' +
       '<div style="display:flex;align-items:baseline;gap:8px;min-width:0;flex-shrink:0' + (n5 ? ';flex-direction:column;gap:2px' : '') + '"><span class="' + (n5 ? 'clamp2' : 'ellip') + '" style="font-family:' + L.head + ';font-size:' + (big ? 30 : n5 ? 21 : 26) + 'px;font-weight:800;text-transform:uppercase;letter-spacing:.01em;line-height:1">' + esc(x.player || '') + '</span>' +
       '<span style="font-size:13px;font-weight:700;opacity:.6;flex-shrink:0">' + esc([c.team, c.pos].filter(Boolean).join(' · ')) + '</span></div>' +
@@ -1141,8 +1142,8 @@
     var md = models() || [], mi = +p.slice(2), m = md[mi]; if (!m) return emptyBleed('Loading…');
     setTimeout(loadRosters, 0);
     var L = MODEL_LOOK[m.name] || { bg: '#10141c', panel: '#1a2030', line: '#2a3446', acc: m.acc || '#fff', head: 'inherit', text: 'inherit', num: 'inherit', tag: '' };
-    var ps = (m.plays || []).slice(0, 10), n = ps.length, cols = n <= 3 ? Math.max(1, n) : n === 4 ? 2 : n <= 6 ? 3 : n <= 8 ? 4 : 5, rows = Math.ceil(n / cols) || 1, big = rows === 1;
-    var grid = n ? '<div style="display:grid;grid-template-columns:repeat(' + cols + ',minmax(0,1fr));grid-template-rows:repeat(' + rows + ',minmax(0,1fr));gap:14px;flex:1;min-height:0' + (n <= 2 ? ';max-width:' + (n * 360) + 'px;margin:0 auto;width:100%' : '') + '">' + ps.map(function (pp, ri) { return playCard(m, L, pp, mi, ri, big, cols === 5); }).join('') + '</div>'
+    var ps = (m.plays || []).slice(0, 12), n = ps.length, cols = n <= 3 ? Math.max(1, n) : n === 4 ? 2 : n <= 6 ? 3 : n <= 8 ? 4 : n <= 10 ? 5 : 6, rows = Math.ceil(n / cols) || 1, big = rows === 1;
+    var grid = n ? '<div style="display:grid;grid-template-columns:repeat(' + cols + ',minmax(0,1fr));grid-template-rows:repeat(' + rows + ',minmax(0,1fr));gap:14px;flex:1;min-height:0' + (n <= 2 ? ';max-width:' + (n * 360) + 'px;margin:0 auto;width:100%' : '') + '">' + ps.map(function (pp, ri) { return playCard(m, L, pp, mi, ri, big, cols >= 5); }).join('') + '</div>'
       : '<div style="flex:1;display:flex;align-items:center;justify-content:center;font-family:' + L.head + ';font-size:34px;opacity:.75">' + esc(m.note || 'No plays yet today') + '</div>';
     return '<div style="position:absolute;inset:0;background:radial-gradient(ellipse at 80% -10%,' + L.panel + ' 0%,' + L.bg + ' 60%)"></div>' + btag('Plays · ' + m.name) + top +
       '<div style="position:absolute;left:40px;right:40px;top:84px;bottom:30px;display:flex;flex-direction:column;gap:14px;font-family:' + L.text + '">' +
