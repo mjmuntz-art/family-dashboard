@@ -86,6 +86,13 @@
   var BIRTHDAY = L({ id: 'birthday', title: 'Happy Birthday!', fonts: ['Fredoka:wght@600', 'Nunito:wght@400;600;700;800'], head: "'Fredoka', system-ui, sans-serif", body: "'Nunito', system-ui, sans-serif", headW: 600, titleSize: 34, h2: 34,
     panel: panel('40,14,52', 0.62), edge: 'rgba(255,200,240,0.30)', accent: '#ffc94d', ink: '#2a1e00', muted: '#eedcf2', r: 26, r2: 16 });
 
+  // Mike's school calendar: the countdowns and the greeting on the day
+  var SCHOOL_DAYS = {
+    '2026-12-22': ['Last Day Before Break', 'Winter break starts tomorrow'],
+    '2027-01-05': ['Back to School', 'Teacher institute day'],
+    '2027-01-06': ['Second Semester Starts', 'Welcome back']
+  };
+  window.SCHOOL_COUNTDOWNS = [['2026-12-22', 'Last day before break', '❄️'], ['2027-01-05', 'Back to school', '🍎'], ['2027-01-06', 'Second semester starts', '🎒']];
   var COUNTDOWN = ['newyear', 'valentines', 'stpatricks', 'easter', 'mothers', 'memorial', 'fathers', 'july4', 'labor', 'halloween', 'veterans', 'thanksgiving', 'christmas'];
 
   function d(y, m, day) { return new Date(y, m - 1, day); }
@@ -154,6 +161,9 @@
     if (!hit) th.title = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][now.getDay()] + ', ' +
       ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][now.getMonth()] + ' ' + now.getDate();
     if (hit && hit.id === 'christmas' && now.getDate() === 24) th.title = 'Merry Christmas Eve';
+    // school days that get their own greeting (the month's scene stays until there's an event-day picture)
+    var sk = now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2) + '-' + ('0' + now.getDate()).slice(-2), sd = !hit && SCHOOL_DAYS[sk];
+    if (sd) { th.title = sd[0]; th.sub = sd[1]; }
     var nb = nextBirthday(now, birthdays), nh = nextHoliday(now);
     if (hit && hit.sub) th.sub = hit.sub;
     else if (nb && nb.n <= 7 && (!nh || nb.n <= nh.n)) th.sub = inDays(possessive(nb.name) + ' birthday', nb.n);

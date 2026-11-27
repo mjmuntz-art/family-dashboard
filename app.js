@@ -2114,6 +2114,7 @@
   function countdownItems() { // your Countdowns calendar first, then birthdays and holidays
     var n = now(), mine = [], other = [];
     ((S.back && S.back.calendar && S.back.calendar.countdowns) || []).forEach(function (c) { var d = new Date(c.start), k = dayDiff(n, d); if (k >= 0) mine.push({ name: c.title, date: d, n: k, emoji: cdEmoji(c.title) }); });
+    (window.SCHOOL_COUNTDOWNS || []).forEach(function (c) { var q = c[0].split('-'), d = new Date(+q[0], +q[1] - 1, +q[2]), k = dayDiff(n, d); if (k >= 0 && k <= 45 && !mine.some(function (x) { return x.name.toLowerCase() === c[1].toLowerCase(); })) mine.push({ name: c[1], date: d, n: k, emoji: c[2] }); });
     (C.birthdays || []).forEach(function (b) {
       var p = String(b.date || '').split('-'); if (p.length < 2) return;
       var d = new Date(n.getFullYear(), +p[0] - 1, +p[1]); if (dayDiff(n, d) < 0) d = new Date(n.getFullYear() + 1, +p[0] - 1, +p[1]);
