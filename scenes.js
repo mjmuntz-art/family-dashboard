@@ -831,6 +831,13 @@
       outside: { when: ['morning', 'midday', 'afternoon', 'evening', 'dusk', 'night'], mask: 'scenes/christmasday-windows.png', n: 28, flakes: true },
       steam: { when: ['morning', 'midday', 'afternoon', 'evening', 'dusk', 'night'], at: [[1196, 547]] },
       motes: { morning: [0, 620, 300, 660], midday: [0, 620, 300, 660], afternoon: [0, 620, 300, 660] } },
+    // MLK Day: the memorial on a snowy morning by the Tidal Basin. The low sun glows by the Washington Monument, the icy plaza glints,
+    // the plaza lamps and the statue's lights come on after sunset, and stars come out over the trees at night
+    mlk: { dusk: true, skyMask: 'scenes/mlk-sky.png', stars: [450, 1350, 10, 380], starTimes: ['night'],
+      suns: { morning: [787, 392, 120], evening: [921, 390, 140] },
+      glints: { morning: [0, 1350, 570, 790], midday: [0, 1350, 570, 790], afternoon: [0, 1350, 570, 790], evening: [0, 1350, 570, 790] },
+      lights: { dusk: [[89, 532, 16, 'lamp'], [136, 486, 12, 'lamp'], [305, 526, 16, 'lamp'], [422, 518, 16, 'lamp'], [667, 503, 14, 'lamp'], [799, 505, 14, 'lamp'], [909, 508, 14, 'lamp'], [1166, 560, 16, 'lamp'], [298, 470, 70, 'window'], [470, 300, 26, 'window']],
+        night: [[89, 532, 16, 'lamp'], [136, 486, 12, 'lamp'], [305, 526, 16, 'lamp'], [422, 518, 16, 'lamp'], [667, 503, 14, 'lamp'], [799, 505, 14, 'lamp'], [909, 508, 14, 'lamp'], [1166, 560, 16, 'lamp'], [298, 470, 70, 'window'], [470, 300, 26, 'window']] } },
     august: { dusk: true, skyMask: 'scenes/august-sky.png',
       suns: { morning: [315, 321, 170], afternoon: [370, 225, 150], evening: [335, 302, 180], dusk: [329, 315, 190] }, moon: { night: [325, 223, 70] },
       mist: { morning: [372, '#fff3df'] }, stars: [600, 1270, 20, 290], meteors: { night: 6 },
@@ -878,7 +885,7 @@
         out += '<g class="a-meteor" style="animation-duration:' + f(9 + r() * 14) + 's;animation-delay:-' + f(r() * 20) + 's"><line x1="' + f(mx) + '" y1="' + f(my) + '" x2="' + f(mx + len) + '" y2="' + f(my - len * 0.5) + '" stroke="' + c.lin([[0, '#ffffff', 1], [1, '#ffffff', 0]], 1, 0) + '" stroke-width="2.2" stroke-linecap="round"/></g>'; }
       out += skyOut;
     }
-    if (cfg.stars && (tod === 'night' || tod === 'evening')) { out += skyIn; var sb = cfg.stars; for (var j = 0; j < (tod === 'night' ? 34 : 12); j++) out += '<circle class="a-twinkle" style="animation-delay:-' + f(r() * 4) + 's;animation-duration:' + f(2 + r() * 3) + 's" cx="' + f(sb[0] + r() * (sb[1] - sb[0])) + '" cy="' + f(sb[2] + r() * (sb[3] - sb[2])) + '" r="' + f(0.8 + r() * 1.4) + '" fill="#ffffff"/>'; out += skyOut; }
+    if (cfg.stars && (cfg.starTimes || ['night', 'evening']).indexOf(tod) >= 0) { out += skyIn; var sb = cfg.stars; for (var j = 0; j < (tod === 'night' ? 34 : 12); j++) out += '<circle class="a-twinkle" style="animation-delay:-' + f(r() * 4) + 's;animation-duration:' + f(2 + r() * 3) + 's" cx="' + f(sb[0] + r() * (sb[1] - sb[0])) + '" cy="' + f(sb[2] + r() * (sb[3] - sb[2])) + '" r="' + f(0.8 + r() * 1.4) + '" fill="#ffffff"/>'; out += skyOut; }
     var spk = cfg.glints ? cfg.glints[tod] : (tod !== 'night' ? cfg.sparkle : null);
     if (spk && !low) { var gb = spk; for (var q = 0; q < 26; q++) { var x = gb[0] + r() * (gb[1] - gb[0]), y = gb[2] + r() * (gb[3] - gb[2]), z = 1.5 + r() * 2.5;
       out += '<path class="a-twinkle" style="animation-delay:-' + f(r() * 6) + 's;animation-duration:' + f(3 + r() * 4) + 's" d="M' + f(x) + ',' + f(y - z * 2) + ' L' + f(x + z * 0.4) + ',' + f(y) + ' L' + f(x) + ',' + f(y + z * 2) + ' L' + f(x - z * 0.4) + ',' + f(y) + 'Z M' + f(x - z * 2) + ',' + f(y) + ' L' + f(x) + ',' + f(y + z * 0.4) + ' L' + f(x + z * 2) + ',' + f(y) + ' L' + f(x) + ',' + f(y - z * 0.4) + 'Z" fill="#ffffff"/>'; } }
