@@ -442,6 +442,11 @@
     var status = st.state === 'pre' ? whenLabel(d) : (st.shortDetail || st.detail || '');
     return { id: ev.id, sport: sport, league: league, lg: label, state: st.state, status: status, date: d, teams: teams };
   }
+  function bowlLabel(note) { // "CFP Quarterfinal at the Rose Bowl Game" → "CFP · Rose Bowl"; "Duke's Mayo Bowl" stays
+    var b = (/([A-Z][\w'.&-]*\s)+Bowl/.exec(note) || [])[0] || '';
+    if (/college football playoff|\bcfp\b/i.test(note)) return 'CFP · ' + (/championship/i.test(note) && !/semi/i.test(note) ? 'Title game' : /first round/i.test(note) ? 'First round' : b || (/semi/i.test(note) ? 'Semifinal' : 'Quarterfinal'));
+    return b || 'Bowl game';
+  }
   function loadScores() {
     if (DEMO) { S.games = demoGames(); render(); return Promise.resolve(); }
     var n = now(), out = [], seen = {}, miss = [];
@@ -469,7 +474,15 @@
         return (j.events || []).map(function (e) { return parseEvent(e, lg.sport, lg.league, lg.label); });
       }).catch(function () { return []; });
     });
-    return Promise.all([Promise.all(followed), Promise.all(fills)]).then(function (r) {
+    // bowl season (Dec 13 through the title game): any college football game with a Top 25 team, or a playoff game
+    var bowlOn = (function () { var d = new Date(n), m = d.getMonth(), day = d.getDate(); return (m === 11 && day >= 13) || (m === 0 && day <= 21); })();
+    var ymd8 = function (d) { return d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2); };
+    var bowls = bowlOn ? getJSON(ESPN + 'football/college-football/scoreboard?groups=80&limit=100&dates=' + ymd8(new Date(n - 86400000)) + '-' + ymd8(new Date(n + 86400000))).then(function (j) {
+      return (j.events || []).filter(function (e) { var c = (e.competitions || [])[0] || {}, note = ((c.notes || [])[0] || {}).headline || '';
+        return /bowl|playoff|cfp/i.test(note + ' ' + (e.name || '')) && (c.competitors || []).some(function (x) { return x.curatedRank && x.curatedRank.current >= 1 && x.curatedRank.current <= 25; }) || /college football playoff/i.test(note);
+      }).map(function (e) { var g = parseEvent(e, 'football', 'college-football', 'CFB'), note = ((e.competitions[0].notes || [])[0] || {}).headline || ''; g.bowl = note.replace(/presented by.*$/i, '').trim(); g.lg = bowlLabel(g.bowl); return g; });
+    }).catch(function () { return []; }) : Promise.resolve([]);
+    return Promise.all([Promise.all(followed), Promise.all(fills), bowls]).then(function (r) {
       var morris = morrisGames();
       // Live games first, then the followed teams, then Morris, then today's best of the rest
       var all = [].concat.apply([], r[0]).filter(Boolean), fillAll = [].concat.apply([], r[1]);
@@ -481,6 +494,9 @@
       var mineTiles = r[0].map(tile).filter(Boolean);
       mineTiles.filter(function (g) { return g.state === 'in'; }).forEach(add);
       mineTiles.forEach(add); morris.forEach(add);
+      var bowlRank = function (g) { return g.state === 'in' ? 0 : g.state === 'pre' ? 1 : 2; };
+      (r[2] || []).filter(function (g) { return g.state === 'in' || (g.state === 'post' && n - g.date < 18 * 3600000) || (g.state === 'pre' && g.date - n < 30 * 3600000); })
+        .sort(function (a, b) { return bowlRank(a) - bowlRank(b) || a.date - b.date; }).forEach(add);
       var mine = out.length; // your teams always make it; other live games and today's slate fill the rest
       fillAll.filter(function (g) { return g.state === 'in'; }).forEach(add);
       var rank = function (g) { return g.state === 'pre' ? 1 : 2; };
@@ -729,6 +745,7 @@
     if (S.screen === 'news' && p && p.indexOf('s:') === 0) drawQR((newsStories() || [])[+p.slice(2)]);
     if (S.screen === 'news' && p === 'hist' && histPick()) drawQR(histPick());
     if (S.screen === 'family' && p === 'idea') mealPair().forEach(function (m, i) { drawQR(m, 'qr' + i); });
+    if (S.screen === 'family' && p === 'santa') drawQR({ link: 'https://www.noradsanta.org/' }, 'qrsanta');
   }
   // A background reload only redraws the screen it affects, and never restarts a playing radar loop
   function refresh(screens) {
@@ -1185,7 +1202,7 @@
     if (screen === 'news') { var nw = newsStories(), np = nw && nw.length ? nw.map(function (s, i) { return 's:' + i; }) : ['empty']; if (S.hist && S.hist.length) np.push('hist'); if (gasOK()) np.push('gas'); return np; }
     if (screen === 'weather') return S.alerts.map(function (a, i) { return 'al:' + i; }).concat(S.wx ? ['now', 'details', 'hours', 'week', 'sky'].concat(window.Astronomy && S.wx.setD ? ['tonight'] : [], ['radar']) : S.alerts.length ? [] : ['empty']);
     if (screen === 'photos') { var pgN = Math.min(3, (S.groups && S.groups.length) || photoGroups().length) + otdGroups().length; var out = []; for (var q = 0; q < Math.max(1, pgN); q++) out.push('c:' + q); return out; }
-    if (screen === 'family') { var fp = ['main']; if (events()) fp.push('week'); if (mealPair().length) fp.push('idea'); if (boardLists().grocery || boardLists().notes.length) fp.push('board'); if (countdownItems().length) fp.push('cd'); return fp; }
+    if (screen === 'family') { var fp = santaNow() ? ['santa', 'main'] : ['main']; if (events()) fp.push('week'); if (mealPair().length) fp.push('idea'); if (boardLists().grocery || boardLists().notes.length) fp.push('board'); if (countdownItems().length) fp.push('cd'); return fp; }
     if (screen === 'live') { var lv = liveList(); return lv.length ? lv.map(function (g) { return 'g:' + g.id; }) : ['none']; }
     if (screen === 'alert') { var ua = S.alerts.filter(isUrgent); return ua.length ? ua.map(function (a, i) { return 'al:' + S.alerts.indexOf(a); }) : ['none']; }
     if (screen === 'night') return ['main'];
@@ -1625,6 +1642,7 @@
     if (S.screen === 'live') return p === 'none' ? emptyBleed('No live games right now') : gameBleed(findGame(p.slice(2)), top, true);
     if (String(p).indexOf('al:') === 0) return alertBleed(S.alerts[+p.slice(3)], top, S.screen === 'alert');
     if (S.screen === 'alert') return emptyBleed('Warning has ended');
+    if (S.screen === 'family' && p === 'santa') return santaBleed(top);
     if (S.screen === 'family') return p === 'idea' ? mealBleed(top) : p === 'week' ? weekBleed(top) : p === 'who' ? whoBleed(top) : p === 'board' ? boardBleed(top) : countdownBleed(top);
     if (String(p).indexOf('st:') === 0) return standingsBleed(p.slice(3), top);
     if (String(p).indexOf('rk:') === 0) return rankingsBleed(p.slice(3), top);
@@ -1920,6 +1938,7 @@
     S.games.concat(S.mine || []).filter(function (g) { if (seen[g.id] || !(g.followed || g.morris) || g.state === 'post' || !sameDay(g.date, n)) return false; seen[g.id] = 1; return true; }).slice(0, 2).forEach(function (g) {
       var sum = S.sum[g.id] && S.sum[g.id].j; rows.push(['🏟️', g.lg + (g.state === 'in' ? ' · Live' : ' · ' + hm(g.date)) + (sum && sum.tv ? ' · ' + sum.tv : ''), g.teams[0].name + (g.teams[1].home ? ' at ' : ' vs ') + g.teams[1].name]);
     });
+    var sn = santaNow(); if (sn) rows.unshift(['🎅', santaWhere(sn).replace(/^Santa is /, 'Santa: '), santaWhen(sn)]);
     var cd = countdownItems()[0]; if (cd) rows.push([cd.emoji, cd.n === 0 ? 'Today!' : cd.n + ' day' + (cd.n === 1 ? '' : 's') + ' to go', cd.name]);
     var ahead = rows.length ? rows.slice(0, 4).map(function (r) { return '<div style="display:flex;gap:14px;align-items:center"><span style="font-size:34px;width:44px;text-align:center;flex-shrink:0">' + r[0] + '</span><div style="min-width:0"><div style="font-size:14px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;opacity:.7">' + esc(r[1]) + '</div><div class="ellip" style="font-size:22px;font-weight:700">' + esc(r[2]) + '</div></div></div>'; }).join('')
       : '<div style="opacity:.75;font-size:19px">No games or plans tonight</div>';
@@ -2039,6 +2058,50 @@
       description: '* WHAT...60 mph wind gusts and quarter size hail.\n\n* WHERE...Yorkville, Oswego and Plano.\n\n* WHEN...Until 9:45 PM CDT.\n\n* IMPACTS...Hail damage to vehicles is expected. Expect wind damage to roofs, siding, and trees.',
       instruction: 'For your protection move to an interior room on the lowest floor of a building.' };
     return kind === 'urgent' ? [u] : kind === 'both' ? [u, w] : [w];
+  }
+
+  // ------------------------------------------------------------ Christmas Eve: where's Santa?
+  // An estimate from the clock: Santa delivers around midnight local time, so he follows midnight west around the world
+  // (Pacific islands about 4 AM our time, Europe late afternoon, us around midnight). NORAD's official tracker is a QR away.
+  var SANTA_STOPS = [[14, 'Kiritimati, Kiribati', '🇰🇮'], [13, 'Tonga', '🇹🇴'], [12, 'Auckland, New Zealand', '🇳🇿'], [11, 'Solomon Islands', '🇸🇧'], [10, 'Sydney, Australia', '🇦🇺'], [9, 'Tokyo, Japan', '🇯🇵'],
+    [8, 'Beijing, China', '🇨🇳'], [7, 'Bangkok, Thailand', '🇹🇭'], [6, 'Dhaka, Bangladesh', '🇧🇩'], [5.5, 'Mumbai, India', '🇮🇳'], [5, 'Karachi, Pakistan', '🇵🇰'], [4, 'Dubai, UAE', '🇦🇪'], [3, 'Moscow, Russia', '🇷🇺'],
+    [2, 'Athens, Greece', '🇬🇷'], [1, 'Paris, France', '🇫🇷'], [0, 'London, England', '🇬🇧'], [-1, 'the Azores', '🇵🇹'], [-2, 'the middle of the Atlantic', '🌊'], [-3, 'Rio de Janeiro, Brazil', '🇧🇷'],
+    [-4, 'Puerto Rico', '🇵🇷'], [-5, 'New York City', '🗽'], [-6, 'HOME', '🏡'], [-7, 'Denver, Colorado', '🏔️'], [-8, 'Los Angeles, California', '🌴'], [-9, 'Anchorage, Alaska', '🐻'], [-10, 'Honolulu, Hawaii', '🌺'], [-11, 'American Samoa', '🇦🇸']];
+  function santaNow() {
+    var n = new Date(now()), y = n.getFullYear(), start = new Date(y, 11, 24, 4, 0).getTime(), end = new Date(y, 11, 25, 7, 0).getTime(), t = n.getTime();
+    if (t < start || t > end) return null;
+    var utcH = n.getUTCHours() + n.getUTCMinutes() / 60, off = 24 - utcH; if (n.getUTCDate() === 25) off = -utcH; // the offset where it's midnight right now
+    var stop = SANTA_STOPS.reduce(function (best, s) { return Math.abs(s[0] - off) < Math.abs(best[0] - off) ? s : best; }, SANTA_STOPS[0]);
+    if (off > 14.4) stop = null; // before he sets out
+    var homeMid = new Date(y, 11, 25, 0, 0).getTime(), mins = Math.round((homeMid - t) / 60000), home = L.name.split(',')[0];
+    var share = Math.max(0, Math.min(1, (14 - off) / 25)), gifts = Math.round(share * 1.9e9); // a fun estimate, not a count
+    return { stop: stop, home: home, mins: mins, here: stop && stop[1] === 'HOME', visited: mins < -30, share: share, gifts: gifts, off: off };
+  }
+  function santaWhere(s) { return !s.stop ? 'Getting the sleigh ready at the North Pole' : s.here ? 'Santa is in ' + s.home + '! Time for bed!' : 'Santa is over ' + s.stop[1]; }
+  function santaWhen(s) {
+    if (s.visited) return 'Santa already came to ' + s.home + '!';
+    if (s.here || Math.abs(s.mins) <= 30) return 'Santa is in the neighborhood!';
+    var h = Math.floor(s.mins / 60), m = s.mins % 60;
+    return 'Reaches ' + s.home + ' around midnight · ' + (h ? h + ' hr ' : '') + m + ' min away';
+  }
+  function santaBleed(top) {
+    var s = santaNow(); if (!s) return emptyBleed('Santa is resting up');
+    var pos = Math.max(0, Math.min(1, (14 - (s.stop ? s.off : 14.5)) / 25)), homePos = (14 + 6) / 25;
+    var stops = SANTA_STOPS.filter(function (x, i) { return i % 3 === 0 || x[1] === 'HOME'; });
+    return '<div style="position:absolute;inset:0;background:radial-gradient(ellipse at 50% 120%,rgba(30,90,60,.55),transparent 60%),linear-gradient(180deg,rgba(6,10,30,.88),rgba(10,18,40,.94))"></div>' + btag('Christmas Eve · Santa tracker') + top +
+      '<div style="position:absolute;left:48px;right:48px;top:96px;bottom:36px;display:flex;flex-direction:column;gap:22px">' +
+      '<div style="display:flex;align-items:center;gap:24px"><div style="font-size:96px;line-height:1">' + (s.stop ? s.stop[2] === '🏡' ? '🎅' : s.stop[2] : '🎅') + '</div><div style="min-width:0">' +
+      '<div class="head" style="font-size:52px;line-height:1.05">' + esc(santaWhere(s)) + '</div><div style="font-size:24px;font-weight:700;opacity:.85;margin-top:8px">' + esc(santaWhen(s)) + '</div></div></div>' +
+      '<div style="flex:1;display:flex;flex-direction:column;justify-content:center"><div class="lbl" style="margin-bottom:6px">Santa’s trip around the world tonight</div><div style="position:relative;height:200px;margin:0 30px">' + // date line to Hawaii
+      '<div style="position:absolute;left:0;right:0;top:96px;height:12px;border-radius:6px;background:rgba(255,255,255,.14)"></div>' +
+      '<div style="position:absolute;left:0;width:' + (pos * 100).toFixed(1) + '%;top:96px;height:12px;border-radius:6px;background:linear-gradient(90deg,#c62828,#ffd27a)"></div>' +
+      stops.map(function (x, i) { var p = (14 - x[0]) / 25, me = x[1] === 'HOME'; return '<div style="position:absolute;left:' + (p * 100).toFixed(1) + '%;top:118px;transform:translateX(' + (i === 0 ? '-20%' : i === stops.length - 1 ? '-80%' : '-50%') + ');text-align:center;font-size:' + (me ? 18 : 15) + 'px;font-weight:' + (me ? 900 : 700) + ';opacity:' + (me ? 1 : .72) + ';white-space:nowrap"><div style="font-size:' + (me ? 36 : 28) + 'px">' + x[2] + '</div>' + esc(me ? s.home : x[1].split(',')[0]) + '</div>'; }).join('') +
+      '<div style="position:absolute;left:' + (homePos * 100).toFixed(1) + '%;top:52px;transform:translateX(-50%);font-size:36px">📍</div>' +
+      '<div style="position:absolute;left:' + (pos * 100).toFixed(1) + '%;top:12px;transform:translateX(-50%);font-size:72px;line-height:1;filter:drop-shadow(0 4px 10px rgba(0,0,0,.5))">🛷</div></div></div>' +
+      '<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px">' +
+      '<div><div class="lbl">Gifts delivered so far (a fun estimate)</div><div class="head" style="font-size:56px;font-variant-numeric:tabular-nums">' + s.gifts.toLocaleString('en-US') + '</div>' +
+      '<div style="font-size:15px;opacity:.6;margin-top:4px">Santa follows midnight around the world, so this is our best guess from the clock.</div></div>' +
+      '<div style="display:flex;align-items:center;gap:14px"><div style="text-align:right;font-size:16px;font-weight:700;opacity:.8">NORAD’s official<br>Santa tracker</div><div id="qrsanta" style="width:120px;height:120px;padding:6px;box-sizing:border-box;border-radius:12px;background:#fff"></div></div></div></div>';
   }
 
   // ------------------------------------------------------------ family: countdowns and the reminders board
@@ -2804,32 +2867,80 @@
     return field.map(function (x, i) { return Object.assign({ seed: i + 1, aq: champs.indexOf(x) >= 0, conf: conf(x) }, x); });
   }
   function collegePages() { // CFP rankings, then the bracket, then the basketball poll
-    var out = []; rankingsLeagues().forEach(function (l) { out.push('rk:' + l); if (l === 'college-football' && bracketLeagues().length) out.push('bk:cfp'); }); return out;
+    var out = [], rl = rankingsLeagues(), bk = bracketLeagues().length; rl.forEach(function (l) { out.push('rk:' + l); if (l === 'college-football' && bk) out.push('bk:cfp'); });
+    if (bk && rl.indexOf('college-football') < 0) out.unshift('bk:cfp'); // the playoff outlasts the final rankings
+    return out;
   }
-  function bracketLeagues() { return rankingsLeagues().indexOf('college-football') >= 0 && cfpField() ? ['cfp'] : []; }
+  // ---- the official playoff (after selection day): ESPN's postseason games, with seeds, scores and winners moving on
+  function cfpYear() { var d = new Date(now()); return d.getMonth() >= 7 ? d.getFullYear() : d.getFullYear() - 1; } // the season the playoff belongs to
+  function loadCfpGames() {
+    if (window.__CFPGAMES) { S.cfpGames = window.__CFPGAMES.map(cfpGame); return; }
+    var m = new Date(now()).getMonth(); if (m !== 11 && m !== 0) return; // December and January only
+    var live = (S.cfpGames || []).some(function (g) { return g.state === 'in'; }), wait = live ? 60000 : 10 * 60000;
+    if (S.cfpAt && Date.now() - S.cfpAt < wait) return; S.cfpAt = Date.now();
+    var y = cfpYear();
+    getJSON(ESPN + 'football/college-football/scoreboard?seasontype=3&groups=80&limit=300&dates=' + y + '1201-' + (y + 1) + '0131', 20000, true).then(function (j) {
+      var games = (j.events || []).filter(function (e) { var n = ((e.competitions || [])[0] || {}).notes || []; return /college football playoff|\bcfp\b/i.test((n[0] || {}).headline || '') || /college football playoff/i.test(e.name || ''); }).map(cfpGame);
+      S.cfpGames = games; if (S.screen === 'scores') render();
+    }).catch(function () { S.cfpAt = Date.now() - wait + 120000; });
+  }
+  function cfpGame(e) {
+    var g = parseEvent(e, 'football', 'college-football', 'CFB'), comp = e.competitions[0], note = ((comp.notes || [])[0] || {}).headline || e.name || '';
+    g.round = /championship/i.test(note) && !/semi/i.test(note) ? 4 : /semi/i.test(note) ? 3 : /quarter/i.test(note) ? 2 : 1;
+    g.bowl = (/(rose|sugar|orange|cotton|fiesta|peach) bowl/i.exec(note) || [])[0] || '';
+    g.teams.forEach(function (t, i) { var c = comp.competitors.filter(function (x) { return String((x.team || {}).id) === String(t.id); })[0] || {}; t.seed = +(c.seed || (c.curatedRank && c.curatedRank.current <= 12 ? 0 : 0)) || 0; t.tbd = !t.id || /tbd|winner/i.test(t.name); });
+    return g;
+  }
+  function cfpOfficial() { // the official field and its games, once ESPN has them
+    loadCfpGames(); var G = S.cfpGames || []; if (G.filter(function (g) { return g.round <= 2; }).length < 4) return null;
+    var seedOf = {}, field = cfpField() || [];
+    G.forEach(function (g) { g.teams.forEach(function (t) { if (t.seed && !t.tbd) seedOf[t.id] = t.seed; }); });
+    if (Object.keys(seedOf).length < 8) field.forEach(function (x) { if (!seedOf[x.id]) seedOf[x.id] = x.seed; }); // no seeds from ESPN: use the committee ranking order
+    var byId = {}; field.forEach(function (x) { byId[x.id] = x; });
+    var teams = {}; G.forEach(function (g) { g.teams.forEach(function (t) { if (!t.tbd && t.id && seedOf[t.id]) teams[seedOf[t.id]] = Object.assign({ seed: seedOf[t.id], rec: (byId[t.id] || {}).rec || t.rec || '', c1: t.c1, logo: t.logo, name: t.loc || t.name, abbr: t.abbr, id: String(t.id), aq: (byId[t.id] || {}).aq }, {}); }); });
+    if (Object.keys(teams).length < 12) return null;
+    var find = function (round, ids) { return G.filter(function (g) { return g.round === round && g.teams.some(function (t) { return ids.indexOf(String(t.id)) >= 0; }); })[0] || null; };
+    var winner = function (g) { if (!g || g.state !== 'post') return null; var w = g.teams.filter(function (t) { return t.winner; })[0]; return w ? teams[seedOf[w.id]] || null : null; };
+    var s = function (n) { return teams[n]; }, fr = {}, qf = {}, sf = {};
+    [[8, 9], [5, 12], [7, 10], [6, 11]].forEach(function (p) { fr[p[0]] = find(1, [s(p[0]).id, s(p[1]).id]); });
+    [[1, 8], [4, 5], [2, 7], [3, 6]].forEach(function (p) { var w = winner(fr[p[1]]); qf[p[0]] = { g: find(2, [s(p[0]).id]), top: s(p[0]), opp: w }; qf[p[0]].win = winner(qf[p[0]].g); });
+    var semi = function (a, b) { var A = qf[a].win, B = qf[b].win, ids = [A, B].filter(Boolean).map(function (x) { return x.id; }), g = ids.length ? find(3, ids) : null; return { g: g, a: A, b: B, win: winner(g) }; };
+    sf.left = semi(1, 4); sf.right = semi(2, 3);
+    var fids = [sf.left.win, sf.right.win].filter(Boolean).map(function (x) { return x.id; }), fg = fids.length ? find(4, fids) : G.filter(function (g) { return g.round === 4; })[0] || null;
+    var champ = winner(fg), lastGame = G.reduce(function (m, g) { return g.date > m ? g.date : m; }, 0);
+    return { teams: teams, fr: fr, qf: qf, sf: sf, fin: { g: fg, a: sf.left.win, b: sf.right.win, win: champ }, done: champ && Date.now() - lastGame > 4 * 86400000 };
+  }
+  function bracketLeagues() { var o = cfpOfficial(); if (o) return o.done ? [] : ['cfp']; return rankingsLeagues().indexOf('college-football') >= 0 && cfpField() ? ['cfp'] : []; }
   function bracketBleed(top) {
-    var F = cfpField(); if (!F) return emptyBleed('Loading the bracket…');
-    var s = function (n) { return F[n - 1]; };
-    var H = 62;
-    var team = function (x) {
+    var O = cfpOfficial();
+    var F = O ? null : cfpField(); if (!O && !F) return emptyBleed('Loading the bracket…');
+    var s = function (n) { return O ? O.teams[n] : F[n - 1]; }, H = 62;
+    var gameOf = function (g, x) { if (!g || !x) return null; return g.teams.filter(function (tt) { return String(tt.id) === String(x.id); })[0] || null; };
+    var team = function (x, g, slim) {
       if (!x) return '<div style="display:flex;align-items:center;height:' + H + 'px;padding:0 12px;border-radius:10px;background:rgba(255,255,255,.05);border:1px dashed rgba(255,255,255,.22);font-size:15px;font-weight:700;opacity:.6">Winner</div>';
-      var col = rankCol(x), me = rankMine('college-football', x);
-      return '<div style="display:flex;align-items:center;gap:8px;height:' + H + 'px;padding:0 10px 0 0;border-radius:10px;overflow:hidden;background:linear-gradient(90deg,' + col + ',' + col + '99 60%,rgba(16,18,28,.92));' + (me ? 'outline:2px solid var(--accent);' : '') + '">' +
-        '<span style="width:30px;flex-shrink:0;align-self:stretch;display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:900;background:rgba(0,0,0,.28)">' + x.seed + '</span>' + rankLogo(x, 36) +
-        '<span style="flex:1;min-width:0"><span class="ellip" style="display:block;font-size:' + (x.name.length > 11 ? 15 : 17) + 'px;font-weight:900;line-height:1.15;text-shadow:0 1px 6px rgba(0,0,0,.4)">' + esc(x.name) + '</span>' +
-        '<span style="font-size:12px;font-weight:800;opacity:.85">' + esc(x.rec) + (x.aq ? ' · AQ' : '') + '</span></span></div>';
+      var col = rankCol(x), me = rankMine('college-football', x), gt = gameOf(g, x), sc = gt && g.state !== 'pre' ? gt.score : '', lost = g && g.state === 'post' && gt && !gt.winner;
+      return '<div style="display:flex;align-items:center;gap:8px;height:' + H + 'px;padding:0 10px 0 0;border-radius:10px;overflow:hidden;background:linear-gradient(90deg,' + col + ',' + col + '99 60%,rgba(16,18,28,.92));' + (me ? 'outline:2px solid var(--accent);' : '') + (lost ? 'opacity:.45;filter:grayscale(.6);' : '') + '">' +
+        '<span style="width:30px;flex-shrink:0;align-self:stretch;display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:900;background:rgba(0,0,0,.28)">' + x.seed + '</span>' + (sc !== '' ? '' : rankLogo(x, slim ? 26 : 36)) +
+        '<span style="flex:1;min-width:0"><span class="ellip" style="display:block;font-size:' + (sc !== '' ? (x.name.length > 10 ? 14 : 16) : x.name.length > 11 ? 15 : 17) + 'px;font-weight:900;line-height:1.15;text-shadow:0 1px 6px rgba(0,0,0,.4);' + (slim ? 'font-size:14px' : '') + '">' + esc(slim && sc !== '' ? (x.abbr || x.name) : x.name) + '</span>' +
+        '<span class="ellip" style="display:block;font-size:12px;font-weight:800;opacity:.85">' + esc(x.rec || '') + (x.aq && !slim ? ' · AQ' : '') + '</span></span>' +
+        (sc !== '' ? '<span style="font-size:24px;font-weight:900;font-variant-numeric:tabular-nums;min-width:30px;text-align:right">' + esc(String(sc)) + '</span>' : '') + '</div>';
     };
-    var lab = function (txt) { return '<div class="ellip" style="font-size:11px;font-weight:800;letter-spacing:.08em;opacity:.55;text-transform:uppercase;height:14px">' + txt + '</div>'; };
-    var game = function (a, b, label) { return '<div style="display:flex;flex-direction:column;gap:5px">' + lab(label) + team(a) + team(b) + '</div>'; };
+    var when = function (g) { if (!g) return ''; if (g.state === 'in') return '<span style="color:#ff6b6b">● ' + esc(g.status) + '</span>'; if (g.state === 'post') return 'Final'; return esc(g.status); };
+    var lab = function (txt, g) { return '<div class="clamp2" style="font-size:11px;font-weight:800;letter-spacing:.06em;opacity:.6;text-transform:uppercase;line-height:13px;height:26px;display:flex;align-items:flex-end">' + '<span>' + txt + (g ? ' · ' + when(g) : '') + '</span></div>'; };
+    var game = function (a, b, label, g, slim) { return '<div style="display:flex;flex-direction:column;gap:5px">' + lab(label, g) + team(a, g, slim) + team(b, g, slim) + '</div>'; };
     var col = function (inner) { return '<div style="display:flex;flex-direction:column;justify-content:space-around;min-width:0">' + inner + '</div>'; };
-    var fr = function (hi, lo) { return game(s(hi), s(lo), 'First round · at ' + esc(s(hi).abbr || s(hi).name)); };
-    var semi = col(game(null, null, 'Semifinal'));
-    var fin = '<div style="display:flex;flex-direction:column;justify-content:center;min-width:0"><div style="text-align:center;padding:18px 6px;border-radius:16px;background:rgba(255,210,122,.1);border:1px solid rgba(255,210,122,.3)">' +
-      '<div style="font-size:40px;line-height:1">🏆</div><div style="font-size:13px;font-weight:900;letter-spacing:.1em;color:#ffd27a;margin-top:8px">NATIONAL<br>CHAMPIONSHIP</div><div style="font-size:13px;opacity:.7;margin-top:4px">Jan 19</div></div></div>';
-    var cols = [col(fr(8, 9) + fr(5, 12)), col(game(s(1), null, 'Quarterfinal') + game(s(4), null, 'Quarterfinal')), semi, fin, semi,
-      col(game(s(2), null, 'Quarterfinal') + game(s(3), null, 'Quarterfinal')), col(fr(7, 10) + fr(6, 11))];
+    var fr = function (hi, lo) { var g = O && O.fr[hi]; return game(s(hi), s(lo), (O ? 'First round' : 'First round · at ' + esc(s(hi).abbr || s(hi).name)), g); };
+    var qf = function (n) { var q = O && O.qf[n]; return game(s(n), q ? q.opp : null, q && q.g && q.g.bowl ? esc(q.g.bowl) : 'Quarterfinal', q && q.g); };
+    var semi = function (side) { var x = O && O.sf[side]; return col(game(x ? x.a : null, x ? x.b : null, x && x.g && x.g.bowl ? esc(x.g.bowl) : 'Semifinal', x && x.g, true)); };
+    var fg = O && O.fin.g, champ = O && O.fin.win;
+    var fin = '<div style="display:flex;flex-direction:column;justify-content:center;gap:10px;min-width:0"><div style="text-align:center;padding:16px 6px;border-radius:16px;background:rgba(255,210,122,.1);border:1px solid rgba(255,210,122,.3)">' +
+      '<div style="font-size:40px;line-height:1">🏆</div><div style="font-size:13px;font-weight:900;letter-spacing:.1em;color:#ffd27a;margin-top:8px">' + (champ ? 'NATIONAL<br>CHAMPIONS' : 'NATIONAL<br>CHAMPIONSHIP') + '</div>' +
+      (champ ? '<div style="margin-top:8px">' + rankLogo(champ, 54) + '</div><div class="ellip" style="font-size:16px;font-weight:900;margin-top:4px">' + esc(champ.name) + '</div>' : '<div style="font-size:13px;opacity:.7;margin-top:4px">' + (fg ? when(fg) : 'Jan 19') + '</div>') + '</div>' +
+      (O && (O.fin.a || O.fin.b) && !champ ? game(O.fin.a, O.fin.b, 'Title game', fg, true) : '') + '</div>';
+    var cols = [col(fr(8, 9) + fr(5, 12)), col(qf(1) + qf(4)), semi('left'), fin, semi('right'), col(qf(2) + qf(3)), col(fr(7, 10) + fr(6, 11))];
+    var title = O ? (champ ? 'Champions: ' + champ.name : 'College Football Playoff') : 'If the season ended today';
     return RANK_BG + btag('College Football Playoff · Bracket') + top +
-      '<div style="position:absolute;left:36px;right:36px;top:84px;display:flex;align-items:center;justify-content:space-between"><div class="head" style="font-size:32px">If the season ended today</div><div style="font-size:15px;font-weight:700;opacity:.7">AQ = automatic bid · seeds 1–4 get a bye</div></div>' +
+      '<div style="position:absolute;left:36px;right:36px;top:84px;display:flex;align-items:center;justify-content:space-between"><div class="head" style="font-size:32px">' + esc(title) + '</div><div style="font-size:15px;font-weight:700;opacity:.7">' + (O ? 'Official bracket · seeds 1–4 had a bye' : 'AQ = automatic bid · seeds 1–4 get a bye') + '</div></div>' +
       '<div style="position:absolute;left:24px;right:24px;top:132px;bottom:20px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,.72fr) minmax(0,.66fr) minmax(0,.72fr) minmax(0,1fr) minmax(0,1fr);gap:10px">' + cols.join('') + '</div>';
   }
 
