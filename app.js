@@ -2105,7 +2105,7 @@
   }
 
   // ------------------------------------------------------------ family: countdowns and the reminders board
-  var HOLI_EMOJI = { newyear: '🎆', mlk: '✊', valentines: '💘', presidents: '🇺🇸', stpatricks: '☘️', easter: '🐣', mothers: '💐', memorial: '🇺🇸', fathers: '👔', july4: '🎆', labor: '🛠️', halloween: '🎃', veterans: '🎖️', thanksgiving: '🦃', christmas: '🎄', nye: '🥂' };
+  var HOLI_EMOJI = { winter: '❄️', newyear: '🎆', mlk: '✊', valentines: '💘', presidents: '🇺🇸', stpatricks: '☘️', easter: '🐣', mothers: '💐', memorial: '🇺🇸', fathers: '👔', july4: '🎆', labor: '🛠️', halloween: '🎃', veterans: '🎖️', thanksgiving: '🦃', christmas: '🎄', nye: '🥂' };
   function cdEmoji(t) {
     var r = [[/disney|universal|vacation|trip|cruise|flight/i, '✈️'], [/beach|lake|pool/i, '🏖️'], [/birthday|bday/i, '🎂'], [/christmas/i, '🎄'], [/wedding|anniversary/i, '💍'], [/school|class/i, '🎒'], [/game|season|opener|tailgate/i, '🏈'], [/concert|show|tickets/i, '🎟️'], [/party/i, '🎉'], [/camp/i, '🏕️'], [/graduat/i, '🎓'], [/baby|due/i, '👶']];
     for (var i = 0; i < r.length; i++) if (r[i][0].test(t)) return r[i][1];

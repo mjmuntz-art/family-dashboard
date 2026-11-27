@@ -816,6 +816,10 @@
       lights: [[516, 424, 40, 'lamp'], [1083, 424, 40, 'lamp'], [182, 527, 26, 'lamp'], [205, 547, 22, 'lamp'], [109, 651, 28, 'lamp'], [1087, 567, 24, 'lamp'], [1116, 567, 24, 'lamp'],
         [169, 327, 60, 'window'], [305, 180, 20, 'lamp'], [325, 220, 16, 'lamp']],
       fall: function () { return ['confetti', 26, ['#d4af37', '#f2d47a', '#ffffff', '#f4f4f6', '#c0c0c8', '#9ea3ad']]; } }),
+    // First day of winter: the snowy river valley. Snow falls gently, the sun glows at sunrise, morning mist hangs over the valley,
+    // stars come out behind the trees and the full moon glows at night
+    winter: { dusk: true, skyMask: 'scenes/winter-sky.png', snow: [30, 24, 5],
+      suns: { morning: [335, 236, 160] }, moon: { night: [823, 110, 70] }, mist: { morning: [262, '#fff4ea'] }, stars: [0, 1350, 10, 250] },
     august: { dusk: true, skyMask: 'scenes/august-sky.png',
       suns: { morning: [315, 321, 170], afternoon: [370, 225, 150], evening: [335, 302, 180], dusk: [329, 315, 190] }, moon: { night: [325, 223, 70] },
       mist: { morning: [372, '#fff3df'] }, stars: [600, 1270, 20, 290], meteors: { night: 6 },
