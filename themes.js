@@ -167,11 +167,12 @@
     if (hit && hit.id === 'christmas' && now.getDate() === 25) th.id = 'christmasday'; // Christmas morning has its own pictures (same look and fonts)
     // school days that get their own greeting (the month's scene stays until there's an event-day picture)
     var sk = now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2) + '-' + ('0' + now.getDate()).slice(-2), sd = !hit && SCHOOL_DAYS[sk];
-    if (sd) { th.title = sd[0]; th.sub = sd[1]; }
+    if (sd) th.title = sd[0];
     var nb = nextBirthday(now, birthdays), nh = nextHoliday(now);
     if (hit && hit.sub) th.sub = hit.sub;
     else if (nb && nb.n <= 7 && (!nh || nb.n <= nh.n)) th.sub = inDays(possessive(nb.name) + ' birthday', nb.n);
     else th.sub = nh ? inDays(nh.name, nh.n) : '';
+    if (sd) th.sub = sd[1]; // the school day's own line wins over the holiday countdown
     th.isHoliday = !!hit;
     return th;
   };
