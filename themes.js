@@ -164,6 +164,7 @@
     if (!hit) th.title = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][now.getDay()] + ', ' +
       ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][now.getMonth()] + ' ' + now.getDate();
     if (hit && hit.id === 'christmas' && now.getDate() === 24) th.title = 'Merry Christmas Eve';
+    if (hit && hit.id === 'christmas' && now.getDate() === 25) th.id = 'christmasday'; // Christmas morning has its own pictures (same look and fonts)
     // school days that get their own greeting (the month's scene stays until there's an event-day picture)
     var sk = now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2) + '-' + ('0' + now.getDate()).slice(-2), sd = !hit && SCHOOL_DAYS[sk];
     if (sd) { th.title = sd[0]; th.sub = sd[1]; }
