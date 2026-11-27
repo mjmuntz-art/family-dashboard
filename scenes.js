@@ -373,6 +373,7 @@
   // ------------------------------------------------------------------ particles
   var P = {};
   P.leaves = function (c, n, colors, min, max) { var r = c.r, s = ''; for (var i = 0; i < c.count(n); i++) s += '<g class="a-leaf" style="' + dl(r, (min || 14) + r() * ((max || 26) - (min || 14))) + '"><path transform="translate(' + f(r() * W) + ' -14) rotate(' + f(r() * 360) + ')" d="M0,-6 C4,-3 4,3 0,6 C-4,3 -4,-3 0,-6Z" fill="' + pick(r, colors) + '" opacity="0.9"/></g>'; return c.add(s); };
+  P.flakes = function (c, n, min, max) { var r = c.r, s = ''; for (var i = 0; i < c.count(n); i++) s += '<g class="a-leaf" style="' + dl(r, (min || 14) + r() * ((max || 26) - (min || 14))) + '"><circle cx="' + f(r() * W) + '" cy="-8" r="' + f(1.4 + r() * 2.2) + '" fill="#ffffff" opacity="' + f(0.65 + r() * 0.3) + '"/></g>'; return c.add(s); };
   P.apples = function (c, n, box) { // an apple drops from the branches now and then: x0, x1, top y0, y1, how far it falls
     var r = c.r, s = '';
     for (var i = 0; i < c.count(n); i++) {
@@ -795,6 +796,16 @@
       outside: { when: ['morning', 'midday', 'afternoon', 'evening', 'dusk'], mask: 'scenes/thanksgiving-windows.png', n: 16, colors: ['#c9502f', '#e07a3c', '#f0b04a', '#9a2a1a'] },
       steam: { when: ['midday', 'afternoon', 'evening', 'dusk'], at: [[55, 448], [340, 410]] },
       motes: { morning: [180, 760, 300, 660], midday: [180, 760, 300, 660], afternoon: [180, 760, 300, 660] } },
+    // Christmas Eve (and Day, until it has its own pictures): the living room. The fire crackles slowly, the tree, garland and window lights twinkle,
+    // lamps and candles glow, snow falls past the windows, dust floats in the morning sun; milk and cookies wait for Santa at night
+    christmas: { dusk: true,
+      waves: [{ mask: 'scenes/christmas-fire.png', box: [730, 270, 210, 180], freq: [0.06, 0.14], swing: 0.06, scale: 3, dur: 14, seed: 11 }],
+      embers: { box: [770, 410, 110], n: 6, when: ['morning', 'midday', 'afternoon', 'evening', 'dusk', 'night'] },
+      lights: [[829, 374, 150, 'fire'], [829, 467, 120, 'fire'], [20, 260, 60, 'lamp'], [38, 530, 34, 'lamp'], [987, 400, 30, 'lamp'], [316, 334, 26, 'lamp'], [376, 363, 16, 'lamp'],
+        [943, 140, 18, 'lamp'], [970, 136, 16, 'lamp'], [992, 144, 14, 'lamp'], [660, 140, 22, 'lamp'], [620, 167, 14, 'lamp']],
+      bulbR: 13, bulbs: [[1251,33],[1265,30],[1284,38],[1224,46],[1267,50],[1241,57],[1251,70],[1279,87],[1237,90],[1259,90],[1128,92],[1112,95],[1286,103],[1262,104],[1225,104],[1238,110],[1275,114],[1214,117],[1293,120],[1208,134],[1298,134],[1318,138],[1217,149],[1297,157],[1269,163],[1309,170],[1323,171],[1231,172],[1211,173],[1197,178],[1263,177],[1235,190],[1319,189],[1218,192],[1252,194],[1325,202],[1181,204],[1246,207],[1293,206],[1265,215],[1304,218],[1185,222],[1231,222],[1213,231],[1341,240],[1129,247],[1206,245],[1266,252],[1153,261],[1199,264],[1249,264],[1218,267],[1236,272],[1169,274],[1298,274],[1324,274],[1260,276],[1184,284],[1284,287],[1339,286],[1321,297],[1264,297],[1302,303],[1141,305],[1168,305],[1198,309],[1285,312],[1250,317],[1341,320],[1324,319],[1225,323],[1265,325],[1147,324],[1244,331],[1348,333],[1292,334],[1141,337],[1167,339],[1265,342],[1222,349],[1282,351],[1187,355],[1348,373],[1143,374],[1326,376],[1201,386],[1115,392],[1214,393],[1234,393],[1172,394],[1143,397],[1261,404],[1332,407],[1223,411],[1246,411],[1153,414],[1193,419],[1100,420],[1288,425],[1267,425],[1132,427],[1326,436],[1126,442],[1309,444],[1111,450],[1151,450],[1208,452],[1176,452],[1341,454],[1192,458],[1222,459],[1317,462],[1131,474],[1288,475],[1338,476],[1318,476],[1191,495],[1217,498],[1230,518],[832,120],[863,125],[752,127],[768,128],[792,128],[661,133],[814,133],[995,138],[767,142],[801,143],[879,157],[669,160],[640,162],[621,168],[848,168],[759,171],[953,172],[905,174],[1008,174],[786,176],[740,176],[808,176],[688,179],[890,180],[1033,181],[874,186],[751,188],[643,188],[709,188],[609,196],[576,201],[625,205],[1046,211],[579,215],[1059,234],[1028,240],[589,249],[1036,264],[598,281],[578,295],[95,1],[146,0],[162,9],[173,19],[197,26],[210,32],[225,32],[182,36],[292,40],[262,41],[278,42],[241,48],[314,55],[298,56]],
+      outside: { when: ['morning', 'midday', 'afternoon', 'evening', 'dusk', 'night'], mask: 'scenes/christmas-windows.png', n: 34, flakes: true },
+      motes: { morning: [120, 700, 300, 660], midday: [120, 700, 300, 660], afternoon: [120, 700, 300, 660] } },
     august: { dusk: true, skyMask: 'scenes/august-sky.png',
       suns: { morning: [315, 321, 170], afternoon: [370, 225, 150], evening: [335, 302, 180], dusk: [329, 315, 190] }, moon: { night: [325, 223, 70] },
       mist: { morning: [372, '#fff3df'] }, stars: [600, 1270, 20, 290], meteors: { night: 6 },
@@ -859,7 +870,7 @@
       K.geese(c, gz[0], gz[1], tod === 'evening' ? '#3b2140' : '#2c2a33'); if (gk) c.add('</g>'); }
     if (cfg.outside && cfg.outside.when.indexOf(tod) >= 0) { // leaves drift down outside the windows
       var om = c.uid('o'); c.defs += '<mask id="' + om + '" maskUnits="userSpaceOnUse" x="-71.1" y="0" width="1422.2" height="800"><image href="' + cfg.outside.mask + '" x="-71.1" y="0" width="1422.2" height="800" preserveAspectRatio="none"/></mask>';
-      c.add('<g mask="url(#' + om + ')">'); P.leaves(c, cfg.outside.n, cfg.outside.colors, 16, 28); c.add('</g>');
+      c.add('<g mask="url(#' + om + ')">'); if (cfg.outside.flakes) P.flakes(c, cfg.outside.n, 12, 22); else P.leaves(c, cfg.outside.n, cfg.outside.colors, 16, 28); c.add('</g>');
     }
     if (cfg.steam && cfg.steam.when.indexOf(tod) >= 0 && !low) { var stm = '<g filter="' + c.blur(4) + '">';
       cfg.steam.at.forEach(function (pt) { for (var si = 0; si < 4; si++) stm += '<ellipse class="a-steam" style="animation-delay:-' + f(si * 1.4 + r() * 0.6) + 's" cx="' + f(pt[0] + (r() - 0.5) * 16) + '" cy="' + pt[1] + '" rx="6" ry="9" fill="#ffffff" opacity="0.5"/>'; });
