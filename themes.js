@@ -91,11 +91,11 @@
 
   // Mike's school calendar: the countdowns and the greeting on the day
   var SCHOOL_DAYS = {
-    '2026-12-22': ['Last Day Before Break', 'Winter break starts tomorrow'],
+    '2026-12-22': ['Last Day of the Semester', 'Winter break starts tomorrow'],
     '2027-01-05': ['Back to School', 'Teacher institute day'],
     '2027-01-06': ['Second Semester Starts', 'Welcome back']
   };
-  window.SCHOOL_COUNTDOWNS = [['2026-12-22', 'Last day before break', '❄️'], ['2027-01-05', 'Back to school', '🍎'], ['2027-01-06', 'Second semester starts', '🎒']];
+  window.SCHOOL_COUNTDOWNS = [['2026-12-22', 'Last day of the semester', '❄️'], ['2027-01-05', 'Back to school', '🍎'], ['2027-01-06', 'Second semester starts', '🎒']];
   var COUNTDOWN = ['newyear', 'valentines', 'stpatricks', 'easter', 'mothers', 'memorial', 'fathers', 'july4', 'labor', 'halloween', 'veterans', 'thanksgiving', 'christmas'];
 
   function d(y, m, day) { return new Date(y, m - 1, day); }
